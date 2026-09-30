@@ -232,6 +232,18 @@
       "created_at": "2026-09-30T11:55:54.541Z",
       "sender": "ios",
       "is_cancelled": false
+    },
+    {
+      "id": "9ec58769-c9f8-4ae9-a909-aef5ecfb5396",
+      "role": "agent",
+      "content": "Отлично, теперь у меня есть полное представление о текущем коде. Создаю аналитический артефакт с аудитом и обновлённым планом.\nГотово. Вот суть аудита:\n\n---\n\n## ✅ Что уже готово к мульти-платформенности\n\nТекущий код уже хорошо разделён:\n- **3 роли** с изоляцией UI — клиент не видит панелей маркетолога/эксперта\n- **Данные структурированы по доменам** (`funnels[]`, `expert{}`, `clientSession{}`) — это станет основой для API-эндпоинтов 1:1\n- **Telegram SDK** уже подключён, но пока только для `ready()` / `expand()`\n- **Аналитика агрегирована** — личных данных клиентов в ней нет\n\n---\n\n## ⚠️ Что нужно изменить (4 вещи)\n\n| Проблема | Решение | Сложность |\n|---|---|---|\n| Нет `user_id` — всё в localStorage | Добавить `currentUser` в store + backend auth | 🟡 Средняя |\n| Telegram ID = идентификатор аккаунта | Таблица `auth_providers`: один `user.id` → N способов входа | 🟡 Средняя |\n| Роли переключаются на frontend | Backend middleware `verifyRole()` по JWT | 🟡 Средняя |\n| Нет экспорта данных | `GET /api/export/my-data` — одна команда (данные уже сериализуемы) | 🟢 Простая |\n\n---\n\n## 📋 Обновлённый план\n\n**Этап 1 (4-6 нед):** Backend API + БД + Telegram auth — Mini App работает в production\n**Этап 2 (параллельно):** Тот же API + email/Google auth → сайт. `user.id` остаётся тем же.\n**Этап 3:** Mobile App через тот же REST API + FCM push\n\n**UI не меняется.** В [`js/app.js`](file:///home/agent/workspace/js/app.js) нужно добавить одну строку вызова `initSmartFlowAuth()`, в [`js/store.js`](file:///home/agent/workspace/js/store.js) — поле `currentUser` и метод `setCurrentUser()`. Всё остальное — новые файлы.\n\n---\n\nЧто начинаем первым — `auth.js` + backend, или добавить `currentUser` в store прямо сейчас?",
+      "status": "completed",
+      "model": "claude-sonnet-4-6",
+      "client_type": "gemini-bridge",
+      "parent_message_id": "06b457ef-fb78-4de9-96e1-14e4a8f7ed83",
+      "created_at": "2026-09-30T11:57:38.526Z",
+      "sender": "macOS",
+      "is_cancelled": false
     }
   ]
 }
