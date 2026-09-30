@@ -267,12 +267,37 @@ const defaultData = {
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
     niche: 'Психология & Коучинг для фаундеров и топ-менеджеров',
     funnelId: 'funnel-ht',
-    botUsername: 'Elena_Coaching_AI_bot',
+    botUsername: 'SmartFlowBot',
     sellerLink: 'https://t.me/SmartFlowBot?start=elena_coach_ht',
+    billingProvider: 'Tribute (@tribute)',
+    expertPaymentLink: 'https://pay.prodamus.ru/elena_smirnova',
     subscriptionStatus: 'active',
     subscriptionNextBilling: '24 октября 2026',
     subscriptionPrice: 9900,
     cardLast4: '4242',
+    allTags: ['#не_купил_миникурс', '#горячий_лид', '#ждёт_созвон', '#b2b_сегмент', '#сомнения_цена', '#купил_флагман'],
+
+    // AI Natural Language Broadcasts & Segmentation
+    aiBroadcast: {
+      prompt: '',
+      targetTag: '#не_купил_миникурс',
+      matchingLeadsCount: 42,
+      clarificationStep: false,
+      clarificationQuestion: '',
+      readyPost: null,
+      history: [
+        {
+          id: 'bc-1',
+          date: 'Вчера в 17:30',
+          title: 'Живой мастер-класс в кофейне «Раф»',
+          targetTag: '#не_купил_миникурс',
+          sentCount: 42,
+          openRate: '92%',
+          replies: 16,
+          status: 'Отправлено'
+        }
+      ]
+    },
 
     // NEW SECTION REQUIRED: «Кто написал лично» (Нажавшие «Связаться с человеком»)
     directHumanInquiries: [
@@ -289,7 +314,9 @@ const defaultData = {
         audioUrl: null,
         hasAudio: false,
         lastDirectMessage: 'Здравствуйте, Елена! Нам нужно согласовать программу корпоративного тренинга и договор с юрлицом.',
-        status: 'waiting' // 'waiting' | 'in_progress' | 'replied'
+        status: 'waiting',
+        botState: 'paused', // 'paused' | 'standby'
+        tags: ['#b2b_сегмент', '#горячий_лид']
       },
       {
         id: 'inq-2',
@@ -306,7 +333,9 @@ const defaultData = {
         audioDuration: '0:18',
         audioTranscription: '«Здравствуйте! Я основатель IT-аутсорсинга, оборот 3.2 миллиона. Скажите, Елена лично ведет спринт делегирования или через кураторов? Хочу подтвердить слот на четверг.»',
         lastDirectMessage: 'Аудиосообщение (расшифровано Whisper AI)',
-        status: 'waiting'
+        status: 'waiting',
+        botState: 'paused',
+        tags: ['#не_купил_миникурс', '#ждёт_созвон']
       },
       {
         id: 'inq-3',
@@ -321,7 +350,9 @@ const defaultData = {
         audioUrl: null,
         hasAudio: false,
         lastDirectMessage: 'Хочу уточнить, можно ли разбить оплату на 3 транша напрямую через счет ИП без участия банка?',
-        status: 'replied'
+        status: 'replied',
+        botState: 'standby',
+        tags: ['#сомнения_цена', '#не_купил_миникурс']
       }
     ],
 
