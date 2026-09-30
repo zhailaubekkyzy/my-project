@@ -777,6 +777,115 @@ class Store {
     }
   }
 
+  toggleInquiryBotState(inquiryId) {
+    const inq = this.data.expert.directHumanInquiries.find(i => i.id === inquiryId);
+    if (inq) {
+      inq.botState = inq.botState === 'paused' ? 'standby' : 'paused';
+      this.saveData();
+      return inq.botState;
+    }
+    return null;
+  }
+
+  addTagToInquiry(inquiryId, tag) {
+    const inq = this.data.expert.directHumanInquiries.find(i => i.id === inquiryId);
+    if (inq) {
+      if (!inq.tags) inq.tags = [];
+      const cleanTag = tag.startsWith('#') ? tag : '#' + tag;
+      if (!inq.tags.includes(cleanTag)) {
+        inq.tags.push(cleanTag);
+        this.saveData();
+      }
+    }
+  }
+
+  removeTagFromInquiry(inquiryId, tag) {
+    const inq = this.data.expert.directHumanInquiries.find(i => i.id === inquiryId);
+    if (inq && inq.tags) {
+      inq.tags = inq.tags.filter(t => t !== tag);
+      this.saveData();
+    }
+  }
+
+  generateAiBroadcast(promptText) {
+    const p = promptText.toLowerCase();
+    let targetTag = '#не_купил_миникурс';
+    let count = 42;
+
+    if (p.includes('b2b')) {
+      targetTag = '#b2b_сегмент';
+      count = 28;
+    } else if (p.includes('горяч') || p.includes('созвон')) {
+      targetTag = '#горячий_лид';
+      count = 19;
+    }
+
+    this.data.expert.aiBroadcast.prompt = promptText;
+    this.data.expert.aiBroadcast.targetTag = targetTag;
+    this.data.expert.aiBroadcast.matchingLeadsCount = count;
+
+    // Check if missing details (e.g. date or entry price)
+    const hasDate = p.includes('суббот') || p.includes('воскрес') || p.includes('завтра') || p.includes('октябр') || p.includes('ноябр') || p.includes('числа');
+    const hasPrice = p.includes('бесплатн') || p.includes('руб') || p.includes('депозит') || p.includes('стоимост') || p.includes('вход');
+
+    if (!hasDate || !hasPrice) {
+      this.data.expert.aiBroadcast.clarificationStep = true;
+      this.data.expert.aiBroadcast.clarificationQuestion = `ИИ понял контекст! 🎯 Сегмент: ${count} лидов с тегом ${targetTag}. Место: кофейня «Раф», 16:00. Уточните: какая точная дата (в эту субботу?) и условия входа (бесплатно по брони или депозит)?`;
+      this.data.expert.aiBroadcast.readyPost = null;
+    } else {
+      this.data.expert.aiBroadcast.clarificationStep = false;
+      this.data.expert.aiBroadcast.readyPost = {
+        title: 'Мастер-класс в кофейне «Раф»',
+        text: `🔥 Привет! Заметила, что вы интересовались темой женского ресурса и практиками, но не успели зайти на мини-курс. В эту субботу в 16:00 я провожу камерный живой мастер-класс в кофейне «Раф» в центре. Разберем ключевые затыки за чашкой кофе. Участие бесплатное по брони, мест всего 12!`,
+        buttonLabel: '🎟️ Забронировать место на мастер-класс',
+        segment: targetTag,
+        count: count
+      };
+    }
+    this.saveData();
+  }
+
+  confirmBroadcastDetails(detailsText) {
+    const count = this.data.expert.aiBroadcast.matchingLeadsCount || 42;
+    const tag = this.data.expert.aiBroadcast.targetTag || '#не_купил_миникурс';
+
+    this.data.expert.aiBroadcast.clarificationStep = false;
+    this.data.expert.aiBroadcast.readyPost = {
+      title: 'Мастер-класс в кофейне «Раф»',
+      text: `🔥 Привет! Заметила, что вы интересовались темой практик и наполнения, но не успели зайти на мини-курс. В эту субботу в 16:00 я провожу камерный живой мастер-класс в уютной кофейне «Раф». Разберем практики за чашкой кофе. ${detailsText}. Мест всего 12!`,
+      buttonLabel: '🎟️ Забронировать место на мастер-класс',
+      segment: tag,
+      count: count
+    };
+    this.saveData();
+  }
+
+  sendBroadcastNow() {
+    if (this.data.expert.aiBroadcast.readyPost) {
+      const camp = {
+        id: 'bc-' + Date.now(),
+        date: 'Только что',
+        title: this.data.expert.aiBroadcast.readyPost.title,
+        targetTag: this.data.expert.aiBroadcast.readyPost.segment,
+        sentCount: this.data.expert.aiBroadcast.readyPost.count,
+        openRate: '100%',
+        replies: 0,
+        status: 'Отправлено 🚀'
+      };
+      this.data.expert.aiBroadcast.history.unshift(camp);
+      this.data.expert.aiBroadcast.readyPost = null;
+      this.data.expert.aiBroadcast.prompt = '';
+
+      // Activate all bots for these leads and put them on standby!
+      this.data.expert.directHumanInquiries.forEach(inq => {
+        inq.botState = 'standby';
+      });
+      this.saveData();
+      return camp;
+    }
+    return null;
+  }
+
   clearClientChat() {
     this.data.clientSession.messages = JSON.parse(JSON.stringify(defaultData.clientSession.messages));
     this.saveData();
