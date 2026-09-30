@@ -538,37 +538,42 @@ function renderExpertView(state) {
       </div>
     </div>
 
-    <!-- Navigation Tabs for Expert Cabinet (Chats, Direct Inquiries, Analytics, Recommendations, PMF) -->
-    <div class="grid grid-cols-5 gap-1 bg-[#111a2a] p-1 rounded-2xl border border-slate-800 text-xs">
-      <button onclick="window.setExpertTab('chats')" class="py-2 px-1 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'chats' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
-        <i data-lucide="messages-square" class="w-3.5 h-3.5"></i>
-        <span class="text-[9px]">1. Переписки</span>
+    <!-- Navigation Tabs for Expert Cabinet (Chats, Direct Inquiries, Analytics, Recommendations, PMF, Broadcasts) -->
+    <div class="grid grid-cols-6 gap-0.5 bg-[#111a2a] p-1 rounded-2xl border border-slate-800 text-xs">
+      <button onclick="window.setExpertTab('chats')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'chats' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
+        <i data-lucide="messages-square" class="w-3 h-3"></i>
+        <span class="text-[8px]">Переписки</span>
       </button>
 
       <!-- NEW SECTION: Кто написал лично -->
-      <button onclick="window.setExpertTab('direct_inquiries')" class="py-2 px-1 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 relative ${activeTab === 'direct_inquiries' ? 'bg-[#ef4444] text-white font-bold shadow-lg' : 'text-rose-400 hover:text-rose-300'}">
-        <i data-lucide="user-check" class="w-3.5 h-3.5"></i>
-        <span class="text-[9px]">Лично 👤</span>
+      <button onclick="window.setExpertTab('direct_inquiries')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 relative ${activeTab === 'direct_inquiries' ? 'bg-[#ef4444] text-white font-bold shadow-lg' : 'text-rose-400 hover:text-rose-300'}">
+        <i data-lucide="user-check" class="w-3 h-3"></i>
+        <span class="text-[8px]">Лично 👤</span>
         ${waitingDirectInquiries ? `
-          <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-600 text-white font-bold text-[9px] flex items-center justify-center animate-bounce">
+          <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-600 text-white font-bold text-[8px] flex items-center justify-center animate-bounce">
             ${waitingDirectInquiries}
           </span>
         ` : ''}
       </button>
 
-      <button onclick="window.setExpertTab('analytics')" class="py-2 px-1 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'analytics' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
-        <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
-        <span class="text-[9px]">2. Аналитика</span>
+      <button onclick="window.setExpertTab('analytics')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'analytics' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
+        <i data-lucide="trending-up" class="w-3 h-3"></i>
+        <span class="text-[8px]">Аналитика</span>
       </button>
 
-      <button onclick="window.setExpertTab('recommendations')" class="py-2 px-1 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'recommendations' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
-        <i data-lucide="lightbulb" class="w-3.5 h-3.5"></i>
-        <span class="text-[9px]">3. Советы ИИ</span>
+      <button onclick="window.setExpertTab('recommendations')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'recommendations' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
+        <i data-lucide="lightbulb" class="w-3 h-3"></i>
+        <span class="text-[8px]">Советы ИИ</span>
       </button>
 
-      <button onclick="window.setExpertTab('pmf')" class="py-2 px-1 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'pmf' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
-        <i data-lucide="sparkle" class="w-3.5 h-3.5"></i>
-        <span class="text-[9px]">PMF Опрос</span>
+      <button onclick="window.setExpertTab('pmf')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'pmf' ? 'bg-[#81D8D0] text-[#090e17] font-bold shadow-lg' : 'text-slate-400 hover:text-white'}">
+        <i data-lucide="sparkle" class="w-3 h-3"></i>
+        <span class="text-[8px]">PMF</span>
+      </button>
+
+      <button onclick="window.setExpertTab('broadcasts')" class="py-2 px-0.5 rounded-xl font-medium transition text-center flex flex-col items-center gap-1 ${activeTab === 'broadcasts' ? 'bg-violet-500 text-white font-bold shadow-lg' : 'text-violet-400 hover:text-violet-300'}">
+        <i data-lucide="send-horizontal" class="w-3 h-3"></i>
+        <span class="text-[8px]">Рассылки</span>
       </button>
     </div>
 
@@ -578,6 +583,7 @@ function renderExpertView(state) {
     ${activeTab === 'analytics' ? renderExpertAnalyticsWindow(state) : ''}
     ${activeTab === 'recommendations' ? renderExpertRecommendationsWindow(state) : ''}
     ${activeTab === 'pmf' ? renderExpertPmfWindow(state) : ''}
+    ${activeTab === 'broadcasts' ? renderExpertBroadcastWindow(state) : ''}
   `;
 }
 
