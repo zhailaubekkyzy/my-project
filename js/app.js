@@ -52,7 +52,7 @@ function renderApp(state) {
         <div>
           <div class="font-bold text-base flex items-center gap-2">
             <span class="text-white tracking-tight">SmartFlow</span>
-            <span class="yc-badge">YC & Google Tier</span>
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#81D8D0]/10 text-[#81D8D0] border border-[#81D8D0]/20">Mini App</span>
           </div>
           <div class="text-xs font-handwritten text-[#ef4444] text-[15px] font-bold">
             ${state.appSlogan}
@@ -60,14 +60,14 @@ function renderApp(state) {
         </div>
       </div>
 
-      <!-- Role Selector (Visible for Pitch Presentation & Founders) -->
+      <!-- Role Selector (Marketer, Expert, Client) -->
       <div class="flex items-center bg-[#111a2a] p-1 rounded-2xl border border-[rgba(129,216,208,0.2)] shadow-inner">
-        <button onclick="window.switchRole('marketer')" class="px-3 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'marketer' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
+        <button onclick="window.switchRole('marketer')" class="px-3.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'marketer' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
           <i data-lucide="briefcase" class="w-3.5 h-3.5"></i>
           <span>Маркетолог</span>
         </button>
 
-        <button onclick="window.switchRole('expert')" class="px-3 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'expert' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
+        <button onclick="window.switchRole('expert')" class="px-3.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'expert' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
           <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i>
           <span>Эксперт</span>
           ${state.expert.directHumanInquiries.filter(i => i.status === 'waiting').length ? `
@@ -75,14 +75,9 @@ function renderApp(state) {
           ` : ''}
         </button>
 
-        <button onclick="window.switchRole('client')" class="px-3 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'client' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
+        <button onclick="window.switchRole('client')" class="px-3.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'client' ? 'btn-3d-tiffany' : 'text-slate-400 hover:text-slate-200'}">
           <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
           <span>Клиент (Лид)</span>
-        </button>
-
-        <button onclick="window.switchRole('investor')" class="px-3 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1.5 ${role === 'investor' ? 'btn-3d-red' : 'text-rose-400/80 hover:text-rose-300'}">
-          <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
-          <span>YC Data Room</span>
         </button>
       </div>
 
@@ -112,21 +107,19 @@ function renderApp(state) {
         <div class="tg-header flex items-center justify-between mt-${isDeviceMode ? '6' : '0'}">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-full bg-[#111a2a] border border-[#81D8D0]/40 flex items-center justify-center text-sm font-semibold text-[#81D8D0]">
-              ${role === 'marketer' ? '👔' : (role === 'expert' ? '🎓' : (role === 'investor' ? '📈' : '🤖'))}
+              ${role === 'marketer' ? '👔' : (role === 'expert' ? '🎓' : '🤖')}
             </div>
             <div>
               <div class="text-xs font-bold text-white flex items-center gap-1.5">
                 <span>
                   ${role === 'marketer' ? 'SmartFlow • Маркетолог' : 
-                    (role === 'expert' ? 'SmartFlow • Кабинет Эксперта' : 
-                    (role === 'investor' ? 'SmartFlow • YC Data Room' : 'AI-Продавец Елены Смирновой'))}
+                    (role === 'expert' ? 'SmartFlow • Кабинет Эксперта' : 'AI-Продавец Елены Смирновой')}
                 </span>
                 <span class="w-2 h-2 rounded-full bg-[#81D8D0] animate-pulse"></span>
               </div>
               <div class="text-[10px] text-slate-400">
-                ${role === 'marketer' ? 'Воронки & MRR: $328k • YC Benchmark' : 
-                  (role === 'expert' ? 'Воронка: High-Ticket • PMF 96%' : 
-                  (role === 'investor' ? 'Seed Round $3.5M • NRR 146%' : 'онлайн • слушает аудио и текст 🎙️'))}
+                ${role === 'marketer' ? 'Воронки & Аналитика • Автосписание с карт' : 
+                  (role === 'expert' ? 'Воронка: High-Ticket • PMF 96%' : 'онлайн • слушает аудио и текст 🎙️')}
               </div>
             </div>
           </div>
