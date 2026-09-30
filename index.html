@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>FunnelMind AI - Telegram Mini App для маркетологов и онлайн-экспертов</title>
+  <title>SmartFlow — Autonomous AI Sales Agent Engine (Telegram Mini App)</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans & Caveat -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -15,10 +20,22 @@
       darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            handwritten: ['Caveat', 'cursive']
+          },
           colors: {
-            slate: {
-              850: '#151f32',
-              950: '#070b14'
+            tiffany: {
+              300: '#a3eae3',
+              400: '#81D8D0',
+              500: '#50c8b6',
+              600: '#14b8a6',
+              700: '#0d9488'
+            },
+            crimson: {
+              500: '#ef4444',
+              600: '#dc2626',
+              700: '#b91c1c'
             }
           }
         }
@@ -35,14 +52,15 @@
   <!-- Custom CSS -->
   <link rel="stylesheet" href="css/app.css">
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen select-none antialiased flex flex-col justify-between">
+<body class="bg-[#060911] text-slate-100 min-h-screen select-none antialiased flex flex-col justify-between font-sans">
 
-  <!-- Root mount point for the Telegram Mini App -->
+  <!-- Root mount point for SmartFlow Telegram Mini App -->
   <div id="app-root" class="w-full flex-1 flex flex-col items-center">
     <!-- Content will be rendered by js/app.js -->
-    <div class="p-12 text-center text-slate-400">
-      <div class="animate-spin w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-      Загрузка FunnelMind AI...
+    <div class="p-16 text-center text-slate-400">
+      <div class="animate-spin w-9 h-9 border-3 border-[#81D8D0] border-t-transparent rounded-full mx-auto mb-3"></div>
+      <div class="text-sm font-semibold text-white">SmartFlow AI Engine</div>
+      <div class="text-xs text-[#81D8D0] mt-1 font-handwritten text-base">From idea to selling. Faster.</div>
     </div>
   </div>
 
