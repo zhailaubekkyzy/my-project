@@ -172,6 +172,18 @@
       "created_at": "2026-09-30T10:25:13.936Z",
       "sender": "macOS",
       "is_cancelled": false
+    },
+    {
+      "id": "651bef6c-c140-4854-8fc7-ecbdbfc1b2e7",
+      "role": "user",
+      "content": "Интерфейс у эксперта 6 кнопок на одной линии сделай 3 на 3 чтобы легче было нажимать и не было визуальной перегруженности и кнопку «пмф» перефразируй на язык клиента просто «База данных» но внутрянку оставь так же не меняй структуру и логику внутри.",
+      "status": "pending",
+      "model": "claude-sonnet-4-6",
+      "client_type": "gemini-bridge",
+      "parent_message_id": null,
+      "created_at": "2026-09-30T10:25:34.123Z",
+      "sender": "ios",
+      "is_cancelled": false
     }
   ]
 }
