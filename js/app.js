@@ -982,6 +982,26 @@ function renderExpertPmfWindow(state) {
         </div>
       </div>
 
+      <!-- Payment Link Settings -->
+      <div class="glass-card-3d p-3 space-y-2 border-[#81D8D0]/30">
+        <div class="flex items-center gap-2 mb-1">
+          <i data-lucide="credit-card" class="w-4 h-4 text-[#81D8D0]"></i>
+          <span class="text-xs font-bold text-white uppercase tracking-wider">Оплата от клиентов</span>
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-[10px] text-slate-400 block">Ваша ссылка на оплату (Prodamus, ЮKassa, Tribute и др.):</label>
+          <div class="flex gap-2">
+            <input type="text" id="expert-payment-link-input" value="${state.expert.expertPaymentLink || ''}" placeholder="https://pay.prodamus.ru/elena_coaching" class="flex-1 text-xs p-2 rounded-lg bg-[#090e17] border border-slate-700 text-white placeholder-slate-600 focus:outline-none focus:border-[#81D8D0]" />
+            <button onclick="window.saveExpertPaymentLink()" class="px-2.5 py-1.5 rounded-lg btn-3d-tiffany text-[10px] font-bold whitespace-nowrap">Сохранить</button>
+          </div>
+          <div class="text-[10px] text-slate-400 bg-[#090e17] p-2 rounded-lg border border-slate-800 space-y-0.5">
+            <div class="flex items-center gap-1 text-emerald-400 font-semibold"><span>✅</span> Лид оплачивает напрямую вам</div>
+            <div class="flex items-center gap-1 text-slate-400"><span>👁️</span> Маркетолог видит только факт оплаты — без суммы и данных клиента</div>
+            <div class="flex items-center gap-1 text-violet-400"><span>💳</span> Ваша подписка SmartFlow списывается через @tribute</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Custom Buttons Configuration -->
       <div class="glass-card-3d p-3 space-y-2">
         <div class="flex items-center justify-between">
@@ -997,6 +1017,7 @@ function renderExpertPmfWindow(state) {
           `).join('')}
         </div>
       </div>
+
     </div>
   `;
 }
