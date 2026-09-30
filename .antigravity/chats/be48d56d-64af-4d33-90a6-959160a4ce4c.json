@@ -136,6 +136,18 @@
       "created_at": "2026-09-30T10:07:40.234Z",
       "sender": "ios",
       "is_cancelled": false
+    },
+    {
+      "id": "5367162e-8aed-4f81-80c3-36adc179035b",
+      "role": "agent",
+      "content": "Now I have a complete picture. Let me implement all the missing UI features in one go:\n1. Update expert nav from 5 to 6 tabs (add Рассылки)\n2. Update `renderExpertDirectInquiriesWindow` with bot state toggle + tags\n3. Create `renderExpertBroadcastWindow` function\n4. Wire event handlers for broadcast/tags/botState\n5. Add payment link field to PMF tab\nNow update the `renderExpertDirectInquiriesWindow` to add bot state toggle + tags:\nNow add the `renderExpertBroadcastWindow` function and update the PMF window with payment settings. Let me find the exact line where PMF window function ends:\nNow I'll add the payment link field to the PMF window (before custom buttons) and then insert the `renderExpertBroadcastWindow` function right after the PMF window function:\nNow add the `renderExpertBroadcastWindow` function right before the CLIENT VIEW section:\nNow add all the event handlers to `setupGlobalEventListeners`. Let me add them right before `window.resetDemoData`:\nNow let's verify the syntax is clean:\nBoth files pass. Let me also make sure the `editPmfAnswer` handler that was in the old code doesn't conflict (there was a reference to `window.editPmfAnswer` in the PMF template already):\nThe handler was already referenced in the template and now properly defined. Let me also verify there are no duplicate `editPmfAnswer` definitions from old code:\nExactly one definition. Everything is clean. Here's what was shipped:\n\n---\n\n## ✅ Все обновления готовы\n\nВот что реализовано и теперь работает:\n\n### 🗂️ 6-й таб «Рассылки» в кабинете эксперта\n- Сетка навигации расширена до `grid-cols-6`\n- Новый таб **Рассылки** с фиолетовым акцентом и иконкой `send-horizontal`\n\n### 🤖 Бот на паузе / Standby (таб «Лично 👤»)\nНа каждой карточке лида теперь есть:\n- Полоска статуса бота: `🔴 Бот на паузе — вы ведёте диалог` или `✅ Бот на Standby — ждёт сигнала`\n- Кнопка переключения (Активировать / Приостановить)\n\n### 🏷️ Теги на лидах\n- Чипы с тегами + кнопка `×` для удаления\n- Дропдаун `＋ Тег` из глобального списка `allTags` эксперта\n\n### 📣 ИИ-Рассылки (таб «Рассылки»)\n1. **Поле ввода** — эксперт пишет своими словами что отправить\n2. **Анализ ИИ** — находит сегмент по тегам, определяет количество лидов\n3. **Уточняющий вопрос** если нет даты или условий (с полем ответа)\n4. **Превью сообщения** с сегментом, счётчиком и кнопкой «✉️ Отправить N лидам»\n5. **История рассылок** — все прошлые кампании\n6. После отправки — **конфетти** 🎉\n\n### 💳 Ссылка оплаты (таб PMF)\n- Новый блок «Оплата от клиентов» с полем для ссылки\n- Текст: лид → платит напрямую эксперту; маркетолог видит только факт оплаты; подписка через @tribute\n\n👉 **Смотрите:** https://antigravity.luch.dev/site/047eadf2-4fa5-441c-8a3f-9e1b515a3c93/9742c0363ef21524e3cec43e/",
+      "status": "completed",
+      "model": "claude-sonnet-4-6",
+      "client_type": "gemini-bridge",
+      "parent_message_id": "eb39b584-2fa3-4d75-8e12-74ebeb4320c0",
+      "created_at": "2026-09-30T10:14:05.870Z",
+      "sender": "macOS",
+      "is_cancelled": false
     }
   ]
 }

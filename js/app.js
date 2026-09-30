@@ -1022,6 +1022,110 @@ function renderExpertPmfWindow(state) {
   `;
 }
 
+// AI Broadcast Window
+function renderExpertBroadcastWindow(state) {
+  const bc = state.expert.aiBroadcast || {};
+  const history = bc.history || [];
+
+  return `
+    <div class="space-y-3">
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+          <i data-lucide="send-horizontal" class="w-4 h-4 text-violet-400"></i>
+          ИИ-Рассылки по базе лидов
+        </span>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 font-semibold">
+          AI-копирайтер
+        </span>
+      </div>
+
+      <!-- Broadcast Composer -->
+      <div class="glass-card-3d p-3.5 space-y-3">
+        <div class="text-[11px] text-slate-300 leading-relaxed">
+          <span class="text-violet-400 font-bold">Скажите своими словами</span> кого и куда пригласить — ИИ подберёт сегмент, напишет сообщение и уточнит детали если нужно.
+        </div>
+
+        <!-- Prompt Input -->
+        <div class="space-y-2">
+          <textarea id="broadcast-prompt-input" rows="3" placeholder='Например: "Пригласи на мастер-класс в 16:00 в кофейне Раф всех тех кто не купил мини-курс «дыхание маткой»"' class="w-full text-xs p-2.5 rounded-xl bg-[#090e17] border border-slate-700 text-white placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none leading-relaxed">${bc.prompt || ''}</textarea>
+          <button onclick="window.generateAiBroadcast()" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold flex items-center justify-center gap-2 shadow-lg">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Анализировать и составить рассылку</span>
+          </button>
+        </div>
+
+        <!-- Clarification Step -->
+        ${bc.clarificationStep ? `
+          <div class="p-3 rounded-xl bg-violet-900/20 border border-violet-500/30 space-y-2">
+            <div class="flex items-start gap-2">
+              <span class="text-lg">🤖</span>
+              <div class="text-xs text-violet-200 leading-relaxed">${bc.clarificationQuestion}</div>
+            </div>
+            <div class="flex gap-2">
+              <input type="text" id="broadcast-clarify-input" placeholder="Напр: В эту субботу, вход бесплатный по брони..." class="flex-1 text-xs p-2 rounded-lg bg-[#090e17] border border-violet-600/40 text-white placeholder-slate-600 focus:outline-none focus:border-violet-400" />
+              <button onclick="window.confirmBroadcastDetails()" class="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold whitespace-nowrap">Подтвердить</button>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Ready Post Preview -->
+        ${bc.readyPost ? `
+          <div class="space-y-2">
+            <div class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+              Рассылка готова к отправке:
+            </div>
+            <div class="p-3 rounded-xl bg-[#0e1624] border border-emerald-500/30 space-y-2">
+              <div class="text-[10px] font-bold text-emerald-400 flex items-center gap-1.5">
+                <span>🎯 Сегмент: <span class="text-violet-300">${bc.readyPost.segment}</span></span>
+                <span class="text-slate-500">•</span>
+                <span>${bc.readyPost.count} лидов</span>
+              </div>
+              <div class="text-xs text-slate-200 leading-relaxed bg-[#090e17] p-2.5 rounded-lg border border-slate-800">${bc.readyPost.text}</div>
+              <div class="p-2 rounded-lg bg-[#81D8D0]/10 border border-[#81D8D0]/20 text-center">
+                <span class="text-[10px] font-bold text-[#81D8D0]">${bc.readyPost.buttonLabel}</span>
+              </div>
+            </div>
+            <button onclick="window.sendBroadcastNow()" class="w-full py-2.5 rounded-xl btn-3d-red text-xs font-bold flex items-center justify-center gap-2 shadow-lg">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              <span>✉️ Отправить ${bc.readyPost.count} лидам</span>
+            </button>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Broadcast History -->
+      <div class="glass-card-3d p-3 space-y-2">
+        <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+          <i data-lucide="history" class="w-4 h-4 text-slate-400"></i>
+          История рассылок
+        </span>
+        ${history.length === 0 ? `
+          <div class="text-center py-4 text-slate-500 text-xs">Рассылок пока нет. Отправьте первую выше! 🚀</div>
+        ` : `
+          <div class="space-y-2">
+            ${history.map(item => `
+              <div class="p-2.5 rounded-xl bg-[#090e17] border border-slate-800 space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-white">${item.title}</span>
+                  <span class="text-[9px] text-slate-500">${item.date}</span>
+                </div>
+                <div class="flex items-center gap-3 text-[10px]">
+                  <span class="text-violet-300">${item.targetTag}</span>
+                  <span class="text-slate-400">${item.sentCount} отправлено</span>
+                  <span class="text-emerald-400">Open rate: ${item.openRate}</span>
+                </div>
+                <div class="text-[10px] font-bold text-emerald-400">${item.status}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+
 // -------------------------------------------------------------
 // 3. CLIENT / LEAD VIEW (Strictly Isolated Chat Experience)
 // -------------------------------------------------------------
@@ -1610,6 +1714,81 @@ function setupGlobalEventListeners() {
     showToast('Воронка создана в SmartFlow!');
     if (window.confetti) {
       window.confetti({ particleCount: 70, spread: 60 });
+    }
+  };
+
+  window.toggleBotState = (inqId) => {
+    const newState = window.funnelStore.toggleInquiryBotState(inqId);
+    if (newState === 'standby') {
+      showToast('Бот активирован: режим Standby 🤖 — ждёт сигнала рассылки');
+    } else {
+      showToast('Бот на паузе 🔴 — вы ведёте диалог лично');
+    }
+  };
+
+  window.addLeadTag = (inqId, tag) => {
+    if (!tag) return;
+    window.funnelStore.addTagToInquiry(inqId, tag);
+    showToast(`Тег ${tag} добавлен лиду`);
+  };
+
+  window.removeLeadTag = (inqId, tag) => {
+    window.funnelStore.removeTagFromInquiry(inqId, tag);
+    showToast(`Тег ${tag} удалён`);
+  };
+
+  window.generateAiBroadcast = () => {
+    const textarea = document.getElementById('broadcast-prompt-input');
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+      showToast('Опишите кого и куда пригласить 👆');
+      return;
+    }
+    window.funnelStore.generateAiBroadcast(text);
+    showToast('ИИ анализирует вашу базу лидов... 🧠');
+  };
+
+  window.confirmBroadcastDetails = () => {
+    const input = document.getElementById('broadcast-clarify-input');
+    const text = input ? input.value.trim() : '';
+    if (!text) {
+      showToast('Уточните детали для ИИ 👆');
+      return;
+    }
+    window.funnelStore.confirmBroadcastDetails(text);
+    showToast('Детали приняты — рассылка сформирована ✅');
+  };
+
+  window.sendBroadcastNow = () => {
+    const camp = window.funnelStore.sendBroadcastNow();
+    if (camp) {
+      showToast(`Рассылка отправлена ${camp.sentCount} лидам! 🚀`);
+      if (window.confetti) {
+        window.confetti({ particleCount: 80, spread: 70 });
+      }
+    }
+  };
+
+  window.saveExpertPaymentLink = () => {
+    const input = document.getElementById('expert-payment-link-input');
+    const val = input ? input.value.trim() : '';
+    if (val) {
+      window.funnelStore.data.expert.expertPaymentLink = val;
+      window.funnelStore.saveData();
+      showToast('Ссылка оплаты сохранена! Клиенты будут переходить по ней 💳');
+    } else {
+      showToast('Введите ссылку на оплату');
+    }
+  };
+
+  window.editPmfAnswer = (qaId) => {
+    const state = window.funnelStore.data;
+    const qa = state.expert.pmfInterview.questionsAndAnswers.find(q => q.id === qaId);
+    if (!qa) return;
+    const newAnswer = prompt(qa.question, qa.answer);
+    if (newAnswer !== null && newAnswer.trim()) {
+      window.funnelStore.updatePmfAnswer(qaId, newAnswer.trim());
+      showToast('Ответ обновлён в базе знаний ИИ-продавца ✅');
     }
   };
 
