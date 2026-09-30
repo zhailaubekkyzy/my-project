@@ -160,6 +160,18 @@
       "created_at": "2026-09-30T10:24:26.781Z",
       "sender": "ios",
       "is_cancelled": false
+    },
+    {
+      "id": "363231a7-6a8c-4427-b16c-bcbf09b6527e",
+      "role": "agent",
+      "content": "(empty response)",
+      "status": "completed",
+      "model": "claude-sonnet-4-6",
+      "client_type": "gemini-bridge",
+      "parent_message_id": "14dbf64b-3f3d-4dc3-9bf1-721d6dd6f576",
+      "created_at": "2026-09-30T10:25:13.936Z",
+      "sender": "macOS",
+      "is_cancelled": false
     }
   ]
 }
