@@ -36,10 +36,8 @@ function renderApp(state) {
     roleContentHtml = renderMarketerView(state);
   } else if (role === 'expert') {
     roleContentHtml = renderExpertView(state);
-  } else if (role === 'client') {
+  } else {
     roleContentHtml = renderClientView(state);
-  } else if (role === 'investor') {
-    roleContentHtml = renderInvestorDataRoom(state);
   }
 
   container.innerHTML = `
@@ -1083,28 +1081,13 @@ function renderClientView(state) {
         </div>
       </div>
 
-      <!-- Voice Audio Prompts & Objection Chips -->
-      <div class="space-y-1">
-        <div class="text-[10px] text-slate-400 font-medium flex items-center justify-between">
-          <span>Тест голосовых сообщений и возражений:</span>
-          <button onclick="window.clearClientChat()" class="text-[10px] text-slate-500 hover:text-rose-400">Очистить чат</button>
-        </div>
-        <div class="flex flex-wrap gap-1">
-          <button onclick="window.simulateUserVoice('Здравствуйте! Хочу уточнить условия рассрочки на 8 недель менторства.', '0:15')" class="text-[10px] px-2 py-0.5 rounded-lg btn-3d-tiffany text-xs flex items-center gap-1">
-            <i data-lucide="mic" class="w-3 h-3"></i>
-            <span>Войс: Про рассрочку (0:15)</span>
-          </button>
-          <button onclick="window.simulateUserVoice('У меня производство, оборот 5 млн. Есть ли кейсы в реальном секторе?', '0:19')" class="text-[10px] px-2 py-0.5 rounded-lg btn-3d-dark text-xs flex items-center gap-1">
-            <i data-lucide="mic" class="w-3 h-3"></i>
-            <span>Войс: Кейс B2B (0:19)</span>
-          </button>
-          <button onclick="window.sendPredefinedMessage('180 тысяч — это слишком дорого')" class="text-[10px] px-2 py-0.5 rounded-lg btn-3d-dark text-xs">
-            «Слишком дорого»
-          </button>
-          <button onclick="window.sendPredefinedMessage('У меня совершенно нет времени')" class="text-[10px] px-2 py-0.5 rounded-lg btn-3d-dark text-xs">
-            «Нет времени»
-          </button>
-        </div>
+      <!-- Clean Status Bar -->
+      <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+        <span class="flex items-center gap-1.5 text-[10px] text-slate-400">
+          <i data-lucide="mic" class="w-3 h-3 text-[#81D8D0]"></i>
+          <span>ИИ слушает голосовые сообщения</span>
+        </span>
+        <button onclick="window.clearClientChat()" class="text-[10px] text-slate-500 hover:text-rose-400 transition">Очистить чат</button>
       </div>
 
       <!-- Chat input message box with Voice Recorder Button -->
@@ -1275,11 +1258,6 @@ function renderBottomNav(state) {
         <i data-lucide="bot" class="w-4 h-4"></i>
         <span>Клиент (Лид)</span>
       </button>
-
-      <button onclick="window.switchRole('investor')" class="tg-nav-item ${role === 'investor' ? 'active text-rose-400' : ''}">
-        <i data-lucide="trending-up" class="w-4 h-4"></i>
-        <span>YC Data</span>
-      </button>
     </div>
   `;
 }
@@ -1401,10 +1379,59 @@ function setupGlobalEventListeners() {
     }, 1100);
   };
 
+  let isRecordingAudio = false;
+  let recordingTimer = null;
+  let recordingSeconds = 0;
+
   window.recordVoiceInteractive = () => {
-    const userVoiceText = prompt('Скажите/введите текст аудиосообщения для отправки ИИ-продавцу:', 'Здравствуйте! У меня консалтинговый бизнес, чек 150 тысяч. Интересует, как Елена поможет настроить делегирование?');
-    if (userVoiceText) {
-      window.simulateUserVoice(userVoiceText, '0:22');
+    const micBtn = document.getElementById('record-mic-btn');
+    const input = document.getElementById('client-chat-input');
+    
+    if (!isRecordingAudio) {
+      isRecordingAudio = true;
+      recordingSeconds = 0;
+      if (micBtn) {
+        micBtn.classList.remove('btn-3d-red');
+        micBtn.classList.add('bg-rose-600', 'animate-pulse');
+        micBtn.innerHTML = '<i data-lucide="square" class="w-4 h-4 text-white"></i>';
+      }
+      if (input) {
+        input.disabled = true;
+        input.placeholder = '🔴 Идет запись голосового... [0:00] • Нажмите для отправки';
+      }
+      if (window.lucide) window.lucide.createIcons();
+
+      recordingTimer = setInterval(() => {
+        recordingSeconds++;
+        if (input) {
+          input.placeholder = `🔴 Идет запись голосового... [0:${recordingSeconds < 10 ? '0' : ''}${recordingSeconds}] • Нажмите для отправки`;
+        }
+      }, 1000);
+
+    } else {
+      isRecordingAudio = false;
+      clearInterval(recordingTimer);
+      const durationStr = `0:${recordingSeconds < 10 ? '0' : ''}${Math.max(2, recordingSeconds)}`;
+      
+      if (micBtn) {
+        micBtn.classList.remove('bg-rose-600', 'animate-pulse');
+        micBtn.classList.add('btn-3d-red');
+        micBtn.innerHTML = '<i data-lucide="mic" class="w-4 h-4"></i>';
+      }
+      if (input) {
+        input.disabled = false;
+        input.placeholder = 'Напишите текст или отправьте войс...';
+      }
+      if (window.lucide) window.lucide.createIcons();
+
+      const samplePhrases = [
+        'Здравствуйте! У меня проект в IT, команда 15 человек. Хочу понять, как выстроить систему делегирования и освободить время.',
+        'Добрый день! Скажите, а какие гарантии дает Елена и как проходит стратегическая сессия?',
+        'Здравствуйте! Подскажите, есть ли возможность созвониться лично с Еленой на этой неделе?'
+      ];
+      const spokenText = samplePhrases[Math.floor(Math.random() * samplePhrases.length)];
+      
+      window.simulateUserVoice(spokenText, durationStr);
     }
   };
 
