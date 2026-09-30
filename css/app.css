@@ -1,0 +1,286 @@
+/* app.css - Telegram Mini App Theme & Component Styles */
+
+:root {
+  --tg-color-bg: #0f172a;
+  --tg-color-card: #1e293b;
+  --tg-color-card-border: rgba(255, 255, 255, 0.08);
+  --tg-color-primary: #2481cc;
+  --tg-color-primary-hover: #1c68a5;
+  --tg-color-accent: #38bdf8;
+  --tg-color-text: #f8fafc;
+  --tg-color-text-muted: #94a3b8;
+  --tg-color-success: #10b981;
+  --tg-color-warning: #f59e0b;
+  --tg-color-danger: #ef4444;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #0b0f19;
+  color: #f8fafc;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Telegram Mini App Container & Frame */
+.tma-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+}
+
+.tma-shell.device-mode {
+  padding: 20px 10px;
+  background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #090d16 100%);
+}
+
+.phone-mockup {
+  width: 100%;
+  max-width: 440px;
+  height: 92vh;
+  min-height: 740px;
+  max-height: 920px;
+  background: #0f172a;
+  border-radius: 44px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 10px #1e293b, 0 0 0 12px #334155;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fullscreen-mode .phone-mockup {
+  max-width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+}
+
+.phone-island {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 24px;
+  background: #000;
+  border-radius: 20px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.phone-camera {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #111;
+  border: 2px solid #222;
+}
+
+.phone-speaker {
+  width: 40px;
+  height: 4px;
+  background: #222;
+  border-radius: 2px;
+}
+
+/* Telegram Top Bar */
+.tg-header {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 16px;
+  z-index: 40;
+}
+
+/* Modern Glass Card */
+.glass-card {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+/* Telegram Native Buttons */
+.tg-btn-primary {
+  background: linear-gradient(135deg, #2481cc 0%, #1e6fae 100%);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(36, 129, 204, 0.35);
+  border: none;
+  cursor: pointer;
+}
+
+.tg-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(36, 129, 204, 0.5);
+}
+
+.tg-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.tg-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-weight: 500;
+  border-radius: 12px;
+  padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.tg-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Telegram Bottom Navigation */
+.tg-nav-bar {
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 12px;
+}
+
+.tg-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.tg-nav-item.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+/* Chat bubble styling */
+.chat-bubble-ai {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px 18px 18px 4px;
+  color: #f1f5f9;
+  padding: 12px 16px;
+  max-width: 85%;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.chat-bubble-user {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  border-radius: 18px 18px 4px 18px;
+  color: #ffffff;
+  padding: 12px 16px;
+  max-width: 85%;
+  line-height: 1.5;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.chat-bubble-expert {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-radius: 18px 18px 4px 18px;
+  color: #ffffff;
+  padding: 12px 16px;
+  max-width: 85%;
+  line-height: 1.5;
+  font-size: 14px;
+  margin-left: auto;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+/* Typing indicator */
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1e293b;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Micro pulse for hot lead */
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.pulse-badge {
+  animation: pulseGlow 2s infinite;
+}
