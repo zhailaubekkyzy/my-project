@@ -1,23 +1,75 @@
-// store.js - Central State Management for FunnelMind AI Telegram Mini App
+// store.js - Central State Management for SmartFlow Telegram Mini App
 
-const STORAGE_KEY = 'funnelmind_tma_v1';
+const STORAGE_KEY = 'smartflow_tma_v2';
 
 const defaultData = {
-  activeRole: 'marketer', // 'marketer' | 'expert' | 'client'
+  appName: 'SmartFlow',
+  appSlogan: 'From idea to selling. Faster.',
+  activeRole: 'marketer', // 'marketer' | 'expert' | 'client' | 'investor'
   currentFunnelId: 'funnel-ht',
   currentExpertId: 'exp-elena',
   currentClientChatId: 'chat-lead-1',
   viewMode: 'desktop-tma', // 'desktop-tma' (device frame) or 'fullscreen'
+  showDevRoleSwitcher: true, // Allows toggling roles for pitch demo, but user mode is isolated
   
+  // Y Combinator & Google Tier Investor Data Room
+  investorData: {
+    round: 'Seed Round ($3.5M at $28M Cap)',
+    targetInvestors: 'Y Combinator S26 • Google Ventures • a16z Speedrun',
+    deckHeadline: 'SmartFlow: The Autonomous Conversational AI Sales Engine for the $52B Creator Economy',
+    
+    // Core SaaS / Fintech Metrics
+    financials: {
+      mrr: '$328,500',
+      mrrRub: '31,200,000 ₽',
+      arrRunRate: '$3,942,000',
+      momGrowth: '+34.2%',
+      grossMargin: '89.4%',
+      netRevenueRetention: '146%', // Top decile YC benchmark
+      quickRatio: '4.8',
+      magicNumber: '2.14', // Extreme GTM efficiency
+      paybackPeriod: '21 days',
+      cac: '$168',
+      ltv: '$1,480',
+      ltvCacRatio: '8.8x'
+    },
+
+    // Viral Bottom-Up Flywheel (Product-Led Growth)
+    growthFlywheel: {
+      kFactor: '1.68', // Viral loop
+      organicLeadConversion: '3.4%', // Leads who convert into new paying experts/marketers
+      avgFunnelImpressionsPerExpert: '480 / mo',
+      zeroPaidMarketing: '84% of new experts join via "Powered by SmartFlow" badge in chat'
+    },
+
+    // Market Sizing (TAM / SAM / SOM)
+    marketSize: {
+      tam: '$52.4B',
+      tamDesc: 'Global Creator Economy & Conversational AI Sales Platforms',
+      sam: '$14.2B',
+      samDesc: 'Social-First Creators & Online Academies across Telegram, WhatsApp, IG',
+      som: '$850M',
+      somDesc: 'High-Ticket Mentorship & EdTech Beachhead in EMEA & LATAM'
+    },
+
+    // AI Sales Agent Benchmarks vs Traditional Human Sales
+    benchmarks: [
+      { metric: 'Скорость первого ответа', human: '48 минут', smartFlow: '1.8 секунды', delta: 'В 1600 раз быстрее' },
+      { metric: 'Конверсия лида в созвон/оплату', human: '4.2%', smartFlow: '18.4%', delta: '+340% рост' },
+      { metric: 'Точность отработки возражений', human: '62%', smartFlow: '96.8%', delta: 'База знаний эксперта' },
+      { metric: 'Доступность для лидов', human: 'Пн-Пт 10:00-19:00', smartFlow: '24/7/365 без сна', delta: '100% покрытие ночного трафика' }
+    ]
+  },
+
   // Marketer Profile & Funnels
   marketer: {
     id: 'mkt-1',
     name: 'Александр Громов',
-    tag: '@gromov_funnels',
+    tag: '@gromov_smartflow',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
     title: 'Top Funnel Architect & AI Strategist',
-    bio: 'Специализация: Воронки на высокий чек и EdTech с AI-агентами',
-    balance: 237600, // Выручка от подписок маркетолога
+    bio: 'Специализация: Воронки на высокий чек и EdTech с AI-агентами SmartFlow',
+    balance: 237600,
     mrr: 237600,
     activeSubscribersCount: 24,
     bankCard: '•••• 8831'
@@ -129,7 +181,7 @@ const defaultData = {
         }
       ],
 
-      // Subscribed Experts list (Retention, join date, aggregated revenue without client personal info)
+      // Subscribed Experts list
       subscribers: [
         {
           id: 'exp-elena',
@@ -193,7 +245,6 @@ const defaultData = {
         }
       ],
 
-      // Cohort Retention matrix
       cohortRetention: {
         cohorts: [
           { month: 'Май 2026', users: 6, m1: '100%', m2: '100%', m3: '83%', m4: '83%', m5: '83%' },
@@ -204,48 +255,6 @@ const defaultData = {
         ],
         avgLtv: '42,800 ₽',
         churnRate: '4.8%'
-      }
-    },
-
-    {
-      id: 'funnel-edtech',
-      title: 'EdTech Sprint: Быстрый запуск инфопродукта',
-      niche: 'Онлайн-школы, языковые курсы, профессии',
-      tagline: 'Микро-воронка через полезный практикум и продажу трипвайера 990-2990 ₽',
-      monthlyPrice: 6900,
-      badge: 'Высокий поток',
-      description: 'Автоматизированный прогрев через 3 коротких голосовых скрипта и видео-демо с моментальной онлайн-оплатой в Telegram.',
-      steps: [
-        { number: 1, name: 'Тест/Квиз в боте', goal: 'Геймификация и сегментация по уровню знаний', dropOffRate: '8%', conversionRate: '92%' },
-        { number: 2, name: 'Персональный разбор ошибок', goal: 'Показать ценность платного курса', dropOffRate: '22%', conversionRate: '78%' },
-        { number: 3, name: 'Спец-цена 24 часа', goal: 'Ограничение по времени и быстрая оплата', dropOffRate: '35%', conversionRate: '65%' }
-      ],
-      analytics: {
-        activeExpertsCount: 8,
-        totalLeadsProcessed: 5120,
-        avgFunnelConversion: '24.1%',
-        totalExpertsRevenue: '5,180,000 ₽',
-        avgDealCheck: '12,500 ₽',
-        stepDropOffs: [
-          { step: '1. Квиз', entered: 5120, passed: 4710, cr: '92.0%' },
-          { step: '2. Разбор ошибок', entered: 4710, passed: 3673, cr: '78.0%' },
-          { step: '3. Оплата спец-цены', entered: 3673, passed: 1234, cr: '33.6%' }
-        ]
-      },
-      analyzerRecommendations: [
-        {
-          id: 'rec-ed-1',
-          urgency: 'high',
-          title: 'Добавить рассрочку на пакет с куратором',
-          observation: '70% лидов выбирают дешевый тариф из-за отсутствия сплит-платежей.',
-          solution: 'Подключить Т-Банк Долями и Яндекс Сплит.'
-        }
-      ],
-      subscribers: [],
-      cohortRetention: {
-        cohorts: [],
-        avgLtv: '26,500 ₽',
-        churnRate: '6.2%'
       }
     }
   ],
@@ -259,16 +268,67 @@ const defaultData = {
     niche: 'Психология & Коучинг для фаундеров и топ-менеджеров',
     funnelId: 'funnel-ht',
     botUsername: 'Elena_Coaching_AI_bot',
-    sellerLink: 'https://t.me/FunnelMindBot?start=elena_coach_ht',
+    sellerLink: 'https://t.me/SmartFlowBot?start=elena_coach_ht',
     subscriptionStatus: 'active',
     subscriptionNextBilling: '24 октября 2026',
     subscriptionPrice: 9900,
     cardLast4: '4242',
-    
+
+    // NEW SECTION REQUIRED: «Кто написал лично» (Нажавшие «Связаться с человеком»)
+    directHumanInquiries: [
+      {
+        id: 'inq-1',
+        leadName: 'Ксения Макарова',
+        leadAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+        leadUsername: '@ksenia_makarova',
+        timeAgo: '4 мин назад',
+        urgency: 'Срочно 🔥',
+        dealValue: '350,000 ₽',
+        sourceStep: 'Шаг 4: Оффер & Корпоративный тренинг',
+        summary: 'Нажала «Связаться с человеком». Запрос на 2-дневный офлайн интенсив для 40 топ-менеджеров.',
+        audioUrl: null,
+        hasAudio: false,
+        lastDirectMessage: 'Здравствуйте, Елена! Нам нужно согласовать программу корпоративного тренинга и договор с юрлицом.',
+        status: 'waiting' // 'waiting' | 'in_progress' | 'replied'
+      },
+      {
+        id: 'inq-2',
+        leadName: 'Марк Левин',
+        leadAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+        leadUsername: '@mark_levin_it',
+        timeAgo: '14 мин назад',
+        urgency: 'Горячий лид',
+        dealValue: '180,000 ₽',
+        sourceStep: 'Шаг 5: Запись на созвон',
+        summary: 'Отправил аудиосообщение с вопросом о личном участии Елены и нажал «Написать человеку».',
+        audioUrl: 'sample-voice.mp3',
+        hasAudio: true,
+        audioDuration: '0:18',
+        audioTranscription: '«Здравствуйте! Я основатель IT-аутсорсинга, оборот 3.2 миллиона. Скажите, Елена лично ведет спринт делегирования или через кураторов? Хочу подтвердить слот на четверг.»',
+        lastDirectMessage: 'Аудиосообщение (расшифровано Whisper AI)',
+        status: 'waiting'
+      },
+      {
+        id: 'inq-3',
+        leadName: 'Виктор Захаров',
+        leadAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80',
+        leadUsername: '@victor_zakharov',
+        timeAgo: '1 час назад',
+        urgency: 'Стандарт',
+        dealValue: '180,000 ₽',
+        sourceStep: 'Шаг 4: Возражение по рассрочке',
+        summary: 'Нажал «Связаться с человеком». Интересуется индивидуальным графиком платежей на 6 месяцев.',
+        audioUrl: null,
+        hasAudio: false,
+        lastDirectMessage: 'Хочу уточнить, можно ли разбить оплату на 3 транша напрямую через счет ИП без участия банка?',
+        status: 'replied'
+      }
+    ],
+
     // PMF Interview State (Between AI-Marketer & Expert)
     pmfInterview: {
       completed: true,
-      pmfScore: 94,
+      pmfScore: 96,
       lastUpdated: 'Сегодня в 10:15',
       questionsAndAnswers: [
         {
@@ -309,10 +369,9 @@ const defaultData = {
       { id: 'btn-audit', label: '📅 Записаться на диагностику', action: 'book_audit', primary: true },
       { id: 'btn-cases', label: '🏆 Кейсы и результаты', action: 'show_cases', primary: false },
       { id: 'btn-guide', label: '📥 Забрать гайд по делегированию', action: 'get_guide', primary: false },
-      { id: 'btn-human', label: '👤 Написать Елене лично', action: 'contact_human', primary: false }
+      { id: 'btn-human', label: '👤 Написать человеку (Елене)', action: 'contact_human', primary: false }
     ],
 
-    // 3 Main Views Data for Expert
     // 1. CHATS (All client dialogues)
     chats: [
       {
@@ -320,7 +379,7 @@ const defaultData = {
         leadName: 'Марк Левин',
         leadAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
         leadUsername: '@mark_levin_it',
-        status: 'hot', // 'hot' | 'qualified' | 'objection' | 'closed' | 'needs_human'
+        status: 'hot',
         statusLabel: 'Горячий лид 🔥',
         lastMessageTime: '12 мин назад',
         unreadCount: 0,
@@ -328,12 +387,18 @@ const defaultData = {
         summary: 'Основатель IT-аутсорсинга, выручка 3.2M ₽. Главная боль — работает по 14 часов. Хочет созвон.',
         messages: [
           { sender: 'lead', text: 'Здравствуйте! Увидел ваш разбор про делегирование в канале. Хочу узнать подробнее.', time: '14:20' },
-          { sender: 'ai', text: 'Приветствую, Марк! Рад познакомиться. Я AI-ассистент Елены Смирновой. Направляю вам обещанный аудит «5 скрытых утечек времени фаундера». Скажите, какой у вас сейчас проект и сколько времени в неделю съедает операционка?', time: '14:21' },
-          { sender: 'lead', text: 'IT-разработка, 18 человек команда. Работаю без выходных, часов по 70 в неделю, сам закрываю продажи и контролирую разработку.', time: '14:24' },
+          { sender: 'ai', text: 'Приветствую, Марк! Рад познакомиться. Я AI-ассистент Елены Смирновой в SmartFlow. Направляю вам аудит «5 скрытых утечек времени фаундера». Скажите, какой у вас сейчас проект и сколько времени в неделю съедает операционка?', time: '14:21' },
+          { 
+            sender: 'lead', 
+            isVoice: true, 
+            duration: '0:18', 
+            text: '«IT-разработка, 18 человек команда. Работаю без выходных, часов по 70 в неделю, сам закрываю продажи и контролирую разработку.»',
+            whisperTranscribed: true,
+            time: '14:24' 
+          },
           { sender: 'ai', text: 'Понимаю вашу ситуацию, Марк. Типичная ловушка роста: бизнес растет за счет вашего здоровья. Елена как раз помогла Артему (CEO веб-студии) перестроить команду, сократив его личные часы с 65 до 25 в неделю при росте оборота на 40% за 2 месяца. Хотите посмотреть короткий разбор его внедрений?', time: '14:25' },
           { sender: 'lead', text: 'Да, интересно. А сколько стоит полноценная работа с Еленой?', time: '14:28' },
-          { sender: 'ai', text: 'Индивидуальное сопровождение на 8 недель стоит 180,000 ₽ с гарантией результата (также доступна рассрочка от 15,000 ₽/мес). Первый шаг — стратегическая сессия за 25,000 ₽, где Елена лично разберет архитектуру вашего бизнеса. Если решите идти дальше — эти 25,000 ₽ полностью зачтутся в оплату программы. Хотите выбрать удобный слот на этой неделе?', time: '14:30' },
-          { sender: 'lead', text: 'Звучит логично. Давайте на четверг в первой половине дня. Или можно сначала пару вопросов Елене задать?', time: '14:32' }
+          { sender: 'ai', text: 'Индивидуальное сопровождение на 8 недель стоит 180,000 ₽ с гарантией результата (также доступна рассрочка от 15,000 ₽/мес). Первый шаг — стратегическая сессия за 25,000 ₽, где Елена лично разберет архитектуру вашего бизнеса. Если решите идти дальше — эти 25,000 ₽ полностью зачтутся в оплату программы. Хотите выбрать удобный слот на этой неделе?', time: '14:30' }
         ]
       },
       {
@@ -368,26 +433,10 @@ const defaultData = {
           { sender: 'lead', text: 'Оплатил 25,000 ₽ по ссылке, чек пришел.', time: '12:10' },
           { sender: 'ai', text: 'Отлично, Владислав! Оплата успешно зафиксирована 🎉 Забронировал за вами слот: Четверг, 2 октября в 16:00 (МСК). Ссылка на Zoom и анкета подготовки отправлены вам сюда. Елена уже изучает ваш проект!', time: '12:11' }
         ]
-      },
-      {
-        id: 'chat-lead-4',
-        leadName: 'Ксения Макарова',
-        leadAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-        leadUsername: '@ksenia_makarova',
-        status: 'needs_human',
-        statusLabel: 'Требует эксперта 👤',
-        lastMessageTime: '3 часа назад',
-        unreadCount: 0,
-        dealValue: '350,000 ₽',
-        summary: 'Запрос на корпоративный тренинг для топ-менеджмента (40 человек). Нестандартный кейс.',
-        messages: [
-          { sender: 'lead', text: 'Здравствуйте! Мы хотим пригласить Елену провести 2-дневный офлайн интенсив для наших руководителей направлений. Работает ли она с корпорациями?', time: '11:05' },
-          { sender: 'ai', text: 'Добрый день, Ксения! Да, Елена проводит закрытые стратегические сессии для корпоративных клиентов. Я передал ваш запрос лично Елене, она свяжется с вами в течение 15 минут для уточнения задач команды.', time: '11:06' }
-        ]
       }
     ],
 
-    // 2. ANALYTICS & CONVERSION (Key numbers)
+    // 2. ANALYTICS & CONVERSION
     analytics: {
       period: 'Последние 30 дней',
       trafficVisitors: 438,
@@ -409,7 +458,7 @@ const defaultData = {
       ]
     },
 
-    // 3. AI-MARKETER RECOMMENDATIONS (Based on real logs & analytics)
+    // 3. AI-MARKETER RECOMMENDATIONS
     aiMarketerRecommendations: [
       {
         id: 'rec-exp-1',
@@ -433,32 +482,32 @@ const defaultData = {
         id: 'rec-exp-3',
         impact: '+18% к доходимости',
         tag: 'Скорость ответа',
-        title: 'Подключаться лично в чаты с тегом "Требует эксперта" быстрее 15 минут',
-        reason: 'Когда вы отвечаете в течение 12 минут, конверсия в сделку составляет 68%. Если ответ задержан на 1+ час — падает до 19%. Включите пуш-уведомления в Telegram!',
+        title: 'Подключаться лично в раздел "Кто написал лично" быстрее 10 минут',
+        reason: 'Когда вы отвечаете лично в течение 10 минут, конверсия в сделку составляет 68%. Если ответ задержан на 1+ час — падает до 19%.',
         applied: false,
         actionType: 'push_alerts'
       }
     ]
   },
 
-  // Live Client Chat Session (Simulation of end-user interacting with Elena's AI Seller)
+  // Live Client Chat Session (End-user interacting with Elena's AI Seller)
   clientSession: {
     expertName: 'Елена Смирнова',
     expertAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
-    botName: 'Elena Coaching AI Seller',
+    botName: 'SmartFlow AI Sales Agent',
     status: 'online',
     currentFunnelStep: 1,
     messages: [
       {
         id: 'cm-1',
         sender: 'ai',
-        text: 'Приветствую! 👋 Я виртуальный бизнес-ассистент Елены Смирновой — Executive-коуча и эксперта по системному масштабированию бизнеса без выгорания.\n\nЗа 6 лет Елена помогла более чем 140 фаундерам освободить 15+ часов в неделю и вырасти в чистой прибыли x2-x5.\n\nЗафиксировал для вас полезный материал: **Гайд «5 скрытых утечек времени фаундера»** 📥\n\nСкажите, в какой нише ваш проект и какой сейчас масштаб команды?',
+        text: 'Приветствую! 👋 Я AI-продавец Елены Смирновой — Executive-коуча и ментора фаундеров.\n\nЗа 6 лет Елена помогла 140+ собственникам высвободить 15+ часов в неделю и вырасти в чистой прибыли x2-x5.\n\nЗафиксировал для вас **Гайд «5 скрытых утечек времени фаундера»** 📥\n\nМожете написать мне текстом или **отправить голосовое сообщение** 🎙️ — я отлично распознаю аудио! В какой нише ваш проект и какой сейчас оборот?',
         time: 'Только что',
         quickReplies: [
-          'Услуги / IT (до 15 человек)',
-          'Торговля / E-commerce (15-50 человек)',
+          'Услуги / IT (оборот 2-5M ₽)',
+          'Торговля / E-commerce',
           'Производство / B2B',
-          'Экспертный бизнес / Онлайн-школа'
+          '🎙️ Отправить аудио-вопрос'
         ]
       }
     ],
@@ -516,7 +565,7 @@ class Store {
   }
 
   setRole(role) {
-    if (['marketer', 'expert', 'client'].includes(role)) {
+    if (['marketer', 'expert', 'client', 'investor'].includes(role)) {
       this.data.activeRole = role;
       this.saveData();
     }
@@ -527,7 +576,6 @@ class Store {
     this.saveData();
   }
 
-  // Marketer Actions
   selectFunnel(funnelId) {
     this.data.currentFunnelId = funnelId;
     this.saveData();
@@ -537,7 +585,7 @@ class Store {
     const id = 'funnel-' + Date.now();
     const newFunnel = {
       id,
-      title: funnelData.title || 'Новая воронка',
+      title: funnelData.title || 'Новая воронка SmartFlow',
       niche: funnelData.niche || 'Общая ниша',
       tagline: funnelData.tagline || 'Автоматическая воронка для экспертов',
       monthlyPrice: Number(funnelData.monthlyPrice) || 7900,
@@ -573,23 +621,7 @@ class Store {
           solution: 'Добавить варианты ответа кнопками.'
         }
       ],
-      subscribers: [
-        {
-          id: 'exp-new',
-          name: 'Дмитрий Соловьев',
-          niche: funnelData.niche,
-          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
-          joinDate: 'Только что',
-          status: 'active',
-          monthsActive: 1,
-          cardLast4: '5541',
-          leadsProcessed: 45,
-          closedDeals: 2,
-          revenueGenerated: '250,000 ₽',
-          avgCheck: '125,000 ₽',
-          crOverall: '21.0%'
-        }
-      ],
+      subscribers: [],
       cohortRetention: {
         cohorts: [{ month: 'Текущий', users: 1, m1: '100%' }],
         avgLtv: `${funnelData.monthlyPrice || 7900} ₽`,
@@ -603,53 +635,57 @@ class Store {
     return newFunnel;
   }
 
-  // Expert Actions
-  updatePmfAnswer(questionId, newAnswer) {
-    const q = this.data.expert.pmfInterview.questionsAndAnswers.find(item => item.id === questionId);
-    if (q) {
-      q.answer = newAnswer;
-      this.data.expert.pmfInterview.lastUpdated = 'Только что';
-      this.saveData();
-    }
-  }
+  // Handle direct inquiry when lead clicks "Связаться с человеком"
+  registerDirectInquiry(leadData) {
+    const newInquiry = {
+      id: 'inq-' + Date.now(),
+      leadName: leadData.leadName || 'Пользователь Telegram',
+      leadAvatar: leadData.leadAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+      leadUsername: leadData.leadUsername || '@telegram_user',
+      timeAgo: 'Только что',
+      urgency: 'Срочно 🔥',
+      dealValue: '180,000 ₽',
+      sourceStep: 'Чат ИИ-продавца',
+      summary: leadData.summary || 'Нажал кнопку «Связаться с человеком» в SmartFlow.',
+      audioUrl: leadData.audioUrl || null,
+      hasAudio: !!leadData.hasAudio,
+      audioDuration: leadData.audioDuration || null,
+      audioTranscription: leadData.audioTranscription || null,
+      lastDirectMessage: leadData.lastDirectMessage || 'Клиент запросил связь с экспертом лично.',
+      status: 'waiting'
+    };
 
-  addPmfQuestionAnswer(question, answer, category) {
-    const id = 'q' + (this.data.expert.pmfInterview.questionsAndAnswers.length + 1);
-    this.data.expert.pmfInterview.questionsAndAnswers.push({ id, question, answer, category: category || 'Позиционирование' });
+    this.data.expert.directHumanInquiries.unshift(newInquiry);
     this.saveData();
+    return newInquiry;
   }
 
-  updateCustomButtons(buttons) {
-    this.data.expert.customButtons = buttons;
+  resolveDirectInquiry(inquiryId, replyText) {
+    const inq = this.data.expert.directHumanInquiries.find(i => i.id === inquiryId);
+    if (inq) {
+      inq.status = 'replied';
+      inq.timeAgo = 'Отвечено';
+      this.saveData();
+    }
+  }
+
+  // Voice message simulation
+  sendClientVoiceMessage(transcription, duration = '0:16') {
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userVoiceMsg = {
+      id: 'cm-' + Date.now(),
+      sender: 'user',
+      isVoice: true,
+      duration: duration,
+      text: `«${transcription}»`,
+      whisperTranscribed: true,
+      time: timeNow
+    };
+    this.data.clientSession.messages.push(userVoiceMsg);
     this.saveData();
+    return userVoiceMsg;
   }
 
-  // Human Takeover / Expert sends message in lead chat
-  sendExpertMessageToLead(chatId, text) {
-    const chat = this.data.expert.chats.find(c => c.id === chatId);
-    if (chat && text.trim()) {
-      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      chat.messages.push({
-        sender: 'expert_human', // Direct human intervention
-        text: text.trim(),
-        time: timeNow
-      });
-      chat.status = 'hot';
-      chat.statusLabel = 'Эксперт на связи 👤';
-      chat.lastMessageTime = 'Только что';
-      this.saveData();
-    }
-  }
-
-  applyExpertRecommendation(recId) {
-    const rec = this.data.expert.aiMarketerRecommendations.find(r => r.id === recId);
-    if (rec) {
-      rec.applied = true;
-      this.saveData();
-    }
-  }
-
-  // Client Simulation Actions
   sendClientMessage(text) {
     const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsg = {
@@ -677,11 +713,43 @@ class Store {
     return aiMsg;
   }
 
+  sendExpertMessageToLead(chatId, text) {
+    const chat = this.data.expert.chats.find(c => c.id === chatId);
+    if (chat && text.trim()) {
+      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      chat.messages.push({
+        sender: 'expert_human',
+        text: text.trim(),
+        time: timeNow
+      });
+      chat.status = 'hot';
+      chat.statusLabel = 'Эксперт на связи 👤';
+      chat.lastMessageTime = 'Только что';
+      this.saveData();
+    }
+  }
+
+  applyExpertRecommendation(recId) {
+    const rec = this.data.expert.aiMarketerRecommendations.find(r => r.id === recId);
+    if (rec) {
+      rec.applied = true;
+      this.saveData();
+    }
+  }
+
+  updatePmfAnswer(questionId, newAnswer) {
+    const q = this.data.expert.pmfInterview.questionsAndAnswers.find(item => item.id === questionId);
+    if (q) {
+      q.answer = newAnswer;
+      this.data.expert.pmfInterview.lastUpdated = 'Только что';
+      this.saveData();
+    }
+  }
+
   clearClientChat() {
     this.data.clientSession.messages = JSON.parse(JSON.stringify(defaultData.clientSession.messages));
     this.saveData();
   }
 }
 
-// Global instance
 window.funnelStore = new Store();
