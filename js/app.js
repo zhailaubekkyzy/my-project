@@ -590,6 +590,7 @@ function renderExpertView(state) {
 // NEW SECTION: "Кто написал лично" (Direct Inquiries Queue)
 function renderExpertDirectInquiriesWindow(state) {
   const inquiries = state.expert.directHumanInquiries;
+  const allTags = state.expert.allTags || [];
 
   return `
     <div class="space-y-3">
@@ -626,6 +627,33 @@ function renderExpertDirectInquiriesWindow(state) {
                 <div class="text-[9px] font-bold ${inq.status === 'waiting' ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}">
                   ${inq.status === 'waiting' ? inq.urgency : 'Отвечено ✅'}
                 </div>
+              </div>
+            </div>
+
+            <!-- Bot State Toggle -->
+            <div class="flex items-center justify-between mb-2 p-2 rounded-xl ${(inq.botState || 'paused') === 'standby' ? 'bg-emerald-900/30 border border-emerald-500/30' : 'bg-rose-900/20 border border-rose-500/20'}">
+              <div class="flex items-center gap-1.5 text-[11px] font-semibold ${(inq.botState || 'paused') === 'standby' ? 'text-emerald-300' : 'text-rose-400'}">
+                <span>${(inq.botState || 'paused') === 'standby' ? '✅' : '🔴'}</span>
+                <span>${(inq.botState || 'paused') === 'standby' ? 'Бот на Standby — ждёт сигнала' : 'Бот на паузе — вы ведёте диалог'}</span>
+              </div>
+              <button onclick="window.toggleBotState('${inq.id}')" class="px-2 py-1 rounded-lg text-[10px] font-bold ${(inq.botState || 'paused') === 'standby' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                ${(inq.botState || 'paused') === 'standby' ? 'Приостановить' : 'Активировать бота'}
+              </button>
+            </div>
+
+            <!-- Tags -->
+            <div class="mb-2">
+              <div class="flex items-center flex-wrap gap-1">
+                ${(inq.tags || []).map(tag => `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-[10px] text-violet-300 font-semibold">
+                    ${tag}
+                    <button onclick="window.removeLeadTag('${inq.id}', '${tag}')" class="text-violet-400 hover:text-white leading-none">&times;</button>
+                  </span>
+                `).join('')}
+                <select onchange="window.addLeadTag('${inq.id}', this.value); this.value=''" class="text-[10px] px-2 py-0.5 rounded-full bg-[#090e17] border border-dashed border-slate-600 text-slate-400 cursor-pointer">
+                  <option value="">＋ Тег</option>
+                  ${allTags.map(t => `<option value="${t}">${t}</option>`).join('')}
+                </select>
               </div>
             </div>
 
