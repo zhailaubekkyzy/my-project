@@ -20,4 +20,5 @@ DerivedData/
 *.sqlite
 data/*.db
 data/*.sqlite
+backups/
 
