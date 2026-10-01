@@ -12,6 +12,15 @@ const defaultData = {
   viewMode: 'desktop-tma', // 'desktop-tma' (device frame) or 'fullscreen'
   showDevRoleSwitcher: true, // Allows toggling roles for pitch demo, but user mode is isolated
   
+  // Telegram Authentication & Core Backend Identity
+  auth: {
+    status: 'checking', // 'checking' | 'authenticated' | 'expired' | 'offline_demo'
+    internalUserId: null,
+    telegramUser: null,
+    token: null,
+    error: null
+  },
+
   // Y Combinator & Google Tier Investor Data Room
   investorData: {
     round: 'Seed Round ($3.5M at $28M Cap)',
@@ -593,6 +602,36 @@ class Store {
         console.error('Store listener error:', err);
       }
     });
+  }
+
+  setAuth(authData) {
+    if (!this.data.auth) this.data.auth = {};
+    this.data.auth.status = 'authenticated';
+    this.data.auth.internalUserId = authData.user?.id || authData.internalUserId;
+    this.data.auth.telegramUser = authData.user || authData.telegramUser;
+    this.data.auth.token = authData.token;
+    this.data.auth.error = null;
+    if (authData.user?.displayName) {
+      if (this.data.activeRole === 'expert' && this.data.expert) {
+        this.data.expert.name = authData.user.displayName;
+        if (authData.user.avatarUrl) this.data.expert.avatar = authData.user.avatarUrl;
+      }
+    }
+    this.saveData();
+  }
+
+  setSessionExpired(err) {
+    if (!this.data.auth) this.data.auth = {};
+    this.data.auth.status = 'expired';
+    this.data.auth.error = err?.message || 'Сессия Telegram Mini App истекла';
+    this.saveData();
+  }
+
+  setAuthOffline(msg = 'Демо-режим') {
+    if (!this.data.auth) this.data.auth = {};
+    this.data.auth.status = 'offline_demo';
+    this.data.auth.error = msg;
+    this.saveData();
   }
 
   setRole(role) {
