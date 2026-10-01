@@ -1,0 +1,194 @@
+// js/api-client.js - SmartFlow Backend API Client & Session Manager
+
+(function (window) {
+  const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+    ? window.location.origin
+    : ''; // Relative in full deployment, or configured endpoint
+
+  const TOKEN_KEY = 'smartflow_auth_token_v1';
+  let sessionToken = localStorage.getItem(TOKEN_KEY) || null;
+  let onSessionExpiredCallback = null;
+
+  async function apiFetch(endpoint, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    };
+
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers
+      });
+
+      const contentType = res.headers.get('content-type');
+      let data = null;
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        data = await res.text();
+      }
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          // Session expired or invalid
+          console.warn('[SmartFlow API] 401 Unauthorized:', data);
+          if (onSessionExpiredCallback) {
+            onSessionExpiredCallback(data);
+          }
+        }
+        const error = new Error(data?.message || `HTTP ${res.status}: ${res.statusText}`);
+        error.status = res.status;
+        error.data = data;
+        throw error;
+      }
+
+      return data;
+    } catch (err) {
+      console.warn(`[SmartFlow API] Request failed for ${endpoint}:`, err.message);
+      throw err;
+    }
+  }
+
+  const apiClient = {
+    getToken() {
+      return sessionToken;
+    },
+
+    setToken(token) {
+      sessionToken = token;
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+      }
+    },
+
+    clearToken() {
+      sessionToken = null;
+      localStorage.removeItem(TOKEN_KEY);
+    },
+
+    onSessionExpired(callback) {
+      onSessionExpiredCallback = callback;
+    },
+
+    // Auth endpoints
+    async loginWithTelegram(initData, role = 'expert') {
+      const res = await apiFetch('/api/auth/telegram', {
+        method: 'POST',
+        body: JSON.stringify({ initData, role })
+      });
+      if (res.token) {
+        this.setToken(res.token);
+      }
+      return res;
+    },
+
+    async loginDev(role = 'expert', userId = null) {
+      const res = await apiFetch('/api/auth/dev-login', {
+        method: 'POST',
+        body: JSON.stringify({ role, userId })
+      });
+      if (res.token) {
+        this.setToken(res.token);
+      }
+      return res;
+    },
+
+    async getMe() {
+      return await apiFetch('/api/auth/me');
+    },
+
+    // Projects endpoints
+    async getProjects() {
+      return await apiFetch('/api/projects');
+    },
+
+    async getProject(projectId) {
+      return await apiFetch(`/api/projects/${projectId}`);
+    },
+
+    async updateProject(projectId, updateData) {
+      return await apiFetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+      });
+    },
+
+    async getProjectAnalytics(projectId) {
+      return await apiFetch(`/api/projects/${projectId}/analytics`);
+    },
+
+    // CRM Clients & Messages
+    async getClients(projectId) {
+      return await apiFetch(`/api/projects/${projectId}/clients`);
+    },
+
+    async getMessages(projectId, clientId) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/messages`);
+    },
+
+    async sendMessage(projectId, clientId, messageData) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(messageData)
+      });
+    },
+
+    async getHumanInquiries(projectId) {
+      return await apiFetch(`/api/projects/${projectId}/clients/inquiries/list`);
+    },
+
+    async resolveInquiry(projectId, inquiryId) {
+      return await apiFetch(`/api/projects/${projectId}/clients/inquiries/${inquiryId}/resolve`, {
+        method: 'POST'
+      });
+    },
+
+    // Templates & Subscriptions
+    async getTemplates() {
+      return await apiFetch('/api/templates');
+    },
+
+    async getSubscriptions() {
+      return await apiFetch('/api/subscriptions/my');
+    },
+
+    async cancelSubscription(subId, reason) {
+      return await apiFetch(`/api/subscriptions/${subId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+    },
+
+    // Public Client Endpoints
+    async getPublicFunnel(slug) {
+      return await apiFetch(`/api/public/funnels/${slug}`);
+    },
+
+    async sendClientChat(slug, chatPayload) {
+      return await apiFetch(`/api/public/funnels/${slug}/chat`, {
+        method: 'POST',
+        body: JSON.stringify(chatPayload)
+      });
+    },
+
+    async requestHumanContact(slug, payload) {
+      return await apiFetch(`/api/public/funnels/${slug}/human-request`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+
+    async checkHealth() {
+      return await apiFetch('/api/health');
+    }
+  };
+
+  window.smartFlowApi = apiClient;
+})(window);
