@@ -2,6 +2,46 @@
 
 let activeVoicePlaybackId = null;
 
+async function initTelegramAuth() {
+  const store = window.funnelStore;
+  const api = window.smartFlowApi;
+  if (!api || !store) return;
+
+  api.onSessionExpired((err) => {
+    store.setSessionExpired(err);
+  });
+
+  const tg = window.Telegram?.WebApp;
+  const initData = tg?.initData;
+
+  if (initData) {
+    try {
+      const res = await api.loginWithTelegram(initData, store.data.activeRole);
+      store.setAuth(res);
+      showToast(`Telegram вход: ${res.user.displayName} ✅`);
+    } catch (err) {
+      if (err.data?.code === 'TELEGRAM_INITDATA_EXPIRED') {
+        store.setSessionExpired(err.data);
+      } else {
+        store.setAuthOffline(`Подпись Telegram: ${err.message}`);
+      }
+    }
+  } else {
+    // Browser preview mode outside native Telegram client
+    try {
+      const devRes = await api.loginDev(store.data.activeRole);
+      store.setAuth(devRes);
+    } catch (err) {
+      store.setAuthOffline('Автономный демо-режим');
+    }
+  }
+}
+
+window.reconnectTelegramAuth = () => {
+  initTelegramAuth();
+  showToast('Обновление сессии Telegram...');
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Telegram WebApp SDK if available
   if (window.Telegram && window.Telegram.WebApp) {
@@ -21,6 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial render
   renderApp(window.funnelStore.data);
   setupGlobalEventListeners();
+
+  // Connect to Core Backend & Telegram Auth
+  initTelegramAuth();
 });
 
 function renderApp(state) {
