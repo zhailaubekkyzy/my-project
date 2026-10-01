@@ -12,3 +12,12 @@ DerivedData/
 .cache/
 .DS_Store
 *.log
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.sqlite
+data/*.db
+data/*.sqlite
+
