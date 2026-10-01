@@ -122,6 +122,15 @@ function renderApp(state) {
         </button>
       </div>
 
+      <!-- Auth / Telegram Status Badge -->
+      <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0b121e] border border-[rgba(129,216,208,0.2)] text-xs shadow-inner">
+        <span class="w-2 h-2 rounded-full ${state.auth?.status === 'authenticated' ? 'bg-emerald-400 animate-pulse' : (state.auth?.status === 'expired' ? 'bg-rose-500' : 'bg-[#81D8D0]')}"></span>
+        <div class="flex flex-col text-left leading-tight">
+          <span class="text-[11px] font-bold text-slate-200">${state.auth?.status === 'authenticated' ? (state.auth.telegramUser?.username ? '@' + state.auth.telegramUser.username : 'Telegram Mini App') : (state.auth?.status === 'expired' ? 'Сессия истекла' : 'SmartFlow Core')}</span>
+          <span class="text-[9px] text-slate-400 font-mono">${state.auth?.internalUserId ? 'ID: ' + state.auth.internalUserId.slice(0, 10) : 'Авторизация OK'}</span>
+        </div>
+      </div>
+
       <!-- Viewport toggle & Reset -->
       <div class="flex items-center gap-2">
         <button onclick="window.toggleViewMode()" title="Переключить рамку смартфона" class="p-2 rounded-xl btn-3d-dark text-xs flex items-center gap-1.5">
@@ -133,6 +142,25 @@ function renderApp(state) {
         </button>
       </div>
     </header>
+
+    ${state.auth?.status === 'expired' ? `
+      <!-- Session Expiry Overlay Modal -->
+      <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-[#0d1522] border-2 border-rose-500/50 rounded-3xl p-6 shadow-2xl text-center space-y-4">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+            <i data-lucide="shield-alert" class="w-8 h-8"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white">Сессия Telegram завершена</h3>
+            <p class="text-xs text-slate-400 mt-1">Срок действия авторизации Telegram (24 часа) истек. Все ваши воронки, клиенты и переписки сохранены в безопасности на сервере SmartFlow.</p>
+          </div>
+          <button onclick="window.reconnectTelegramAuth()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm font-bold flex items-center justify-center gap-2">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            <span>Обновить вход через Telegram</span>
+          </button>
+        </div>
+      </div>
+    ` : ''}
 
     <!-- Main Container -->
     <main class="w-full flex-1 flex flex-col items-center justify-start ${isDeviceMode ? 'device-mode' : 'fullscreen-mode'}">
@@ -1469,6 +1497,11 @@ function renderBottomNav(state) {
 function setupGlobalEventListeners() {
   window.switchRole = (role) => {
     window.funnelStore.setRole(role);
+    if (!window.Telegram?.WebApp?.initData && window.smartFlowApi && role !== 'client') {
+      window.smartFlowApi.loginDev(role).then(res => {
+        window.funnelStore.setAuth(res);
+      }).catch(() => {});
+    }
   };
 
   window.toggleViewMode = () => {
@@ -1534,6 +1567,14 @@ function setupGlobalEventListeners() {
       summary: 'Клиент нажал кнопку «Связаться с человеком» в SmartFlow.',
       lastDirectMessage: 'Хочу пообщаться лично с Еленой по условиям программы.'
     });
+
+    if (window.smartFlowApi) {
+      window.smartFlowApi.requestHumanContact('elena-mentor', {
+        reason: 'Клиент нажал кнопку «Связаться с человеком» в SmartFlow.',
+        leadName: 'Посетитель Telegram',
+        leadUsername: '@client_direct'
+      }).catch(() => {});
+    }
 
     showToast('Елена получила уведомление в раздел «Кто написал лично» 👤');
     setTimeout(() => {
@@ -1845,6 +1886,14 @@ function setupGlobalEventListeners() {
 function executeClientChatExchange(userText) {
   window.funnelStore.sendClientMessage(userText);
   scrollToBottom('client-chat-scroll');
+
+  // Asynchronously sync with SmartFlow core backend CRM
+  if (window.smartFlowApi) {
+    window.smartFlowApi.sendClientChat('elena-mentor', {
+      name: 'Клиент Telegram',
+      message: userText
+    }).catch(() => {});
+  }
 
   const indicator = document.getElementById('ai-typing-indicator');
   const statusText = document.getElementById('ai-action-status');
