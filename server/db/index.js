@@ -2,7 +2,12 @@
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// PostgreSQL returns BIGINT (e.g. COUNT(*)) and NUMERIC (e.g. SUM/AVG) as strings to avoid
+// precision loss; SQLite returns plain numbers. Parse them so both drivers behave the same.
+types.setTypeParser(20, value => (value === null ? null : parseInt(value, 10)));   // INT8 / BIGINT
+types.setTypeParser(1700, value => (value === null ? null : parseFloat(value)));   // NUMERIC
 
 let sqliteDb = null;
 let pgPool = null;
