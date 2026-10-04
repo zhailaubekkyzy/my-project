@@ -103,6 +103,16 @@ npm start
 ```
 Сервер будет доступен по адресу: `http://localhost:3000` (API: `http://localhost:3000/api/health`).
 
+### Сборка фронтенда
+CSS (Tailwind) и иконки (Lucide) собираются заранее, без CDN. Готовые `css/tailwind.css` и `js/icons.js` лежат в репозитории.
+После изменения классов или иконок в `index.html` / `js/*.js` пересоберите их:
+```bash
+npm run build          # иконки + Tailwind CSS
+npm run build:pages    # сборка dist/ для Cloudflare Pages (нужна переменная SMARTFLOW_API_URL)
+```
+Cloudflare (Workers с раздачей статики, настройки в `wrangler.jsonc`): Build command `npm run build:pages`, Deploy command `npx wrangler deploy`, переменная сборки `SMARTFLOW_API_URL` = адрес backend на Railway.
+На Railway задайте `CORS_ORIGINS` = адрес сайта на Pages (например `https://smartflow.pages.dev`).
+
 ### 2. Автоматическое тестирование безопасности (14 проверок)
 Тесты запускаются на отдельной изолированной тестовой базе данных:
 ```bash
@@ -140,7 +150,7 @@ node scripts/restore.js backups/smartflow-backup-YYYY-MM-DD.json
    - Бот: `@smartflow_ai_support_bot` (ID: `8832876047`).
    - Статус: **Активен и проверен**. Токен безопасно сохранен в `.env` на сервере и не попадает в git или браузер.
 2. **База данных PostgreSQL & Supabase:**
-   - Предоставлен Publishable Key: `sb_publishable_chPdMVynMO7fAhy4p8Hurg_LhjCHmwZ`.
+   - Publishable Key задаётся переменной окружения `SUPABASE_ANON_KEY` (в коде ключей нет).
    - Для прямого подключения backend к облачной PostgreSQL в Supabase требуется строка подключения (`DATABASE_URL`) или URL проекта (`SUPABASE_URL`) и секретный `service_role` ключ.
    - Текущий backend готов работать как с локальной/встроенной БД (SQLite через `better-sqlite3`), так и с PostgreSQL на Supabase (через `pg` пул) без изменения кода логики.
 3. **Размещение:**

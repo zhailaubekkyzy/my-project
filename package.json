@@ -10,7 +10,11 @@
     "migrate": "node -e \"require('./server/db/migrator').runMigrations()\"",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js",
-    "verify": "node scripts/test-auth-isolation.js"
+    "verify": "node scripts/test-auth-isolation.js",
+    "build:css": "tailwindcss -i styles/tailwind.input.css -o css/tailwind.css --minify",
+    "build:icons": "node scripts/build-icons.js",
+    "build": "npm run build:icons && npm run build:css",
+    "build:pages": "npm run build && node scripts/build-pages.js"
   },
   "keywords": [],
   "author": "",
@@ -18,11 +22,16 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
     "posthog-node": "^5.55.0"
+  },
+  "devDependencies": {
+    "lucide": "1.51.0",
+    "tailwindcss": "3.4.19"
   }
 }

@@ -1,9 +1,13 @@
 // js/api-client.js - SmartFlow Backend API Client & Session Manager
 
 (function (window) {
-  const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
-    ? window.location.origin
-    : ''; // Relative in full deployment, or configured endpoint
+  // window.SMARTFLOW_API_BASE is injected by scripts/build-pages.js when the frontend is
+  // hosted separately (Cloudflare Pages); otherwise the API is on the same origin.
+  const API_BASE = window.SMARTFLOW_API_BASE || (
+    window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+      ? window.location.origin
+      : '' // Relative in full deployment
+  );
 
   const TOKEN_KEY = 'smartflow_auth_token_v1';
   let sessionToken = localStorage.getItem(TOKEN_KEY) || null;
