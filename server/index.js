@@ -1,11 +1,13 @@
 // server/index.js - SmartFlow Core Backend Entrypoint
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const config = require('./config');
 const db = require('./db');
 const migrator = require('./db/migrator');
 const errorHandler = require('./middleware/error-handler');
+const { renderIndexHtml } = require('./asset-version');
 
 // Route modules
 const authRoutes = require('./routes/auth');
@@ -19,6 +21,7 @@ const publicRoutes = require('./routes/public');
 const app = express();
 
 // Global Middleware
+app.use(compression());
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -64,12 +67,35 @@ app.use('/api/public', publicRoutes);
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.
 const ROOT_DIR = path.join(__dirname, '..');
-const INDEX_HTML = path.join(ROOT_DIR, 'index.html');
 const PUBLIC_DIRS = ['css', 'js', 'images'];
-const staticOptions = { dotfiles: 'deny', index: false, fallthrough: false };
+const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
+
+// index.html references css/js with ?v=<content hash> (see asset-version.js), so those
+// requests can be cached for a year; un-versioned requests are revalidated every time.
+const staticOptions = {
+  dotfiles: 'deny',
+  index: false,
+  fallthrough: false,
+  setHeaders(res) {
+    const req = res.req;
+    if (req && req.query && req.query.v) {
+      res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`);
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+};
 
 for (const dir of PUBLIC_DIRS) {
   app.use(`/${dir}`, express.static(path.join(ROOT_DIR, dir), staticOptions));
+}
+
+// In production the stamped index.html is built once; in development it is rebuilt on
+// every request so edits to css/js show up without a restart.
+const prodIndexHtml = config.isProd ? renderIndexHtml() : null;
+function sendIndexHtml(res) {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(prodIndexHtml || renderIndexHtml());
 }
 
 // Fallback to index.html for single-page app routing.
@@ -80,12 +106,12 @@ app.get('*splat', (req, res) => {
     return res.status(404).json({ error: 'not_found', message: 'API маршрут не найден' });
   }
   if (req.path === '/index.html') {
-    return res.sendFile(INDEX_HTML);
+    return sendIndexHtml(res);
   }
   if (path.extname(req.path) || req.path.split('/').some(seg => seg.startsWith('.'))) {
     return res.status(404).type('text/plain').send('Not found');
   }
-  res.sendFile(INDEX_HTML);
+  sendIndexHtml(res);
 });
 
 // Error handling middleware
