@@ -573,12 +573,16 @@ class Store {
     return JSON.parse(JSON.stringify(defaultData));
   }
 
-  saveData() {
+  persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
     } catch (e) {
       console.warn('Failed to save to localStorage', e);
     }
+  }
+
+  saveData() {
+    this.persist();
     this.notify();
   }
 
@@ -604,7 +608,15 @@ class Store {
     });
   }
 
+  // Fields of auth/profile state that affect what is rendered (the token does not).
+  visibleAuthSnapshot() {
+    const auth = this.data.auth || {};
+    const expert = this.data.expert || {};
+    return JSON.stringify([auth.status, auth.internalUserId, auth.telegramUser, auth.error, expert.name, expert.avatar]);
+  }
+
   setAuth(authData) {
+    const before = this.visibleAuthSnapshot();
     if (!this.data.auth) this.data.auth = {};
     this.data.auth.status = 'authenticated';
     this.data.auth.internalUserId = authData.user?.id || authData.internalUserId;
@@ -617,7 +629,13 @@ class Store {
         if (authData.user.avatarUrl) this.data.expert.avatar = authData.user.avatarUrl;
       }
     }
-    this.saveData();
+    // Repeat opens: the screen was already rendered from the cached state. If the login
+    // result changes nothing visible, persist the new token without a full re-render.
+    if (this.visibleAuthSnapshot() === before) {
+      this.persist();
+    } else {
+      this.saveData();
+    }
   }
 
   setSessionExpired(err) {
