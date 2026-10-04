@@ -1,0 +1,59 @@
+# SmartFlow — контекст проекта
+
+Telegram Mini App: маркетолог создаёт воронки, эксперт подключает ИИ-продавца, лиды общаются с ИИ в Telegram.
+Слоган: «From idea to selling. Faster.»
+
+## Как работать с владелицей проекта
+- Общаться по-русски, просто, без жаргона. Она не разработчик и работает с iPad/телефона.
+- Настройки в сервисах (Railway, Cloudflare, Supabase, BotFather) она делает сама. Давай пошаговые инструкции: куда нажать, что вписать.
+- Ключи и токены никогда не просить в чат и не писать в код. Только переменные окружения.
+- Перед изменениями объяснять план; внешний вид менять только если об этом просили.
+- Работа идёт через pull request в `main`; вливает она сама. Одна задача — одна сессия.
+- Обсуждения и идеи — в обычном Claude; сюда приходит готовое ТЗ.
+
+## Архитектура
+```
+Telegram → Cloudflare Worker (фронтенд, статика) → Railway (сервер Node/Express, все ключи)
+                                                     ├→ Supabase (PostgreSQL)
+                                                     ├→ OpenAI (пока НЕ подключён)
+                                                     └→ PostHog (пока НЕ подключён)
+```
+Правило: фронтенд общается только с сервером; сервер — со всеми сервисами.
+
+| Что | Где |
+|---|---|
+| Фронтенд | https://my-project.gzhailaubekkyzy.workers.dev (Cloudflare Worker `my-project`, собирается из `main`) |
+| Сервер | https://my-project-production-f83d.up.railway.app (проверка: `/api/health`) |
+| База | Supabase, проект `bcaipxnztlusjpppkhpj`, подключение через Session pooler |
+| Бот | @smartflow_ai_support_bot, Mini App `t.me/smartflow_ai_support_bot/app` |
+| Репозиторий | github.com/zhailaubekkyzy/my-project |
+
+## Переменные окружения (только имена)
+- Railway: `TELEGRAM_BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`, `CORS_ORIGINS` (адрес workers.dev),
+  `DATABASE_URL` (Supabase Session pooler), `DB_DRIVER=postgres` (ровно это слово),
+  `OPENAI_API_KEY` (имя проверить: в Railway могло быть `OPEN_API_KEY`), `POSTHOG_API_KEY`, `POSTHOG_HOST`.
+- Cloudflare (переменная сборки): `SMARTFLOW_API_URL` = адрес Railway с `https://`, без `/` в конце и без пробелов.
+
+## Код
+- Фронтенд: без фреймворка. `index.html`, `js/app.js` (весь интерфейс строками HTML), `js/store.js` (состояние + **демо-данные**), `js/api-client.js`, `js/ai-engine.js` (ответы ИИ по ключевым словам — заглушка), `css/app.css`.
+- Готовые файлы в репозитории: `css/tailwind.css` (Tailwind) и `js/icons.js` (иконки Lucide). После изменения классов или иконок: `npm run build`.
+- Сервер: `server/index.js`, `server/routes/*`, `server/services/*`, `server/db/*` (SQLite локально / PostgreSQL в проде, один код), миграции в `server/db/migrations/`.
+- Сборка для Cloudflare: `npm run build:pages` → `dist/`, настройки в `wrangler.jsonc`.
+- Тесты: `npm test` (SQLite); на PostgreSQL: `TEST_DATABASE_URL=postgresql://... npm test` (пустая база).
+
+## Важные решения и грабли
+- Сервер раздаёт только `index.html`, `css/`, `js/`, `images/` — остальное 404 (раньше утекали исходники и база).
+- Порядок CSS важен: `app.css`, затем `tailwind.css`.
+- В Supabase на всех таблицах включён RLS без политик: публичный API Supabase закрыт, сервер (владелец таблиц) работает в обход RLS. Новые таблицы — тоже с RLS.
+- Неверный `DB_DRIVER` → сервер молча работает на SQLite (стоит исправить на явную ошибку).
+- `.antigravity/` в репозитории содержит логи чатов другого инструмента; в истории git есть старый токен бота (уже отозван).
+
+## Что сделано
+Безопасность (закрыта раздача файлов, ключи убраны из кода), ускорение открытия (~3 с → ~0,7 с), фронтенд на Cloudflare, база на Supabase, исправлена кнопка «Связаться с человеком».
+
+## Что дальше (по порядку)
+1. Интерфейс на настоящих данных с сервера вместо демо («Елена», «Громов» из `js/store.js`).
+2. OpenAI: ответы ИИ-продавца по промпту и базе знаний эксперта, голосовые через Whisper.
+3. PostHog: события (вход, публикация воронки, сообщение лида, ответ ИИ, заявка «связаться с человеком») без личных данных.
+4. Каталог воронок для экспертов; оплата через Tribute — позже, условия уточнить у владелицы.
+5. RLS в миграциях; понятная ошибка при неверном `DB_DRIVER`.
