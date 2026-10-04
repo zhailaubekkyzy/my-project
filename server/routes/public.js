@@ -5,6 +5,41 @@ const crypto = require('crypto');
 const db = require('../db');
 const projectService = require('../services/project-service');
 
+const DEFAULT_LEAD_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80';
+
+/**
+ * Find a lead of this project by internal id (cli_...) or external client id;
+ * create a new lead if none exists. Always returns a row that exists in `clients`.
+ */
+async function findOrCreateLead(project, { clientId, name, username, avatarUrl, lastMessage }) {
+  if (clientId) {
+    const existing = await db.get(
+      'SELECT * FROM clients WHERE project_id = ? AND (id = ? OR external_client_id = ?)',
+      [project.id, clientId, clientId]
+    );
+    if (existing) return existing;
+  }
+
+  const newLeadId = `cli_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  const assignedExternalId = clientId || `anon_${Date.now()}`;
+
+  await db.run(
+    `INSERT INTO clients (id, project_id, external_client_id, name, username, avatar_url, status, funnel_step, deal_value, tags, last_message, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, 'new', 'step-1', 0, '["Новый лид"]', ?, 0)`,
+    [
+      newLeadId,
+      project.id,
+      assignedExternalId,
+      name || 'Клиент Telegram',
+      username || null,
+      avatarUrl || DEFAULT_LEAD_AVATAR,
+      lastMessage || null
+    ]
+  );
+
+  return db.get('SELECT * FROM clients WHERE id = ?', [newLeadId]);
+}
+
 /**
  * GET /api/public/funnels/:slug
  * Public landing and AI seller profile for leads.
@@ -53,34 +88,13 @@ router.post('/funnels/:slug/chat', async (req, res, next) => {
     }
 
     // 1. Find or create lead in CRM for this project
-    let lead = null;
-    if (externalClientId) {
-      lead = await db.get(
-        'SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?',
-        [project.id, externalClientId]
-      );
-    }
-
-    if (!lead) {
-      const newLeadId = `cli_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-      const assignedExternalId = externalClientId || `anon_${Date.now()}`;
-
-      await db.run(
-        `INSERT INTO clients (id, project_id, external_client_id, name, username, avatar_url, status, funnel_step, deal_value, tags, last_message, is_demo)
-         VALUES (?, ?, ?, ?, ?, ?, 'new', 'step-1', 0, '["Новый лид"]', ?, 0)`,
-        [
-          newLeadId,
-          project.id,
-          assignedExternalId,
-          name,
-          username || null,
-          avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80',
-          textContent
-        ]
-      );
-
-      lead = await db.get('SELECT * FROM clients WHERE id = ?', [newLeadId]);
-    }
+    const lead = await findOrCreateLead(project, {
+      clientId: externalClientId,
+      name,
+      username,
+      avatarUrl,
+      lastMessage: textContent
+    });
 
     // 2. Save user message to database
     const userMsgId = `msg_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -158,6 +172,14 @@ router.post('/funnels/:slug/human-request', async (req, res, next) => {
       return res.status(404).json({ error: 'not_found', message: 'Проект не найден' });
     }
 
+    // The inquiry must reference a real lead (foreign key), so resolve or create it first.
+    const lead = await findOrCreateLead(project, {
+      clientId,
+      name: leadName,
+      username: leadUsername,
+      lastMessage: reason
+    });
+
     const inquiryId = `inq_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
 
     await db.run(
@@ -166,19 +188,17 @@ router.post('/funnels/:slug/human-request', async (req, res, next) => {
       [
         inquiryId,
         project.id,
-        clientId || 'cli_anonymous',
-        leadName || 'Клиент Telegram',
-        leadUsername || null,
+        lead.id,
+        leadName || lead.name || 'Клиент Telegram',
+        leadUsername || lead.username || null,
         reason
       ]
     );
 
-    if (clientId) {
-      await db.run(
-        `UPDATE clients SET status = 'human_needed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`,
-        [clientId, project.id]
-      );
-    }
+    await db.run(
+      `UPDATE clients SET status = 'human_needed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`,
+      [lead.id, project.id]
+    );
 
     res.json({
       success: true,

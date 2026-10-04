@@ -10,7 +10,10 @@ const assert = require('assert');
 const TEST_DB_FILE = path.join(__dirname, '../data/test_stage1.db');
 process.env.NODE_ENV = 'test';
 process.env.DB_FILE = TEST_DB_FILE;
-process.env.DB_DRIVER = 'sqlite';
+// Set TEST_DATABASE_URL (an empty PostgreSQL database) to run the suite on PostgreSQL instead.
+const TEST_DRIVER = process.env.TEST_DATABASE_URL ? 'postgres' : 'sqlite';
+process.env.DB_DRIVER = TEST_DRIVER;
+if (TEST_DRIVER === 'postgres') process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 // Fake token: tests only need a value to sign initData with. Never put a real bot token here.
 process.env.TELEGRAM_BOT_TOKEN = '1234567890:TEST_ONLY_fake_bot_token_not_real';
 process.env.JWT_SECRET = 'sf_test_jwt_secret_key_stage1_testing_12345';
@@ -72,7 +75,7 @@ async function runAllTests() {
 
   // 1. Database Migrations on Isolated DB
   await test('01. Isolated Database Initialization & Versioned Migrations', async () => {
-    db.initDatabase({ dbFile: TEST_DB_FILE, driver: 'sqlite' });
+    db.initDatabase({ dbFile: TEST_DB_FILE, driver: TEST_DRIVER });
     const applied = await migrator.runMigrations({ silent: true });
     assert(applied.length >= 2, 'Should apply at least 2 migrations');
 
@@ -290,7 +293,7 @@ async function runAllTests() {
     db.closeDatabase();
 
     // Re-initialize from the same disk file
-    db.initDatabase({ dbFile: TEST_DB_FILE, driver: 'sqlite' });
+    db.initDatabase({ dbFile: TEST_DB_FILE, driver: TEST_DRIVER });
 
     // Verify Expert A and all data exist intact
     const restoredUser = await db.get('SELECT * FROM users WHERE id = ?', [expertA_InternalId]);
@@ -333,6 +336,42 @@ async function runAllTests() {
 
     assert.strictEqual(responseStatus, 403, 'dev-login must return 403 Forbidden in production');
     assert.strictEqual(responseBody.error, 'forbidden');
+  });
+
+  // 10. "Contact a human" request is stored even without a known lead
+  await test('15. Кнопка «Связаться с человеком» сохраняет заявку (с clientId и без)', async () => {
+    const publicRoutes = require('../server/routes/public');
+    const layer = publicRoutes.stack.find(l => l.route && l.route.path === '/funnels/:slug/human-request');
+    assert(layer, 'human-request route exists');
+
+    const call = async (body) => {
+      let status = 200;
+      let payload = null;
+      let error = null;
+      const res = {
+        status(s) { status = s; return this; },
+        json(b) { payload = b; return this; }
+      };
+      await layer.route.stack[0].handle({ params: { slug: 'elena-mentor' }, body }, res, (err) => { error = err; });
+      if (error) throw error;
+      return { status, payload };
+    };
+
+    // Exactly what the Mini App sends today: no clientId
+    const anonymous = await call({ reason: 'Связаться', leadName: 'Посетитель Telegram' });
+    assert.strictEqual(anonymous.status, 200);
+    assert.strictEqual(anonymous.payload.success, true);
+    const anonInquiry = await db.get('SELECT * FROM direct_inquiries WHERE id = ?', [anonymous.payload.inquiryId]);
+    const anonLead = await db.get('SELECT * FROM clients WHERE id = ?', [anonInquiry.client_id]);
+    assert(anonLead, 'Inquiry must reference an existing lead');
+    assert.strictEqual(anonLead.status, 'human_needed');
+
+    // Repeat request with an external id reuses the same lead instead of creating duplicates
+    const first = await call({ clientId: 'tg_test_777', reason: 'Первый раз' });
+    const second = await call({ clientId: 'tg_test_777', reason: 'Второй раз' });
+    const firstInquiry = await db.get('SELECT client_id FROM direct_inquiries WHERE id = ?', [first.payload.inquiryId]);
+    const secondInquiry = await db.get('SELECT client_id FROM direct_inquiries WHERE id = ?', [second.payload.inquiryId]);
+    assert.strictEqual(firstInquiry.client_id, secondInquiry.client_id, 'Same lead for the same external id');
   });
 
   console.log('\n------------------------------------------------------');
