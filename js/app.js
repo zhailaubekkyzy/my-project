@@ -42,16 +42,45 @@ window.reconnectTelegramAuth = () => {
   showToast('Обновление сессии Telegram...');
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Initialize Telegram WebApp SDK if available
-  if (window.Telegram && window.Telegram.WebApp) {
-    try {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
-    } catch (e) {
-      console.log('Running outside native Telegram container');
-    }
+// Load a script once, after first render. Returns a promise resolved when it has executed.
+const deferredScripts = {};
+function loadScriptOnce(src) {
+  if (!deferredScripts[src]) {
+    deferredScripts[src] = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.async = true;
+      el.onload = resolve;
+      el.onerror = reject;
+      document.head.appendChild(el);
+    });
   }
+  return deferredScripts[src];
+}
+
+const AI_ENGINE_SRC = 'js/ai-engine.js';
+const CONFETTI_SRC = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+
+// Run fn with window.aiEngine available (it is normally preloaded right after first render).
+function withAiEngine(fn) {
+  if (window.aiEngine) return fn(window.aiEngine);
+  loadScriptOnce(AI_ENGINE_SRC).then(() => fn(window.aiEngine));
+}
+
+function loadNonCriticalScripts() {
+  const run = () => {
+    loadScriptOnce(AI_ENGINE_SRC).catch(() => {});
+    loadScriptOnce(CONFETTI_SRC).catch(() => {});
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 1500 });
+  } else {
+    setTimeout(run, 300);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Telegram.WebApp.ready()/expand() are called inline in index.html, right after the splash.
 
   // Subscribe to store updates
   window.funnelStore.subscribe((state) => {
@@ -64,6 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Connect to Core Backend & Telegram Auth
   initTelegramAuth();
+
+  loadNonCriticalScripts();
 });
 
 function renderApp(state) {
@@ -1614,9 +1645,11 @@ function setupGlobalEventListeners() {
       if (statusText) statusText.innerText = '🤖 ИИ-продавец формирует аргументы...';
       setTimeout(() => {
         if (indicator) indicator.classList.add('hidden');
-        const reply = window.aiEngine.generateSellerResponse(transcription, window.funnelStore.data.clientSession.messages);
-        window.funnelStore.addAiSellerReply(reply.text, reply.quickReplies);
-        scrollToBottom('client-chat-scroll');
+        withAiEngine((aiEngine) => {
+          const reply = aiEngine.generateSellerResponse(transcription, window.funnelStore.data.clientSession.messages);
+          window.funnelStore.addAiSellerReply(reply.text, reply.quickReplies);
+          scrollToBottom('client-chat-scroll');
+        });
       }, 900);
     }, 1100);
   };
@@ -1904,9 +1937,11 @@ function executeClientChatExchange(userText) {
 
   setTimeout(() => {
     if (indicator) indicator.classList.add('hidden');
-    const reply = window.aiEngine.generateSellerResponse(userText, window.funnelStore.data.clientSession.messages);
-    window.funnelStore.addAiSellerReply(reply.text, reply.quickReplies);
-    scrollToBottom('client-chat-scroll');
+    withAiEngine((aiEngine) => {
+      const reply = aiEngine.generateSellerResponse(userText, window.funnelStore.data.clientSession.messages);
+      window.funnelStore.addAiSellerReply(reply.text, reply.quickReplies);
+      scrollToBottom('client-chat-scroll');
+    });
   }, 900);
 }
 
