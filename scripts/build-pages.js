@@ -22,7 +22,7 @@ if (!apiUrl) {
   console.error('[build-pages] SMARTFLOW_API_URL is not set. Set it to your Railway backend URL (https://...up.railway.app).');
   process.exit(1);
 }
-if (!/^https:\/\/[^/]+$/.test(apiUrl)) {
+if (!/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(apiUrl)) {
   console.error(`[build-pages] SMARTFLOW_API_URL must look like https://host (no path), got: ${apiUrl}`);
   process.exit(1);
 }

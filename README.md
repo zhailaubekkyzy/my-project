@@ -103,6 +103,16 @@ npm start
 ```
 Сервер будет доступен по адресу: `http://localhost:3000` (API: `http://localhost:3000/api/health`).
 
+### Сборка фронтенда
+CSS (Tailwind) и иконки (Lucide) собираются заранее, без CDN. Готовые `css/tailwind.css` и `js/icons.js` лежат в репозитории.
+После изменения классов или иконок в `index.html` / `js/*.js` пересоберите их:
+```bash
+npm run build          # иконки + Tailwind CSS
+npm run build:pages    # сборка dist/ для Cloudflare Pages (нужна переменная SMARTFLOW_API_URL)
+```
+Cloudflare Pages: Build command `npm run build:pages`, Build output directory `dist`, переменная `SMARTFLOW_API_URL` = адрес backend на Railway.
+На Railway задайте `CORS_ORIGINS` = адрес сайта на Pages (например `https://smartflow.pages.dev`).
+
 ### 2. Автоматическое тестирование безопасности (14 проверок)
 Тесты запускаются на отдельной изолированной тестовой базе данных:
 ```bash
