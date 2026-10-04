@@ -3,7 +3,7 @@
 // Build variable: SMARTFLOW_API_URL = Railway backend URL (https://...up.railway.app)
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "smartflow",
+  "name": "my-project",
   "compatibility_date": "2025-09-01",
   "assets": {
     "directory": "./dist",
