@@ -29,6 +29,9 @@ const config = {
   jwtExpiresIn: '7d',
   telegramMaxAgeSeconds: 86400, // 24 hours max age for initData
 
+  // Frontend origins allowed by CORS (Cloudflare Pages domain, custom domain)
+  corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean),
+
   // Database settings
   dbDriver: process.env.DB_DRIVER || 'sqlite',
   dbFile: process.env.DB_FILE || path.join(__dirname, '../data/smartflow.db'),

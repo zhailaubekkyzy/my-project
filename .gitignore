@@ -22,3 +22,6 @@ data/*.db
 data/*.sqlite
 backups/
 
+
+# Cloudflare Pages build output (npm run build:pages)
+dist/

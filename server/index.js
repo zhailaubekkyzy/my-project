@@ -23,9 +23,12 @@ const app = express();
 // Global Middleware
 app.use(compression());
 app.use(cors({
-  origin: '*',
+  // CORS_ORIGINS: comma-separated frontend origins allowed to call the API, e.g.
+  // https://smartflow.pages.dev. Unset → any origin (auth uses Bearer tokens, not cookies).
+  origin: config.corsOrigins.length ? config.corsOrigins : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // let browsers cache the preflight for a day
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

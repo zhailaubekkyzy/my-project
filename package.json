@@ -13,7 +13,8 @@
     "verify": "node scripts/test-auth-isolation.js",
     "build:css": "tailwindcss -i styles/tailwind.input.css -o css/tailwind.css --minify",
     "build:icons": "node scripts/build-icons.js",
-    "build": "npm run build:icons && npm run build:css"
+    "build": "npm run build:icons && npm run build:css",
+    "build:pages": "npm run build && node scripts/build-pages.js"
   },
   "keywords": [],
   "author": "",
