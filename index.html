@@ -13,44 +13,16 @@
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-            handwritten: ['Caveat', 'cursive']
-          },
-          colors: {
-            tiffany: {
-              300: '#a3eae3',
-              400: '#81D8D0',
-              500: '#50c8b6',
-              600: '#14b8a6',
-              700: '#0d9488'
-            },
-            crimson: {
-              500: '#ef4444',
-              600: '#dc2626',
-              700: '#b91c1c'
-            }
-          }
-        }
-      }
-    }
-  </script>
-
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Canvas Confetti for celebrations -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Custom CSS -->
+  <!-- App theme, then precompiled Tailwind (npm run build:css).
+       Order matters: the Play CDN injected Tailwind after app.css, so utilities win ties. -->
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/tailwind.css">
 </head>
 <body class="bg-[#060911] text-slate-100 min-h-screen select-none antialiased flex flex-col justify-between font-sans">
 

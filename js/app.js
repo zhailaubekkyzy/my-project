@@ -95,7 +95,7 @@ function renderApp(state) {
             <span class="text-white tracking-tight">SmartFlow</span>
             <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#81D8D0]/10 text-[#81D8D0] border border-[#81D8D0]/20">Mini App</span>
           </div>
-          <div class="text-xs font-handwritten text-[#ef4444] text-[15px] font-bold">
+          <div class="font-handwritten text-[#ef4444] text-[15px] leading-4 font-bold">
             ${state.appSlogan}
           </div>
         </div>
