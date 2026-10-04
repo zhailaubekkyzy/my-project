@@ -11,7 +11,8 @@ const TEST_DB_FILE = path.join(__dirname, '../data/test_stage1.db');
 process.env.NODE_ENV = 'test';
 process.env.DB_FILE = TEST_DB_FILE;
 process.env.DB_DRIVER = 'sqlite';
-process.env.TELEGRAM_BOT_TOKEN = '8832876047:AAHr_79H2N0StsQmuqiw57VKbvlCAwgHjg8';
+// Fake token: tests only need a value to sign initData with. Never put a real bot token here.
+process.env.TELEGRAM_BOT_TOKEN = '1234567890:TEST_ONLY_fake_bot_token_not_real';
 process.env.JWT_SECRET = 'sf_test_jwt_secret_key_stage1_testing_12345';
 
 // Remove old test db if present

@@ -140,7 +140,7 @@ node scripts/restore.js backups/smartflow-backup-YYYY-MM-DD.json
    - Бот: `@smartflow_ai_support_bot` (ID: `8832876047`).
    - Статус: **Активен и проверен**. Токен безопасно сохранен в `.env` на сервере и не попадает в git или браузер.
 2. **База данных PostgreSQL & Supabase:**
-   - Предоставлен Publishable Key: `sb_publishable_chPdMVynMO7fAhy4p8Hurg_LhjCHmwZ`.
+   - Publishable Key задаётся переменной окружения `SUPABASE_ANON_KEY` (в коде ключей нет).
    - Для прямого подключения backend к облачной PostgreSQL в Supabase требуется строка подключения (`DATABASE_URL`) или URL проекта (`SUPABASE_URL`) и секретный `service_role` ключ.
    - Текущий backend готов работать как с локальной/встроенной БД (SQLite через `better-sqlite3`), так и с PostgreSQL на Supabase (через `pg` пул) без изменения кода логики.
 3. **Размещение:**
