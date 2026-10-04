@@ -61,15 +61,31 @@ app.use('/api/templates', templateRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);
 
-// Serve static frontend assets (CSS, JS, images, index.html)
-app.use(express.static(path.join(__dirname, '../')));
+// Serve ONLY the public frontend assets. The repository root also holds server code,
+// package.json, migrations and scripts — none of it may be reachable over HTTP.
+const ROOT_DIR = path.join(__dirname, '..');
+const INDEX_HTML = path.join(ROOT_DIR, 'index.html');
+const PUBLIC_DIRS = ['css', 'js', 'images'];
+const staticOptions = { dotfiles: 'deny', index: false, fallthrough: false };
 
-// Fallback to index.html for single-page app routing
-app.get('*splat', (req, res, next) => {
+for (const dir of PUBLIC_DIRS) {
+  app.use(`/${dir}`, express.static(path.join(ROOT_DIR, dir), staticOptions));
+}
+
+// Fallback to index.html for single-page app routing.
+// Paths that look like files (have an extension) or dotfiles get 404 instead of the SPA
+// shell, so probes like /package.json, /.env or /server/config.js never reveal anything.
+app.get('*splat', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'not_found', message: 'API маршрут не найден' });
   }
-  res.sendFile(path.join(__dirname, '../index.html'));
+  if (req.path === '/index.html') {
+    return res.sendFile(INDEX_HTML);
+  }
+  if (path.extname(req.path) || req.path.split('/').some(seg => seg.startsWith('.'))) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  res.sendFile(INDEX_HTML);
 });
 
 // Error handling middleware
