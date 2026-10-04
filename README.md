@@ -110,7 +110,7 @@ CSS (Tailwind) и иконки (Lucide) собираются заранее, б�
 npm run build          # иконки + Tailwind CSS
 npm run build:pages    # сборка dist/ для Cloudflare Pages (нужна переменная SMARTFLOW_API_URL)
 ```
-Cloudflare Pages: Build command `npm run build:pages`, Build output directory `dist`, переменная `SMARTFLOW_API_URL` = адрес backend на Railway.
+Cloudflare (Workers с раздачей статики, настройки в `wrangler.jsonc`): Build command `npm run build:pages`, Deploy command `npx wrangler deploy`, переменная сборки `SMARTFLOW_API_URL` = адрес backend на Railway.
 На Railway задайте `CORS_ORIGINS` = адрес сайта на Pages (например `https://smartflow.pages.dev`).
 
 ### 2. Автоматическое тестирование безопасности (14 проверок)
