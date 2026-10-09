@@ -109,7 +109,17 @@
           <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться профилем
         </button>` : ''}
 
+      ${me.staffRole ? `
+        <button onclick="SF.push('admin')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="life-buoy" class="w-3.5 h-3.5"></i> Панель поддержки
+        </button>` : ''}
+
       <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Очистить данные на этом устройстве</button>
+
+      ${me.supportCode ? `
+        <button onclick="SF.copyText('${SF.js(me.supportCode)}', 'Номер скопирован')" class="w-full text-center text-[10px] text-faint">
+          Ваш номер для поддержки: <span class="font-semibold text-muted">${SF.esc(me.supportCode)}</span>
+        </button>` : ''}
     `;
   }
 
@@ -266,10 +276,19 @@
   };
 
   // ---------------- Screen ----------------
+  // Support panel screens (route.screen 'admin…') are in js/screens/admin.js
+  const isAdmin = (route) => route.screen.startsWith('admin');
   SF.screens.profile = {
-    title: (route) => (route.screen === 'edit' ? 'Редактировать профиль' : 'Профиль'),
+    title(route, state) {
+      if (isAdmin(route)) return SF.admin.title(route, state);
+      return route.screen === 'edit' ? 'Редактировать профиль' : 'Профиль';
+    },
     render(route, state) {
+      if (isAdmin(route)) return SF.admin.render(route, state);
       return route.screen === 'edit' ? renderEdit(state) : renderView(state);
+    },
+    afterRender(route, state) {
+      if (isAdmin(route)) SF.admin.afterRender(route, state);
     }
   };
 })(window);

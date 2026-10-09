@@ -466,7 +466,7 @@
       s.applyServerUser(res.user);
       s.saveData();
     } catch (err) {
-      showToast('Не удалось сохранить согласие. Попробуйте ещё раз');
+      showToast(SF.withErrorCode('Не удалось сохранить согласие. Попробуйте ещё раз', err));
       return;
     }
     SF.askWriteAccess(); // the bot will tell about new requests from clients

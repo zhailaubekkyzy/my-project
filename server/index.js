@@ -23,6 +23,9 @@ const chatRoutes = require('./routes/chat');
 const marketplaceRoutes = require('./routes/marketplace');
 const feedbackRoutes = require('./routes/feedback');
 const brainRoutes = require('./routes/brain');
+const supportRoutes = require('./routes/support');
+const adminRoutes = require('./routes/admin');
+const supportService = require('./services/support-service');
 const siEngine = require('./services/si-engine');
 
 const app = express();
@@ -86,6 +89,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/brain', brainRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.
@@ -145,6 +150,10 @@ async function startServer(port = config.port) {
   console.log('[SmartFlow] Initializing database...');
   db.getDatabase();
   await migrator.runMigrations({ silent: false });
+  // Support: numbers (SF-48213) for people who signed up earlier, the list of blocked people
+  const numbered = await supportService.backfillSupportCodes();
+  if (numbered) console.log(`[SmartFlow] Support numbers given to ${numbered} users`);
+  await supportService.refreshBlocked();
 
   return new Promise((resolve) => {
     const server = app.listen(port, () => {

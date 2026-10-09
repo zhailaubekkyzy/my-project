@@ -13,9 +13,25 @@ let sqliteDb = null;
 let pgPool = null;
 let activeDriver = 'sqlite';
 
+// DB_DRIVER must be exactly "postgres" or "sqlite". A typo used to silently start the server on
+// a temporary SQLite file (data lost on restart); now the server refuses to start and says why.
+const DRIVER_ALIASES = { postgres: 'postgres', postgresql: 'postgres', pg: 'postgres', sqlite: 'sqlite', sqlite3: 'sqlite' };
+
+function resolveDriver(value) {
+  if (!value) return process.env.DATABASE_URL ? 'postgres' : 'sqlite';
+  const driver = DRIVER_ALIASES[String(value).trim().toLowerCase()];
+  if (!driver) {
+    throw new Error(`DB_DRIVER="${value}" не понят. В Railway → Variables впишите DB_DRIVER=postgres (ровно это слово).`);
+  }
+  return driver;
+}
+
 function initDatabase(customOptions = {}) {
-  const driver = customOptions.driver || process.env.DB_DRIVER || (process.env.DATABASE_URL ? 'postgres' : 'sqlite');
+  const driver = resolveDriver(customOptions.driver || process.env.DB_DRIVER);
   activeDriver = driver;
+  if (driver === 'postgres' && !(customOptions.connectionString || process.env.DATABASE_URL)) {
+    throw new Error('DB_DRIVER=postgres, но DATABASE_URL не задан. В Railway → Variables добавьте DATABASE_URL (Supabase → Session pooler).');
+  }
 
   if (driver === 'postgres') {
     const connectionString = customOptions.connectionString || process.env.DATABASE_URL;
@@ -147,6 +163,7 @@ function closeDatabase() {
 }
 
 module.exports = {
+  resolveDriver,
   initDatabase,
   getDatabase,
   query,

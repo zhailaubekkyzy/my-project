@@ -165,6 +165,12 @@
     }
   }
 
+  // "Не отправилось (код K7P2)": the code of a server or connection failure, for support
+  function withErrorCode(text, err) {
+    const code = err && err.errorCode;
+    return code && (err.status >= 500 || err.status === 0) ? `${text} (код ${code})` : text;
+  }
+
   function scrollToBottom(elementId) {
     setTimeout(() => {
       const el = document.getElementById(elementId);
@@ -191,6 +197,7 @@
     closeModal,
     openLink,
     copyText,
+    withErrorCode,
     scrollToBottom
   });
 })(window);

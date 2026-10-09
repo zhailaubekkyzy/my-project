@@ -1,5 +1,12 @@
 // server/middleware/auth.js - Authentication Middleware
 const authService = require('../services/auth-service');
+const supportService = require('../services/support-service');
+
+const BLOCKED_RESPONSE = {
+  error: 'forbidden',
+  code: 'USER_BLOCKED',
+  message: 'Доступ к SmartFlow приостановлен. Если это ошибка — напишите в поддержку @smartflow_ai_support_bot.'
+};
 
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -22,6 +29,10 @@ function requireAuth(req, res, next) {
     });
   }
 
+  if (supportService.isBlocked(decoded.userId)) {
+    return res.status(403).json(BLOCKED_RESPONSE);
+  }
+
   req.user = decoded;
   next();
 }
@@ -31,7 +42,7 @@ function optionalAuth(req, res, next) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     const decoded = authService.verifySessionToken(token);
-    if (decoded) {
+    if (decoded && !supportService.isBlocked(decoded.userId)) {
       req.user = decoded;
     }
   }
@@ -39,6 +50,7 @@ function optionalAuth(req, res, next) {
 }
 
 module.exports = {
+  BLOCKED_RESPONSE,
   requireAuth,
   optionalAuth
 };
