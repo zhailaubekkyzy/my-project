@@ -37,6 +37,10 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
+  // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.
+  // Telegram ids (digits) and usr_... ids work too. The support team is added in the panel itself.
+  adminUsers: (process.env.ADMIN_USERS || '').split(',').map(v => v.trim()).filter(Boolean),
+
   // Frontend origins allowed by CORS (Cloudflare Pages domain, custom domain)
   corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean),
 

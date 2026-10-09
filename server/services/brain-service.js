@@ -366,6 +366,23 @@ async function backfillEmbeddings(pieces) {
   }
 }
 
+// Support panel: pieces of one expert's materials still without an embedding
+async function piecesWithoutMeaning(ownerId) {
+  return db.all(
+    `SELECT c.id, c.text, c.embedding FROM brain_chunks c
+     JOIN brain_materials m ON m.id = c.material_id
+     WHERE m.owner_id = ? AND c.embedding IS NULL`,
+    [ownerId]
+  );
+}
+
+// Support panel: process them now. Returns how many pieces got their embedding.
+async function processPendingPieces(ownerId) {
+  const pieces = await piecesWithoutMeaning(ownerId);
+  await backfillEmbeddings(pieces);
+  return pieces.filter(p => p.embedding).length;
+}
+
 /**
  * Pieces of the consultant's materials that help answer `query`: [{ title, text }].
  * Never throws: a failure here must not break the chat.
@@ -416,5 +433,8 @@ module.exports = {
   addMaterial,
   setConsultants,
   deleteMaterial,
-  contextFor
+  contextFor,
+  BACKFILL_LIMIT,
+  piecesWithoutMeaning,
+  processPendingPieces
 };

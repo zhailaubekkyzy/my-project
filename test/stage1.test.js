@@ -702,6 +702,166 @@ async function runAllTests() {
     assert.strictEqual(left.count, 0, 'The pieces of a deleted material are gone');
   });
 
+  // 14. Support: user numbers, error codes, complaints with details, the support panel and fixes
+  const supportService = require('../server/services/support-service');
+  const errorHandler = require('../server/middleware/error-handler');
+  const ownerTg = { id: 400004, first_name: 'Владелица', username: 'owner_sf' };
+  const studentTg = { id: 500005, first_name: 'Студент', username: 'student_sf' };
+  const tokenOwner = await tokenFor(ownerTg);
+  const tokenStudent = await tokenFor(studentTg);
+  const ownerUser = await authService.findOrCreateTelegramUser(ownerTg, 'expert');
+  const studentUser = await authService.findOrCreateTelegramUser(studentTg, 'expert');
+
+  await test('28. Короткий номер пользователя: выдаётся при входе, у всех разный, ищется однозначно', async () => {
+    const me = await api('GET', '/api/auth/me', tokenClient);
+    assert.match(me.body.user.supportCode, /^SF-\d{5}$/);
+    const again = await api('GET', '/api/auth/me', tokenClient);
+    assert.strictEqual(again.body.user.supportCode, me.body.user.supportCode, 'The number does not change');
+    await db.run('UPDATE users SET support_code = NULL WHERE id = ?', [expertB_InternalId]);
+    assert(await supportService.backfillSupportCodes() >= 1, 'People without a number get one');
+    const codes = (await db.all('SELECT support_code FROM users WHERE support_code IS NOT NULL')).map(r => r.support_code);
+    assert.strictEqual(new Set(codes).size, codes.length, 'Numbers are unique');
+    assert.strictEqual(supportService.normalizeSupportCode('sf 48213'), 'SF-48213');
+    const pub = await api('GET', `/api/marketplace/profiles/${clientUser.id}`);
+    assert(!JSON.stringify(pub.body || {}).includes('SF-'), 'The number is not shown in public profiles');
+  });
+
+  await test('29. Код ошибки: на экране, в логе и в базе с номером человека, без личных данных', async () => {
+    let body = null;
+    let status = null;
+    const res = { headersSent: false, status(s) { status = s; return this; }, json(b) { body = b; return this; } };
+    await errorHandler(new Error('db is down'), { method: 'POST', originalUrl: '/api/chat/x/messages?secret=1', user: { userId: clientUser.id } }, res, () => {});
+    assert.strictEqual(status, 500);
+    assert.match(body.errorCode, /^[A-Z2-9]{4}$/);
+    const row = await db.get('SELECT * FROM error_log WHERE code = ?', [body.errorCode]);
+    assert.strictEqual(row.user_id, clientUser.id);
+    assert.strictEqual(row.path, '/api/chat/x/messages', 'Query string (may hold secrets) is not logged');
+
+    const client = await api('POST', '/api/support/errors', tokenClient, { code: 'k7p2', message: 'render chats/list: TypeError', route: 'chats / list' });
+    assert.strictEqual(client.status, 201);
+    assert.strictEqual(client.body.code, 'K7P2');
+    const saved = await db.get(`SELECT * FROM error_log WHERE code = 'K7P2' AND source = 'client'`);
+    assert.strictEqual(saved.user_id, clientUser.id);
+  });
+
+  let feedbackId = null;
+  await test('30. Жалоба: прикладываются телефон, экран и коды ошибок; команде пишет бот с кнопкой «Открыть»', async () => {
+    const before = telegramBot.testOutbox.length;
+    config.adminUsers = [ownerTg.id.toString()];
+    const res = await api('POST', '/api/feedback', tokenClient, {
+      text: 'SI не отвечает',
+      context: { platform: 'ios', tgVersion: '8.0', route: 'chats / chat / x', botCanWrite: true, secretField: 'dropped',
+        recentErrors: [{ code: 'K7P2', status: 500, path: '/api/chat/x/messages', message: 'Ошибка' }] }
+    });
+    assert.strictEqual(res.status, 201);
+    feedbackId = res.body.id;
+    const row = await db.get('SELECT * FROM feedback WHERE id = ?', [feedbackId]);
+    const ctx = JSON.parse(row.context);
+    assert.strictEqual(ctx.platform, 'ios');
+    assert.strictEqual(ctx.recentErrors[0].code, 'K7P2');
+    assert.strictEqual(ctx.secretField, undefined, 'Unknown fields are dropped');
+    const toOwner = telegramBot.testOutbox.slice(before).find(m => m.userId === ownerUser.id);
+    assert(toOwner, 'The owner gets a bot message about the complaint');
+    assert(toOwner.text.includes('SI не отвечает') && toOwner.text.includes('K7P2'));
+    assert(toOwner.reply_markup.inline_keyboard[0][0].url.endsWith(`startapp=A_${feedbackId}`), 'Button opens the complaint');
+  });
+
+  await test('31. Панель поддержки: только команда; владелица добавляет студента по номеру', async () => {
+    assert.strictEqual((await api('GET', '/api/admin/overview', tokenClient)).status, 403, 'Clients have no access');
+    assert.strictEqual((await api('GET', '/api/admin/overview', tokenStudent)).status, 403, 'Not in the team yet');
+    const overview = await api('GET', '/api/admin/overview', tokenOwner);
+    assert.strictEqual(overview.status, 200);
+    assert.strictEqual(overview.body.me.role, 'owner');
+    assert(overview.body.feedback.new >= 1);
+    assert.strictEqual((await api('GET', '/api/auth/me', tokenOwner)).body.user.staffRole, 'owner');
+
+    const studentCode = (await api('GET', '/api/auth/me', tokenStudent)).body.user.supportCode;
+    assert.strictEqual((await api('POST', '/api/admin/staff', tokenOwner, { supportCode: 'SF-00000' })).status, 404);
+    assert.strictEqual((await api('POST', '/api/admin/staff', tokenOwner, { supportCode: studentCode.toLowerCase() })).status, 201);
+    assert.strictEqual((await api('GET', '/api/admin/overview', tokenStudent)).body.me.role, 'support');
+    assert.strictEqual((await api('GET', '/api/admin/staff', tokenStudent)).status, 403, 'Only the owner manages the team');
+
+    const clientCode = (await api('GET', '/api/auth/me', tokenClient)).body.user.supportCode;
+    const found = await api('GET', `/api/admin/users?q=${encodeURIComponent(clientCode)}`, tokenStudent);
+    assert.strictEqual(found.body.users.length, 1);
+    assert.strictEqual(found.body.users[0].id, clientUser.id);
+    assert.strictEqual((await api('GET', '/api/admin/users?q=%40client_serg', tokenStudent)).body.users[0].id, clientUser.id, 'Search by @username');
+
+    const card = await api('GET', `/api/admin/users/${clientUser.id}`, tokenStudent);
+    assert.strictEqual(card.status, 200);
+    assert(card.body.feedback.some(f => f.id === feedbackId));
+    assert(card.body.errors.some(e => e.code === 'K7P2'));
+    assert(card.body.chatsAsClient.length >= 1, 'The person\'s chats are listed');
+
+    const byCode = await api('GET', '/api/admin/errors?code=k7p2', tokenStudent);
+    assert(byCode.body.errors.length >= 1 && byCode.body.errors[0].user.id === clientUser.id, 'An error code leads to the person');
+
+    const reply = await api('POST', `/api/admin/feedback/${feedbackId}/reply`, tokenStudent, { text: 'Починили, откройте чат заново', close: true });
+    assert.strictEqual(reply.body.feedback.status, 'done');
+    const mine = await api('GET', '/api/feedback/mine', tokenClient);
+    assert.strictEqual(mine.body.feedback.find(f => f.id === feedbackId).reply, 'Починили, откройте чат заново', 'The answer is in the person\'s support chat');
+    assert(telegramBot.testOutbox.some(m => m.userId === clientUser.id && m.text.includes('Починили')), 'The bot sends the answer');
+  });
+
+  await test('32. Исправления: «было → станет», только у этого человека, стоп при другом числе записей', async () => {
+    await api('POST', `/api/chat/${projectA.slug}/human`, tokenClient, { reason: 'Позовите человека' });
+    const chat = (await api('GET', `/api/admin/users/${clientUser.id}`, tokenStudent)).body.chatsAsClient.find(c => c.slug === projectA.slug);
+    assert.strictEqual(chat.siPaused, true);
+
+    // Another person's chat cannot be changed from this person's card
+    const foreign = await api('POST', `/api/admin/users/${expertB_InternalId}/fixes/resume_si/preview`, tokenStudent, { params: { clientId: chat.clientId } });
+    assert.strictEqual(foreign.status, 404);
+
+    const url = `/api/admin/users/${clientUser.id}/fixes/resume_si`;
+    const preview = await api('POST', `${url}/preview`, tokenStudent, { params: { clientId: chat.clientId } });
+    assert.strictEqual(preview.body.preview.count, 1);
+    assert.strictEqual(preview.body.preview.changes[0].after, 'отвечает');
+    const wrong = await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 300 });
+    assert.strictEqual(wrong.status, 409, 'Different number of records → stop');
+    assert.strictEqual((await db.get('SELECT status FROM clients WHERE id = ?', [chat.clientId])).status, 'human_needed', 'Nothing changed');
+    const applied = await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 1 });
+    assert.strictEqual(applied.status, 200);
+    assert.strictEqual((await db.get('SELECT status FROM clients WHERE id = ?', [chat.clientId])).status, 'active');
+    assert.strictEqual((await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 1 })).status, 409, 'Nothing to change twice');
+
+    const reset = await api('POST', `/api/admin/users/${clientUser.id}/fixes/reset_device/apply`, tokenStudent, { expectedCount: 1 });
+    assert.strictEqual(reset.status, 200);
+    assert((await api('GET', '/api/auth/me', tokenClient)).body.user.clientResetAt, 'The app learns it must clear its cache');
+
+    const log = await api('GET', '/api/admin/actions', tokenOwner);
+    const entry = log.body.actions.find(a => a.action === 'fix:resume_si');
+    assert(entry && entry.targetUserId === clientUser.id && entry.details.changes[0].before.includes('молчит'), 'Every fix is in the team log');
+
+    const viewed = await api('GET', `/api/admin/users/${clientUser.id}/chats/${chat.clientId}`, tokenStudent);
+    assert(viewed.body.messages.length > 0);
+    assert((await db.get(`SELECT COUNT(*) AS count FROM admin_actions WHERE action = 'view_chat'`)).count >= 1, 'Reading a chat is logged');
+  });
+
+  await test('33. Блокировка: только владелица; заблокированный не может пользоваться приложением', async () => {
+    const url = `/api/admin/users/${clientUser.id}/fixes/block_user`;
+    assert.strictEqual((await api('POST', `${url}/preview`, tokenStudent, { params: { blocked: true } })).status, 403, 'Support cannot block');
+    assert.strictEqual((await api('POST', `/api/admin/users/${studentUser.id}/fixes/block_user/apply`, tokenOwner, { params: { blocked: true }, expectedCount: 1 })).status, 409, 'A team member cannot be blocked');
+    assert.strictEqual((await api('POST', `${url}/apply`, tokenOwner, { params: { blocked: true }, expectedCount: 1 })).status, 200);
+    const blocked = await api('GET', '/api/chat', tokenClient);
+    assert.strictEqual(blocked.status, 403);
+    assert.strictEqual(blocked.body.code, 'USER_BLOCKED');
+    const login = await fetch(`${baseUrl}/api/auth/telegram`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, clientTg) })
+    });
+    assert.strictEqual(login.status, 403, 'A blocked person cannot sign in');
+    assert.strictEqual((await api('POST', `${url}/apply`, tokenOwner, { params: { blocked: false }, expectedCount: 1 })).status, 200);
+    assert.strictEqual((await api('GET', '/api/chat', tokenClient)).status, 200, 'Unblocked again');
+    config.adminUsers = [];
+  });
+
+  await test('34. Неверный DB_DRIVER — понятная ошибка вместо тихого SQLite', async () => {
+    assert.strictEqual(db.resolveDriver('postgres'), 'postgres');
+    assert.strictEqual(db.resolveDriver('PostgreSQL'), 'postgres');
+    assert.strictEqual(db.resolveDriver('sqlite'), 'sqlite');
+    assert.throws(() => db.resolveDriver('postgress'), /DB_DRIVER/);
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

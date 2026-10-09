@@ -106,6 +106,13 @@
       store().setRemote('brain', res.materials || []);
     }, 60000),
 
+    // My messages to support and the team's answers
+    myFeedback: (maxAge = 30000) => ensure('myFeedback', async () => {
+      if (!signedIn()) return false;
+      const res = await api().getMyFeedback();
+      store().setRemote('myFeedback', res.feedback || []);
+    }, maxAge),
+
     // My consultants again (after creating or editing one)
     myConsultants: () => ensure('consultants', async () => {
       if (!signedIn()) return false;

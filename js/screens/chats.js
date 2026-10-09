@@ -30,7 +30,8 @@
 
   function renderList(state) {
     const chats = state.remote.chats;
-    const lastAssistant = state.chats.assistant[state.chats.assistant.length - 1];
+    const assistantList = assistantMessages(state);
+    const lastAssistant = assistantList[assistantList.length - 1];
     return `
       <div class="space-y-2">
         ${chats === null && SF.data.signedIn() ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
@@ -147,6 +148,23 @@
   }
 
   // ---------------- SI-assistant: complaints and suggestions ----------------
+  const ACK_TEXT = 'Спасибо, записал! Передам команде SmartFlow. Ответ придёт сюда и в Telegram.';
+
+  // Messages of the support chat: the greeting, then my messages from the server with the team's
+  // answers; messages that did not reach the server stay on this phone (state.chats.assistant).
+  function assistantMessages(state) {
+    const local = state.chats.assistant;
+    const server = state.remote.myFeedback;
+    if (!server) return local;
+    const list = [local[0]];
+    server.forEach(f => {
+      list.push({ sender: 'me', text: f.text });
+      list.push({ sender: 'ai', text: ACK_TEXT });
+      if (f.reply) list.push({ sender: 'team', text: f.reply });
+    });
+    return list.concat(local.slice(1).filter(m => m.unsent));
+  }
+
   function renderAssistant(state) {
     return `
       <div class="glass-card-3d p-3 flex items-center gap-2.5 border-[var(--si-bubble-line)]">
@@ -157,15 +175,23 @@
         </div>
       </div>
       <div class="glass-card-3d p-3 flex flex-col space-y-2.5 min-h-[280px] max-h-[460px] overflow-y-auto" id="chat-scroll">
-        ${state.chats.assistant.map(m => m.sender === 'me'
-          ? `<div class="flex justify-end"><div class="chat-bubble-human">${SF.formatChatMarkdown(m.text)}</div></div>`
-          : `<div class="flex items-end gap-1.5"><img src="${SF.MASCOTS.assistant}" alt="SI" class="mascot-avatar" /><div class="chat-bubble-si">${SF.formatChatMarkdown(m.text)}</div></div>`
-        ).join('')}
+        ${assistantMessages(state).map(m => {
+          if (m.sender === 'me') return `<div class="flex justify-end"><div class="chat-bubble-human">${SF.formatChatMarkdown(m.text)}</div></div>`;
+          if (m.sender === 'team') {
+            return `
+              <div class="flex flex-col items-start">
+                <div class="text-[9px] text-brand font-semibold px-1 mb-0.5">👤 Команда SmartFlow</div>
+                <div class="chat-bubble-expert">${SF.formatChatMarkdown(m.text)}</div>
+              </div>`;
+          }
+          return `<div class="flex items-end gap-1.5"><img src="${SF.MASCOTS.assistant}" alt="SI" class="mascot-avatar" /><div class="chat-bubble-si">${SF.formatChatMarkdown(m.text)}</div></div>`;
+        }).join('')}
       </div>
       <form onsubmit="SF.actions.sendFeedback(event)" class="flex items-center gap-2">
         <input type="text" name="text" data-keep="assistant-input" maxlength="2000" autocomplete="off" placeholder="Жалоба, предложение или вопрос..." class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
         <button type="submit" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить"><i data-lucide="send" class="w-4 h-4"></i></button>
       </form>
+      ${state.me.supportCode ? `<div class="text-[10px] text-faint text-center">Ваш номер в поддержке: ${SF.esc(state.me.supportCode)}. К сообщению автоматически прикладываются модель телефона, версия Telegram и коды последних ошибок — без ваших переписок.</div>` : ''}
     `;
   }
 
@@ -208,7 +234,7 @@
       SF.data.myChats();
       if (res.limitReached) showToast('SI ответил на всё, что мог. Нажмите «Связаться с человеком»');
     } catch (err) {
-      showToast(err.status === 401 ? 'Войдите заново через Telegram' : 'Не отправилось. Проверьте интернет и попробуйте ещё раз');
+      showToast(err.status === 401 ? 'Войдите заново через Telegram' : SF.withErrorCode('Не отправилось. Проверьте интернет и попробуйте ещё раз', err));
     } finally {
       sending = false;
       SF.scrollToBottom('chat-scroll');
@@ -223,7 +249,7 @@
       SF.data.chatMessages(slug);
       showToast('Эксперт получил ваш запрос в Telegram и ответит здесь');
     } catch (err) {
-      showToast('Не получилось отправить запрос. Попробуйте ещё раз');
+      showToast(SF.withErrorCode('Не получилось отправить запрос. Попробуйте ещё раз', err));
     }
   };
 
@@ -242,17 +268,24 @@
     if (!text) return;
     e.target.text.value = '';
     const s = store();
-    s.addAssistantMessage('me', text);
-    let saved = false;
+    let error = null;
     if (SF.data.signedIn()) {
       try {
-        await api().sendFeedback(text);
-        saved = true;
-      } catch (err) {}
+        const res = await api().sendFeedback(text, SF.supportContext());
+        const mine = s.data.remote.myFeedback || [];
+        s.setRemote('myFeedback', [...mine, { id: res.id, text, status: 'new', reply: null }]);
+        SF.data.invalidate('myFeedback');
+        SF.data.myFeedback();
+      } catch (err) {
+        error = err;
+      }
+    } else {
+      error = new Error('Откройте приложение в Telegram');
     }
-    s.addAssistantMessage('ai', saved
-      ? 'Спасибо, записал! Передам команде SmartFlow. Если это жалоба на SI или человека — мы проверим переписку.'
-      : 'Не получилось отправить: нет связи с сервером. Попробуйте ещё раз чуть позже.');
+    if (error) {
+      s.addAssistantMessage('me', text, { unsent: true });
+      s.addAssistantMessage('ai', `Не получилось отправить: ${error.message}. Попробуйте ещё раз чуть позже.`, { unsent: true });
+    }
     SF.scrollToBottom('chat-scroll');
   };
 
@@ -271,10 +304,14 @@
     afterRender(route, state) {
       if (route.screen !== 'chat') {
         SF.data.myChats();
+        SF.data.myFeedback(60000);
         return;
       }
       SF.scrollToBottom('chat-scroll');
-      if (route.slug === ASSISTANT) return;
+      if (route.slug === ASSISTANT) {
+        SF.data.myFeedback(15000);
+        return;
+      }
       const slug = route.slug;
       if (SF.data.isMissing(state, slug)) return;
       SF.data.cardBySlug(slug);

@@ -4,8 +4,8 @@ const router = express.Router();
 const authService = require('../services/auth-service');
 const projectService = require('../services/project-service');
 const subscriptionService = require('../services/subscription-service');
-const profileService = require('../services/profile-service');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, BLOCKED_RESPONSE } = require('../middleware/auth');
+const supportService = require('../services/support-service');
 const config = require('../config');
 const db = require('../db');
 
@@ -47,6 +47,16 @@ router.post('/telegram', async (req, res, next) => {
 
     // Find or create permanent internal user
     const user = await authService.findOrCreateTelegramUser(verification.user, role || 'expert');
+    if (user.status === 'blocked') {
+      supportService.setBlocked(user.id, true);
+      return res.status(403).json(BLOCKED_RESPONSE);
+    }
+    // For the support panel: when the person was last here and whether the bot may write to them
+    const writeAllowed = verification.user.allows_write_to_pm;
+    await db.run(
+      'UPDATE users SET last_seen_at = CURRENT_TIMESTAMP, telegram_write_allowed = COALESCE(?, telegram_write_allowed) WHERE id = ?',
+      [typeof writeAllowed === 'boolean' ? (writeAllowed ? 1 : 0) : null, user.id]
+    );
     const token = authService.generateSessionToken(user);
 
     // Fetch user projects and subscription
@@ -55,7 +65,7 @@ router.post('/telegram', async (req, res, next) => {
 
     res.json({
       token,
-      user: { ...profileService.toPublicUser(user), telegramId: user.telegramId },
+      user: { ...(await supportService.sessionUser(user)), telegramId: user.telegramId },
       projects,
       subscription
     });
@@ -80,7 +90,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
     const funnelSubs = await subscriptionService.getExpertFunnelSubscriptions(user.id);
 
     res.json({
-      user: profileService.toPublicUser(user),
+      user: await supportService.sessionUser(user),
       projects,
       subscription,
       funnelSubscriptions: funnelSubs
@@ -131,7 +141,7 @@ router.post('/dev-login', async (req, res, next) => {
 
     res.json({
       token,
-      user: profileService.toPublicUser(user),
+      user: await supportService.sessionUser(user),
       projects,
       subscription,
       isDevBypass: true

@@ -33,6 +33,8 @@ const defaultData = {
     username: null,
     photoUrl: null,
     hasUploadedPhoto: false,
+    supportCode: null,       // short number for support, e.g. SF-48213 (shown in Profile)
+    staffRole: null,         // 'owner' | 'support' | null — opens the support panel
     profile: {
       displayName: '',
       headline: '',
@@ -62,8 +64,12 @@ const defaultData = {
     inquiries: {},           // { [projectId]: [...] } "Мне написали"
     clientMessages: {},      // { [clientId]: [...] }
     analytics: {},           // { [projectId]: live numbers }
-    brain: null              // my SI-brain materials (only their text is stored)
+    brain: null,             // my SI-brain materials (only their text is stored)
+    myFeedback: null         // my messages to support with the team's answers
   },
+
+  // When the support team last pressed "Очистить данные на телефоне" (see setAuth)
+  deviceResetSeen: null,
 
   // Chats that live only in the app
   chats: {
@@ -138,6 +144,16 @@ class Store {
   // Login
   // ---------------------------------------------------------------
   setAuth(authData) {
+    // The support team asked to clear this person's cache: start from a clean state once
+    const resetAt = authData.user?.clientResetAt;
+    if (resetAt && resetAt !== this.data.deviceResetSeen) {
+      const hadSeen = this.data.deviceResetSeen !== null;
+      const ui = this.data.ui;
+      this.data = clone(defaultData);
+      this.data.ui = ui;
+      this.data.deviceResetSeen = resetAt;
+      if (hadSeen && window.SF && window.SF.showToast) setTimeout(() => window.SF.showToast('Поддержка обновила приложение на этом телефоне'), 500);
+    }
     this.data.auth = { status: 'authenticated', internalUserId: authData.user?.id || null, error: null };
     if (authData.user) this.applyServerUser(authData.user);
     if (authData.projects?.owned) this.setServerConsultants(authData.projects.owned);
@@ -205,6 +221,8 @@ class Store {
     me.username = user.username || null;
     me.photoUrl = user.photoUrl || null;
     me.hasUploadedPhoto = Boolean(user.hasUploadedPhoto);
+    if (user.supportCode) me.supportCode = user.supportCode;
+    if (user.staffRole !== undefined) me.staffRole = user.staffRole;
     if (user.profile) me.profile = { ...me.profile, ...user.profile };
   }
 
@@ -295,8 +313,9 @@ class Store {
     this.saveData();
   }
 
-  addAssistantMessage(sender, text) {
-    this.data.chats.assistant.push({ id: `a-${Date.now()}-${sender}`, sender, text });
+  // unsent: did not reach the server (shown until the support chat is loaded from the server)
+  addAssistantMessage(sender, text, { unsent = false } = {}) {
+    this.data.chats.assistant.push({ id: `a-${Date.now()}-${sender}`, sender, text, ...(unsent ? { unsent: true } : {}) });
     this.saveData();
   }
 }
