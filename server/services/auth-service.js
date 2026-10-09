@@ -146,7 +146,7 @@ async function findOrCreateTelegramUser(tgUser, requestedRole = 'expert') {
         slug,
         'Экспертные услуги и консалтинг',
         JSON.stringify({
-          systemRole: `AI-продавец и ассистент эксперта ${displayName}`,
+          systemRole: `SI-консультант и ассистент эксперта ${displayName}`,
           tone: 'экспертный, заботливый, конвертирующий',
           targetAudience: 'Целевые клиенты и подписчики',
           objectionsHandling: {

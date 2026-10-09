@@ -1,6 +1,6 @@
 // store.js - Central State Management for SmartFlow Telegram Mini App
 
-const STORAGE_KEY = 'smartflow_tma_v2';
+const STORAGE_KEY = 'smartflow_tma_v3'; // v3: SI wording in demo data
 
 const defaultData = {
   appName: 'SmartFlow',
@@ -9,7 +9,6 @@ const defaultData = {
   currentFunnelId: 'funnel-ht',
   currentExpertId: 'exp-elena',
   currentClientChatId: 'chat-lead-1',
-  viewMode: 'desktop-tma', // 'desktop-tma' (device frame) or 'fullscreen'
   showDevRoleSwitcher: true, // Allows toggling roles for pitch demo, but user mode is isolated
   
   // Telegram Authentication & Core Backend Identity
@@ -25,7 +24,7 @@ const defaultData = {
   investorData: {
     round: 'Seed Round ($3.5M at $28M Cap)',
     targetInvestors: 'Y Combinator S26 • Google Ventures • a16z Speedrun',
-    deckHeadline: 'SmartFlow: The Autonomous Conversational AI Sales Engine for the $52B Creator Economy',
+    deckHeadline: 'SmartFlow: The Autonomous Conversational SI Sales Engine for the $52B Creator Economy',
     
     // Core SaaS / Fintech Metrics
     financials: {
@@ -54,7 +53,7 @@ const defaultData = {
     // Market Sizing (TAM / SAM / SOM)
     marketSize: {
       tam: '$52.4B',
-      tamDesc: 'Global Creator Economy & Conversational AI Sales Platforms',
+      tamDesc: 'Global Creator Economy & Conversational SI Sales Platforms',
       sam: '$14.2B',
       samDesc: 'Social-First Creators & Online Academies across Telegram, WhatsApp, IG',
       som: '$850M',
@@ -76,8 +75,8 @@ const defaultData = {
     name: 'Александр Громов',
     tag: '@gromov_smartflow',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    title: 'Top Funnel Architect & AI Strategist',
-    bio: 'Специализация: Воронки на высокий чек и EdTech с AI-агентами SmartFlow',
+    title: 'Top Funnel Architect & SI Strategist',
+    bio: 'Специализация: Воронки на высокий чек и EdTech с SI-агентами SmartFlow',
     balance: 237600,
     mrr: 237600,
     activeSubscribersCount: 24,
@@ -185,7 +184,7 @@ const defaultData = {
           id: 'rec-mkt-3',
           urgency: 'tip',
           title: 'Внедрение триггера "Дедлайн слотов"',
-          observation: 'Эксперты закрывают на созвон на 22% лучше, если ИИ-продавец говорит: "На эту неделю у эксперта осталось всего 2 свободных слота".',
+          observation: 'Эксперты закрывают на созвон на 22% лучше, если SI-консультант говорит: "На эту неделю у эксперта осталось всего 2 свободных слота".',
           solution: 'Включено в стандартный промпт шага 5.'
         }
       ],
@@ -341,7 +340,7 @@ const defaultData = {
         hasAudio: true,
         audioDuration: '0:18',
         audioTranscription: '«Здравствуйте! Я основатель IT-аутсорсинга, оборот 3.2 миллиона. Скажите, Елена лично ведет спринт делегирования или через кураторов? Хочу подтвердить слот на четверг.»',
-        lastDirectMessage: 'Аудиосообщение (расшифровано Whisper AI)',
+        lastDirectMessage: 'Аудиосообщение (расшифровано SI)',
         status: 'waiting',
         botState: 'paused',
         tags: ['#не_купил_миникурс', '#ждёт_созвон']
@@ -397,7 +396,7 @@ const defaultData = {
         },
         {
           id: 'q5',
-          question: 'Какие материалы, кейсы и кнопки целевого действия должен показывать ИИ-продавец?',
+          question: 'Какие материалы, кейсы и кнопки целевого действия должен показывать SI-консультант?',
           answer: 'Материалы: PDF-гайд "5 скрытых утечек времени фаундера", ссылка на видео-интервью с резидентом с ростом выручки с 2M до 7M ₽. Кнопки: "Забронировать стратегический разбор", "Смотреть кейсы", "Связаться с Еленой в Telegram".',
           category: 'Материалы & Кнопки'
         }
@@ -427,7 +426,7 @@ const defaultData = {
         summary: 'Основатель IT-аутсорсинга, выручка 3.2M ₽. Главная боль — работает по 14 часов. Хочет созвон.',
         messages: [
           { sender: 'lead', text: 'Здравствуйте! Увидел ваш разбор про делегирование в канале. Хочу узнать подробнее.', time: '14:20' },
-          { sender: 'ai', text: 'Приветствую, Марк! Рад познакомиться. Я AI-ассистент Елены Смирновой в SmartFlow. Направляю вам аудит «5 скрытых утечек времени фаундера». Скажите, какой у вас сейчас проект и сколько времени в неделю съедает операционка?', time: '14:21' },
+          { sender: 'ai', text: 'Приветствую, Марк! Рад познакомиться. Я SI-ассистент Елены Смирновой в SmartFlow. Направляю вам аудит «5 скрытых утечек времени фаундера». Скажите, какой у вас сейчас проект и сколько времени в неделю съедает операционка?', time: '14:21' },
           { 
             sender: 'lead', 
             isVoice: true, 
@@ -491,7 +490,7 @@ const defaultData = {
       aiSellerSavedHours: 114,
       steps: [
         { title: 'Посетители воронки', count: 438, percent: '100%' },
-        { title: 'Старт диалога с ИИ', count: 392, percent: '89.5%' },
+        { title: 'Старт диалога с SI', count: 392, percent: '89.5%' },
         { title: 'Прошли квалификацию', count: 246, percent: '62.7%' },
         { title: 'Ознакомились с оффером', count: 154, percent: '39.2%' },
         { title: 'Запись на созвон / Оплата', count: 58, percent: '14.6%' }
@@ -505,7 +504,7 @@ const defaultData = {
         impact: '+35,000 ₽ к чеку',
         tag: 'Оффер & PMF',
         title: 'Увеличить стоимость стартового созвона с 25,000 ₽ до 35,000 ₽',
-        reason: 'Ваш ИИ-продавец квалифицирует лидов с выручкой > 2.5 млн ₽. Для этой аудитории чек 25k кажется "подозрительно доступным". Тест на 20 лидах показал, что готовность платить 35k абсолютно такая же.',
+        reason: 'Ваш SI-консультант квалифицирует лидов с выручкой > 2.5 млн ₽. Для этой аудитории чек 25k кажется "подозрительно доступным". Тест на 20 лидах показал, что готовность платить 35k абсолютно такая же.',
         applied: false,
         actionType: 'update_price'
       },
@@ -514,7 +513,7 @@ const defaultData = {
         impact: '+22% к конверсии',
         tag: 'Возражения',
         title: 'Внедрить авто-демонстрацию кейса в нише B2B IT',
-        reason: 'За сентябрь 18 лидов из IT-сферы задали вопрос: "А есть ли примеры в заказной разработке?". Добавьте 2 слайда кейса Артема прямо в ответ ИИ-продавца.',
+        reason: 'За сентябрь 18 лидов из IT-сферы задали вопрос: "А есть ли примеры в заказной разработке?". Добавьте 2 слайда кейса Артема прямо в ответ SI-консультанта.',
         applied: true,
         actionType: 'add_case'
       },
@@ -534,14 +533,14 @@ const defaultData = {
   clientSession: {
     expertName: 'Елена Смирнова',
     expertAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
-    botName: 'SmartFlow AI Sales Agent',
+    botName: 'SmartFlow SI-консультант',
     status: 'online',
     currentFunnelStep: 1,
     messages: [
       {
         id: 'cm-1',
         sender: 'ai',
-        text: 'Приветствую! 👋 Я AI-продавец Елены Смирновой — Executive-коуча и ментора фаундеров.\n\nЗа 6 лет Елена помогла 140+ собственникам высвободить 15+ часов в неделю и вырасти в чистой прибыли x2-x5.\n\nЗафиксировал для вас **Гайд «5 скрытых утечек времени фаундера»** 📥\n\nМожете написать мне текстом или **отправить голосовое сообщение** 🎙️ — я отлично распознаю аудио! В какой нише ваш проект и какой сейчас оборот?',
+        text: 'Приветствую! 👋 Я SI-консультант Елены Смирновой — Executive-коуча и ментора фаундеров.\n\nЗа 6 лет Елена помогла 140+ собственникам высвободить 15+ часов в неделю и вырасти в чистой прибыли x2-x5.\n\nЗафиксировал для вас **Гайд «5 скрытых утечек времени фаундера»** 📥\n\nМожете написать мне текстом или **отправить голосовое сообщение** 🎙️ — я отлично распознаю аудио! В какой нише ваш проект и какой сейчас оборот?',
         time: 'Только что',
         quickReplies: [
           'Услуги / IT (оборот 2-5M ₽)',
@@ -659,11 +658,6 @@ class Store {
     }
   }
 
-  setViewMode(mode) {
-    this.data.viewMode = mode;
-    this.saveData();
-  }
-
   selectFunnel(funnelId) {
     this.data.currentFunnelId = funnelId;
     this.saveData();
@@ -733,7 +727,7 @@ class Store {
       timeAgo: 'Только что',
       urgency: 'Срочно 🔥',
       dealValue: '180,000 ₽',
-      sourceStep: 'Чат ИИ-продавца',
+      sourceStep: 'Чат SI-консультанта',
       summary: leadData.summary || 'Нажал кнопку «Связаться с человеком» в SmartFlow.',
       audioUrl: leadData.audioUrl || null,
       hasAudio: !!leadData.hasAudio,
@@ -887,7 +881,7 @@ class Store {
 
     if (!hasDate || !hasPrice) {
       this.data.expert.aiBroadcast.clarificationStep = true;
-      this.data.expert.aiBroadcast.clarificationQuestion = `ИИ понял контекст! 🎯 Сегмент: ${count} лидов с тегом ${targetTag}. Место: кофейня «Раф», 16:00. Уточните: какая точная дата (в эту субботу?) и условия входа (бесплатно по брони или депозит)?`;
+      this.data.expert.aiBroadcast.clarificationQuestion = `SI понял контекст! 🎯 Сегмент: ${count} лидов с тегом ${targetTag}. Место: кофейня «Раф», 16:00. Уточните: какая точная дата (в эту субботу?) и условия входа (бесплатно по брони или депозит)?`;
       this.data.expert.aiBroadcast.readyPost = null;
     } else {
       this.data.expert.aiBroadcast.clarificationStep = false;

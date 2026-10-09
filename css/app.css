@@ -1,256 +1,246 @@
-/* app.css - SmartFlow Telegram Mini App Theme & 3D Tactile Design */
+/* app.css - SmartFlow theme.
+ * Logo idea: SI (red dot) in the center connects people (Tiffany/blue petals) around it.
+ * Chats with SI get a soft warm-red tint, chats with people a calm Tiffany tint.
+ * Light by default; dark when Telegram is in dark mode (<html data-theme="dark">).
+ * Colors are "R G B" triplets so Tailwind can add opacity (see tailwind.config.js).
+ */
 
 :root {
-  /* Brand Colors from Image & Spec */
+  --c-page: 246 249 250;
+  --c-card: 255 255 255;
+  --c-sunken: 242 247 249;
+  --c-raised: 232 241 244;
+  --c-ink: 18 32 45;
+  --c-ink-2: 51 71 89;
+  --c-muted: 92 111 128;
+  --c-faint: 134 151 166;
+  --c-line: 224 233 238;
+  --c-line-2: 204 217 225;
+  --c-brand: 13 128 120;
+  --c-si: 208 58 52;
+
+  --c-emerald-300: 4 120 87;
+  --c-emerald-400: 5 140 98;
+  --c-emerald-800: 167 243 208;
+  --c-emerald-900: 209 250 229;
+  --c-emerald-950: 236 253 245;
+  --c-rose-300: 190 18 60;
+  --c-rose-400: 219 39 79;
+  --c-rose-900: 255 228 230;
+  --c-amber-300: 146 64 14;
+  --c-amber-400: 180 83 9;
+  --c-violet-200: 91 33 182;
+  --c-violet-300: 109 40 217;
+  --c-violet-400: 124 58 237;
+  --c-violet-900: 237 233 254;
+  --c-sky-300: 3 105 161;
+  --c-sky-400: 2 132 199;
+
+  /* Brand colors from the logo */
   --sf-tiffany: #81D8D0;
-  --sf-tiffany-hover: #65cfc6;
-  --sf-tiffany-dark: #14b8a6;
   --sf-tiffany-deep: #0d9488;
-  --sf-tiffany-glow: rgba(129, 216, 208, 0.35);
+  --sf-logo-cyan: #6fd3df;
+  --sf-logo-blue: #2f88a8;
+  --sf-si-red: #e53935;
 
-  --sf-brand-red: #dc2626;
-  --sf-brand-red-hover: #b91c1c;
-  --sf-brand-red-light: #f87171;
-  --sf-brand-red-glow: rgba(220, 38, 38, 0.4);
+  /* Chat tints */
+  --si-bubble: #fff3f1;
+  --si-bubble-line: #fbd5d0;
+  --human-bubble: #e9f8f6;
+  --human-bubble-line: #bfe9e4;
+  --human-bubble-strong: #c9efeb;
 
-  --sf-bg-dark: #080d16;
-  --sf-card-dark: #111a2a;
-  --sf-card-dark-border: rgba(129, 216, 208, 0.18);
-  --sf-card-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-soft: 0 1px 2px rgb(18 32 45 / 0.04), 0 6px 18px -8px rgb(18 32 45 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(18 32 45 / 0.05), 0 12px 28px -10px rgb(18 32 45 / 0.18);
 
-  --sf-text-main: #f8fafc;
-  --sf-text-muted: #94a3b8;
-  --sf-text-tiffany: #81D8D0;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --c-page: 9 15 23;
+  --c-card: 17 26 40;
+  --c-sunken: 12 19 30;
+  --c-raised: 24 35 52;
+  --c-ink: 241 245 249;
+  --c-ink-2: 203 213 225;
+  --c-muted: 148 163 184;
+  --c-faint: 100 116 139;
+  --c-line: 31 43 61;
+  --c-line-2: 51 65 85;
+  --c-brand: 129 216 208;
+  --c-si: 248 128 120;
+
+  --c-emerald-300: 110 231 183;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-800: 6 95 70;
+  --c-emerald-900: 6 78 59;
+  --c-emerald-950: 2 44 34;
+  --c-rose-300: 253 164 175;
+  --c-rose-400: 251 113 133;
+  --c-rose-900: 136 19 55;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 251 191 36;
+  --c-violet-200: 221 214 254;
+  --c-violet-300: 196 181 253;
+  --c-violet-400: 167 139 250;
+  --c-violet-900: 76 29 149;
+  --c-sky-300: 125 211 252;
+  --c-sky-400: 56 189 248;
+
+  --si-bubble: #2a1719;
+  --si-bubble-line: #5a2a2b;
+  --human-bubble: #10302f;
+  --human-bubble-line: #1f5853;
+  --human-bubble-strong: #164340;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 20px -10px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.3), 0 14px 30px -10px rgb(0 0 0 / 0.7);
+
+  color-scheme: dark;
+}
+
+html, body {
+  height: 100%;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #060911;
-  color: #f8fafc;
+  background-color: rgb(var(--c-page));
+  color: rgb(var(--c-ink));
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
-  background-image: 
-    radial-gradient(circle at 15% 15%, rgba(129, 216, 208, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(220, 38, 38, 0.06) 0%, transparent 45%);
-  background-attachment: fixed;
 }
 
-/* Handwritten / Cursive accent font simulation */
+#app-root {
+  min-height: 0;
+}
+
+/* Handwritten accent font (slogan) */
 .font-handwritten {
   font-family: "Caveat", "Brush Script MT", "Segoe Script", cursive;
   letter-spacing: 0.5px;
 }
 
-/* 3D Tactile Card */
+/* Card */
 .glass-card-3d {
-  background: linear-gradient(145deg, #131f33 0%, #0d1624 100%);
-  border: 1px solid rgba(129, 216, 208, 0.2);
+  background: rgb(var(--c-card));
+  border: 1px solid rgb(var(--c-line));
   border-radius: 20px;
-  box-shadow: 
-    0 16px 36px -8px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 1px 1px rgba(255, 255, 255, 0.15),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-soft);
   position: relative;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-card-3d:hover {
-  border-color: rgba(129, 216, 208, 0.4);
-  box-shadow: 
-    0 20px 42px -6px rgba(0, 0, 0, 0.85),
-    0 0 20px rgba(129, 216, 208, 0.15),
-    inset 0 1px 1px rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-lift);
 }
 
-/* Photo Hero Banner (Tiffany & Red Style) */
+/* Hero banner in logo colors */
 .hero-tiffany-banner {
-  background: linear-gradient(135deg, #81D8D0 0%, #68c8bf 60%, #4ecdc4 100%);
-  color: #090d16;
+  background: linear-gradient(135deg, #a8e9e3 0%, var(--sf-logo-cyan) 55%, #5bbfd2 100%);
+  color: #0b2530;
   border-radius: 20px;
-  box-shadow: 
-    0 14px 30px -6px rgba(129, 216, 208, 0.4),
-    inset 0 2px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -3px 0 rgba(13, 148, 136, 0.4);
+  box-shadow: var(--shadow-soft);
   position: relative;
   overflow: hidden;
 }
 
-/* 3D Tactile Buttons with Deep Shadows */
+/* Buttons: calm, soft depth */
 .btn-3d-tiffany {
-  background: linear-gradient(180deg, #81D8D0 0%, #50beaf 100%);
-  color: #061118;
+  background: linear-gradient(180deg, #8fdfd8 0%, #6fcfc6 100%);
+  color: #08302c;
   font-weight: 700;
   border-radius: 14px;
-  border: 1px solid #a3eae3;
-  box-shadow: 
-    0 4px 0 #147a70,
-    0 8px 16px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  transition: all 0.15s ease;
+  border: 1px solid #7bd3cb;
+  box-shadow: 0 2px 0 #4fb3aa, 0 6px 14px -6px rgb(13 148 136 / 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   cursor: pointer;
 }
 
 .btn-3d-tiffany:hover {
-  background: linear-gradient(180deg, #92e0d9 0%, #5fc6b8 100%);
-  box-shadow: 
-    0 5px 0 #147a70,
-    0 12px 24px rgba(129, 216, 208, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  filter: brightness(1.03);
 }
 
 .btn-3d-tiffany:active {
-  transform: translateY(3px);
-  box-shadow: 
-    0 1px 0 #147a70,
-    0 3px 6px rgba(0, 0, 0, 0.4);
+  transform: translateY(2px);
+  box-shadow: 0 0 0 #4fb3aa, 0 2px 6px -2px rgb(13 148 136 / 0.4);
 }
 
+/* Red = SI actions and real alerts only */
 .btn-3d-red {
-  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  background: linear-gradient(180deg, #f06560 0%, #e04440 100%);
   color: #ffffff;
   font-weight: 700;
   border-radius: 14px;
-  border: 1px solid #f87171;
-  box-shadow: 
-    0 4px 0 #7f1d1d,
-    0 8px 16px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transition: all 0.15s ease;
+  border: 1px solid #ea5a55;
+  box-shadow: 0 2px 0 #b8302c, 0 6px 14px -6px rgb(229 57 53 / 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   cursor: pointer;
 }
 
 .btn-3d-red:hover {
-  background: linear-gradient(180deg, #f87171 0%, #dc2626 100%);
-  box-shadow: 
-    0 5px 0 #7f1d1d,
-    0 12px 24px rgba(220, 38, 38, 0.35);
+  filter: brightness(1.04);
 }
 
 .btn-3d-red:active {
-  transform: translateY(3px);
-  box-shadow: 
-    0 1px 0 #7f1d1d,
-    0 3px 6px rgba(0, 0, 0, 0.4);
+  transform: translateY(2px);
+  box-shadow: 0 0 0 #b8302c, 0 2px 6px -2px rgb(229 57 53 / 0.4);
 }
 
 .btn-3d-dark {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  color: #f1f5f9;
+  background: rgb(var(--c-card));
+  color: rgb(var(--c-ink-2));
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 
-    0 3px 0 #020617,
-    0 6px 12px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  transition: all 0.15s ease;
+  border: 1px solid rgb(var(--c-line-2));
+  box-shadow: 0 1px 0 rgb(var(--c-line-2));
+  transition: transform 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   cursor: pointer;
 }
 
 .btn-3d-dark:hover {
-  border-color: rgba(129, 216, 208, 0.3);
-  color: #81D8D0;
+  border-color: var(--sf-tiffany);
+  color: rgb(var(--c-brand));
 }
 
 .btn-3d-dark:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #020617;
+  transform: translateY(1px);
 }
 
-/* Telegram Mini App Container & Frame */
-.tma-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 0;
-}
-
-.tma-shell.device-mode {
-  padding: 16px 8px;
-}
-
-.phone-mockup {
+/* App area: full screen, no phone frame. On wide screens it is a centered column. */
+.app-frame {
   width: 100%;
-  max-width: 440px;
-  height: 92vh;
-  min-height: 760px;
-  max-height: 940px;
-  background: #090e17;
-  border-radius: 46px;
-  box-shadow: 
-    0 25px 70px -15px rgba(0, 0, 0, 0.9),
-    0 0 0 10px #151f30,
-    0 0 0 12px #26354d,
-    0 0 40px rgba(129, 216, 208, 0.12);
-  position: relative;
+  max-width: 640px;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(129, 216, 208, 0.25);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: rgb(var(--c-page));
 }
 
-.fullscreen-mode .phone-mockup {
-  max-width: 100%;
-  height: 100vh;
-  min-height: 100vh;
-  max-height: 100vh;
-  border-radius: 0;
-  box-shadow: none;
-  border: none;
+@media (min-width: 680px) {
+  .app-frame {
+    border-left: 1px solid rgb(var(--c-line));
+    border-right: 1px solid rgb(var(--c-line));
+  }
 }
 
-.phone-island {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 120px;
-  height: 24px;
-  background: #000;
-  border-radius: 20px;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid #1a2233;
-}
-
-.phone-camera {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #0d121d;
-  border: 2px solid #232d3f;
-}
-
-.phone-speaker {
-  width: 40px;
-  height: 4px;
-  background: #1e2638;
-  border-radius: 2px;
-}
-
-/* Telegram Top Bar */
+/* App header */
 .tg-header {
-  background: rgba(9, 14, 23, 0.95);
+  background: rgb(var(--c-card) / 0.92);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(129, 216, 208, 0.15);
-  padding: 12px 16px;
+  border-bottom: 1px solid rgb(var(--c-line));
+  padding: 10px 16px;
   z-index: 40;
 }
 
-/* Telegram Bottom Navigation */
+/* Bottom navigation */
 .tg-nav-bar {
-  background: rgba(9, 14, 23, 0.97);
+  background: rgb(var(--c-card) / 0.96);
   backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(129, 216, 208, 0.15);
-  padding: 8px 10px;
+  border-top: 1px solid rgb(var(--c-line));
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
 }
 
 .tg-nav-item {
@@ -262,7 +252,7 @@ body {
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: rgb(var(--c-muted));
   transition: all 0.2s ease;
   cursor: pointer;
   border: none;
@@ -270,66 +260,83 @@ body {
 }
 
 .tg-nav-item.active {
-  color: #81D8D0;
-  background: rgba(129, 216, 208, 0.12);
-  box-shadow: inset 0 0 10px rgba(129, 216, 208, 0.1);
+  color: rgb(var(--c-brand));
+  background: rgb(129 216 208 / 0.18);
 }
 
-/* Chat bubble styling with 3D Depth */
-.chat-bubble-ai {
-  background: linear-gradient(145deg, #131f33 0%, #0d1624 100%);
-  border: 1px solid rgba(129, 216, 208, 0.22);
-  border-radius: 20px 20px 20px 4px;
-  color: #f1f5f9;
-  padding: 12px 16px;
-  max-width: 88%;
-  line-height: 1.5;
-  font-size: 13.5px;
-  box-shadow: 
-    0 10px 24px -6px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+/* SI marker: the red dot from the logo */
+.si-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sf-si-red);
+  box-shadow: 0 0 0 3px rgb(229 57 53 / 0.15);
+  flex-shrink: 0;
 }
 
-.chat-bubble-user {
-  background: linear-gradient(145deg, #0d9488 0%, #0f766e 100%);
-  border-radius: 20px 20px 4px 20px;
-  color: #ffffff;
-  padding: 12px 16px;
-  max-width: 85%;
-  line-height: 1.5;
-  font-size: 13.5px;
-  margin-left: auto;
-  border: 1px solid rgba(129, 216, 208, 0.4);
-  box-shadow: 
-    0 10px 24px -6px rgba(13, 148, 136, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+.mascot-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--si-bubble);
+  border: 1px solid var(--si-bubble-line);
+  object-fit: contain;
+  padding: 1px;
+  flex-shrink: 0;
 }
 
+/* Chat bubbles: SI = soft warm red, people = Tiffany */
+.chat-bubble-si,
+.chat-bubble-human,
 .chat-bubble-expert {
-  background: linear-gradient(145deg, #dc2626 0%, #991b1b 100%);
-  border-radius: 20px 20px 4px 20px;
-  color: #ffffff;
-  padding: 12px 16px;
-  max-width: 85%;
+  padding: 11px 15px;
   line-height: 1.5;
   font-size: 13.5px;
-  margin-left: auto;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  box-shadow: 
-    0 10px 24px -6px rgba(220, 38, 38, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  color: rgb(var(--c-ink));
+  box-shadow: var(--shadow-soft);
 }
 
-/* Audio Voice Message Player Bar */
+.chat-bubble-si {
+  background: var(--si-bubble);
+  border: 1px solid var(--si-bubble-line);
+  border-radius: 18px 18px 18px 6px;
+  max-width: 88%;
+}
+
+.items-end > .chat-bubble-si {
+  border-radius: 18px 18px 6px 18px;
+}
+
+.chat-bubble-human {
+  background: var(--human-bubble);
+  border: 1px solid var(--human-bubble-line);
+  border-radius: 18px 18px 6px 18px;
+  max-width: 85%;
+}
+
+.items-start > .chat-bubble-human {
+  border-radius: 18px 18px 18px 6px;
+}
+
+/* The expert writing personally: a person, so a stronger Tiffany */
+.chat-bubble-expert {
+  background: var(--human-bubble-strong);
+  border: 1px solid var(--sf-tiffany);
+  border-radius: 18px 18px 6px 18px;
+  max-width: 85%;
+}
+
+/* Voice message */
 .audio-voice-box {
-  background: rgba(17, 26, 42, 0.95);
-  border: 1px solid rgba(129, 216, 208, 0.3);
+  background: var(--human-bubble);
+  border: 1px solid var(--human-bubble-line);
   border-radius: 18px;
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-soft);
 }
 
 .audio-waveform {
@@ -341,7 +348,7 @@ body {
 
 .waveform-bar {
   width: 3px;
-  background: #81D8D0;
+  background: var(--sf-tiffany-deep);
   border-radius: 3px;
   transition: height 0.2s ease;
 }
@@ -355,22 +362,23 @@ body {
   100% { transform: scaleY(1.3); }
 }
 
-/* Typing indicator */
+/* SI typing indicator */
 .typing-dots {
   display: inline-flex;
   gap: 5px;
   align-items: center;
   padding: 8px 14px;
-  background: #111a2a;
+  background: var(--si-bubble);
   border-radius: 16px;
-  border: 1px solid rgba(129, 216, 208, 0.2);
+  border: 1px solid var(--si-bubble-line);
 }
 
 .typing-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #81D8D0;
+  background: var(--sf-si-red);
+  opacity: 0.7;
   animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
@@ -382,17 +390,17 @@ body {
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* Red bullet badge from image: ■ 05 — YOUR AI SALES AGENT */
+/* Small square bullet in the hero banner */
 .red-bullet {
   display: inline-block;
   width: 8px;
   height: 8px;
-  background-color: #dc2626;
-  border-radius: 1.5px;
+  background-color: var(--sf-si-red);
+  border-radius: 50%;
   margin-right: 6px;
 }
 
-/* YC Badge */
+/* Investor badge */
 .yc-badge {
   background: linear-gradient(135deg, #ff6600 0%, #cc5200 100%);
   color: #fff;
@@ -401,10 +409,9 @@ body {
   padding: 2px 8px;
   font-size: 10px;
   letter-spacing: 0.5px;
-  box-shadow: 0 3px 8px rgba(255, 102, 0, 0.4);
 }
 
-/* Custom Scrollbars */
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -415,10 +422,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(129, 216, 208, 0.25);
+  background: rgb(var(--c-line-2));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 216, 208, 0.5);
+  background: rgb(var(--c-faint));
 }

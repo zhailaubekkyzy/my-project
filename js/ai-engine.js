@@ -113,7 +113,7 @@ window.aiEngine = {
 
     return {
       score: Math.min(score, 98),
-      tips: tips.length ? tips : ['PMF идеально откалиброван! ИИ-продавец вооружен всеми аргументами.']
+      tips: tips.length ? tips : ['PMF идеально откалиброван! SI-консультант вооружен всеми аргументами.']
     };
   }
 };

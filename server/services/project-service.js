@@ -204,8 +204,8 @@ async function getPublicProjectBySlug(slug) {
   let aiSettings = safeJsonParse(project.custom_ai_settings);
   // Only expose public-facing parts of the AI seller
   const publicAiSeller = {
-    greeting: aiSettings.greeting || `Здравствуйте! Я AI-продавец эксперта ${project.expert_name}. Чем могу помочь?`,
-    roleTitle: aiSettings.systemRole || `AI-консультант ${project.expert_name}`,
+    greeting: aiSettings.greeting || `Здравствуйте! Я SI-консультант эксперта ${project.expert_name}. Чем могу помочь?`,
+    roleTitle: aiSettings.systemRole || `SI-консультант ${project.expert_name}`,
     suggestedTopics: ['Узнать стоимость', 'Записаться на разбор', 'Задать вопрос']
   };
 
