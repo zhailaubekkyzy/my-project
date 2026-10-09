@@ -259,6 +259,32 @@
       });
     },
 
+    // ---------- SI-brain ----------
+    async getBrainMaterials() {
+      return await apiFetch('/api/brain/materials');
+    },
+
+    // file: a File/Blob (PDF, .docx, .txt). Pasted text is uploaded as a .txt Blob.
+    async uploadBrainMaterial(file, { name, title = '', consultantIds = [] } = {}) {
+      const query = new URLSearchParams({ name: name || file.name || 'material.txt', title, consultants: consultantIds.join(',') });
+      return await apiFetch(`/api/brain/materials?${query}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file
+      });
+    },
+
+    async setMaterialConsultants(materialId, consultantIds) {
+      return await apiFetch(`/api/brain/materials/${encodeURIComponent(materialId)}/consultants`, {
+        method: 'PUT',
+        body: JSON.stringify({ consultantIds })
+      });
+    },
+
+    async deleteBrainMaterial(materialId) {
+      return await apiFetch(`/api/brain/materials/${encodeURIComponent(materialId)}`, { method: 'DELETE' });
+    },
+
     async createProject(data) {
       return await apiFetch('/api/projects', {
         method: 'POST',

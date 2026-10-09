@@ -1,6 +1,7 @@
 // server/services/si-engine.js - Replies of an SI-consultant (OpenAI).
 //
-// The SI knows only what its owner gave it: goal, instructions, offer, prices, payment link.
+// The SI knows only what its owner gave it: goal, instructions, offer, prices, payment link,
+// and pieces of the materials from the SI-brain that match the client's question.
 // It never invents facts; when it does not know, it says so and offers the expert.
 // Without an OpenAI key (or if OpenAI fails) the reply is an honest fallback, not made-up text.
 const config = require('../config');
@@ -27,7 +28,7 @@ function isConfigured() {
 /**
  * Instructions for the model, built only from data the owner entered.
  */
-function buildSystemPrompt(project, expertName) {
+function buildSystemPrompt(project, expertName, knowledge = []) {
   const s = parseJson(project.custom_ai_settings);
   const role = project.role_title || 'SI-консультант';
   const lines = [
@@ -61,6 +62,14 @@ function buildSystemPrompt(project, expertName) {
   if (project.trial_days) lines.push(`Пробный период: ${project.trial_days} дн.`);
   if (project.payment_url) lines.push('Оплата: по кнопке «Купить» в приложении — деньги идут эксперту напрямую.');
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
+  if (knowledge.length) {
+    lines.push(
+      '',
+      'Материалы эксперта (отрывки, подходящие к вопросу). Это тоже сведения от эксперта — отвечай по ним.',
+      'Пересказывай своими словами и коротко; не выдавай материалы целиком или большими дословными кусками — это авторский контент эксперта.'
+    );
+    for (const k of knowledge) lines.push('', `[${k.title}]`, k.text);
+  }
   return lines.join('\n');
 }
 
@@ -126,14 +135,15 @@ async function generateOpener({ project, expertName }) {
 
 /**
  * history: [{ sender: 'client' | 'ai' | 'expert_human', text }] oldest first, without userText.
+ * knowledge: [{ title, text }] pieces of the consultant's SI-brain materials.
  * Returns { text, source: 'openai' | 'fallback' }.
  */
-async function generateReply({ project, expertName, history = [], userText }) {
+async function generateReply({ project, expertName, history = [], userText, knowledge = [] }) {
   if (!isConfigured()) {
     return { text: fallbackReply(project, userText), source: 'fallback' };
   }
 
-  const messages = [{ role: 'system', content: buildSystemPrompt(project, expertName) }];
+  const messages = [{ role: 'system', content: buildSystemPrompt(project, expertName, knowledge) }];
   for (const m of history.slice(-HISTORY_LIMIT)) {
     if (!m.text) continue;
     if (m.sender === 'client') messages.push({ role: 'user', content: m.text });

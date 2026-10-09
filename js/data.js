@@ -99,6 +99,13 @@
       store().setRemote(`clientMessages.${clientId}`, await api().getMessages(projectId, clientId));
     }, 5000),
 
+    // SI-brain: my materials and which consultants know them
+    brain: () => ensure('brain', async () => {
+      if (!signedIn()) return false;
+      const res = await api().getBrainMaterials();
+      store().setRemote('brain', res.materials || []);
+    }, 60000),
+
     // My consultants again (after creating or editing one)
     myConsultants: () => ensure('consultants', async () => {
       if (!signedIn()) return false;

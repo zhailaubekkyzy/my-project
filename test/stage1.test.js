@@ -596,6 +596,112 @@ async function runAllTests() {
     assert.strictEqual(row.user_id, clientUser.id);
   });
 
+  // 13. SI-brain: materials (text only), access per consultant, search for the SI
+  const brainService = require('../server/services/brain-service');
+  const uploadMaterial = (token, body, query) => fetch(`${baseUrl}/api/brain/materials?${new URLSearchParams(query)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+    body
+  }).then(async r => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const priceText = 'Программа курса «Выход из операционки». Длительность — 8 недель, созвоны с куратором раз в неделю. ' +
+    'Возврат денег возможен в течение 14 дней после старта.';
+  let materialA = null;
+
+  await test('25. SI-мозг: текст сохраняется, файл — нет; чужие консультанты и материалы недоступны', async () => {
+    const projectB = (await projectService.getUserProjects(expertB_InternalId)).owned[0];
+    const foreign = await uploadMaterial(tokenA, priceText, { name: 'курс.txt', consultants: projectB.id });
+    assert.strictEqual(foreign.status, 403, 'Cannot give a material to another expert\'s consultant');
+
+    const res = await uploadMaterial(tokenA, priceText, { name: 'курс.txt', consultants: projectA.id });
+    assert.strictEqual(res.status, 201);
+    materialA = res.body.material;
+    assert.strictEqual(materialA.title, 'курс');
+    assert.strictEqual(materialA.sourceType, 'txt');
+    assert.deepStrictEqual(materialA.consultantIds, [projectA.id]);
+    const columns = Object.keys(await db.get('SELECT * FROM brain_materials WHERE id = ?', [materialA.id]));
+    assert(!columns.some(c => /data|file|blob/.test(c)), 'The file itself is not stored');
+
+    assert.strictEqual((await uploadMaterial(tokenA, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 1, 2, 3]), { name: 'x.png' })).status, 400, 'Images are rejected');
+    assert.strictEqual((await uploadMaterial(tokenA, '%PDF-1.4 broken', { name: 'x.pdf' })).status, 400, 'A broken PDF gets a clear error');
+    assert.strictEqual((await uploadMaterial('bad-token', priceText, { name: 'a.txt' })).status, 401);
+
+    const listB = await api('GET', '/api/brain/materials', tokenB);
+    assert.strictEqual(listB.body.materials.length, 0, 'Expert B does not see Expert A materials');
+    assert.strictEqual((await api('DELETE', `/api/brain/materials/${materialA.id}`, tokenB)).status, 404);
+    assert.strictEqual((await api('PUT', `/api/brain/materials/${materialA.id}/consultants`, tokenB, { consultantIds: [] })).status, 404);
+    const listA = await api('GET', '/api/brain/materials', tokenA);
+    assert.strictEqual(listA.body.materials[0].id, materialA.id);
+    assert(listA.body.materials[0].preview.startsWith('Программа курса'), 'A preview of the text is shown');
+  });
+
+  await test('26. SI-мозг: чтение PDF и Word, разбивка на части', async () => {
+    const pdf = Buffer.from(
+      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+      '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 100]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n' +
+      '4 0 obj<</Length 60>>stream\nBT /F1 12 Tf 10 50 Td (Course lasts eight weeks, refund in 14 days) Tj ET\nendstream endobj\n' +
+      '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF');
+    const fromPdf = await brainService.extractText(pdf, 'course.pdf');
+    assert.strictEqual(fromPdf.sourceType, 'pdf');
+    assert(fromPdf.text.includes('Course lasts eight weeks'), 'PDF text is read');
+
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.file('_rels/.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.file('word/document.xml', '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body><w:p><w:r><w:t>Стоимость курса — 25 000 рублей, оплата частями.</w:t></w:r></w:p></w:body></w:document>');
+    const fromWord = await brainService.extractText(await zip.generateAsync({ type: 'nodebuffer' }), 'прайс.docx');
+    assert.strictEqual(fromWord.sourceType, 'docx');
+    assert(fromWord.text.includes('25 000 рублей'), 'Word text is read');
+
+    await assert.rejects(brainService.extractText(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3, 4]), 'old.doc'), /\.docx/);
+    const pieces = brainService.chunkText('Предложение номер один. '.repeat(200));
+    assert(pieces.length > 3 && pieces.every(p => p.length <= 1200), 'Long text is cut into pieces');
+  });
+
+  await test('27. SI-мозг: SI получает подходящие отрывки только своих материалов', async () => {
+    // A big material so search (not "everything") is used; one piece mentions the refund
+    const filler = Array.from({ length: 12 }, (_, i) => `Раздел ${i + 1}. Упражнения для команды и делегирование задач, планёрки и отчёты. `.repeat(8)).join('\n\n');
+    const big = await uploadMaterial(tokenA, `${filler}\n\nВозврат: деньги вернём полностью в течение 14 дней, если курс не подошёл.`, { name: 'книга.txt', consultants: projectA.id });
+    assert.strictEqual(big.status, 201);
+
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    let systemPrompt = null;
+    config.openaiApiKey = 'sk-test-not-real';
+    global.fetch = async (url, options) => {
+      if (String(url) === 'https://api.openai.com/v1/embeddings') return new Response('{"error":{"message":"no balance"}}', { status: 429 });
+      if (String(url).startsWith('https://api.openai.com/')) {
+        systemPrompt = JSON.parse(options.body).messages[0].content;
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, вернём в течение 14 дней.' } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'А если не подойдёт, вернёте деньги?' });
+      assert.strictEqual(sent.body.source, 'openai');
+      assert(systemPrompt.includes('деньги вернём полностью'), 'The matching piece reaches the SI (word search without OpenAI embeddings)');
+      assert(systemPrompt.includes('не выдавай материалы целиком'), 'The SI is told not to give away the materials');
+
+      // Taken away from this consultant → the SI no longer gets it
+      await api('PUT', `/api/brain/materials/${big.body.material.id}/consultants`, tokenA, { consultantIds: [] });
+      await api('PUT', `/api/brain/materials/${materialA.id}/consultants`, tokenA, { consultantIds: [] });
+      await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Так вернёте деньги?' });
+      assert(!systemPrompt.includes('деньги вернём полностью') && !systemPrompt.includes('Материалы эксперта'), 'Materials not given to this SI are not used');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // Deleting removes the text completely
+    assert.strictEqual((await api('DELETE', `/api/brain/materials/${big.body.material.id}`, tokenA)).status, 200);
+    const left = await db.get('SELECT COUNT(*) AS count FROM brain_chunks WHERE material_id = ?', [big.body.material.id]);
+    assert.strictEqual(left.count, 0, 'The pieces of a deleted material are gone');
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

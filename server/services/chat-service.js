@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const siEngine = require('./si-engine');
+const brainService = require('./brain-service');
 const telegramBot = require('./telegram-bot');
 const { mediaUrl } = require('./media-service');
 
@@ -135,11 +136,19 @@ async function handleClientMessage(project, lead, text) {
     return { message, reply: await saveMessage(project.id, lead.id, 'ai', LIMIT_TEXT), limitReached: true };
   }
 
+  // Search the SI-brain by this message plus the client's previous one (a follow-up like
+  // "а сколько это длится?" needs the earlier question to make sense). Only when OpenAI answers.
+  let knowledge = [];
+  if (siEngine.isConfigured()) {
+    const previous = [...past].reverse().find(m => m.sender === 'client');
+    knowledge = await brainService.contextFor(project.id, [previous && previous.text, text].filter(Boolean).join('\n'));
+  }
   const result = await siEngine.generateReply({
     project,
     expertName: await expertNameOf(project),
     history: past,
-    userText: text
+    userText: text,
+    knowledge
   });
   const reply = await saveMessage(project.id, lead.id, 'ai', result.text);
   return { message, reply, source: result.source };
