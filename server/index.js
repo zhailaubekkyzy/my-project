@@ -49,6 +49,8 @@ app.get('/api/health', async (req, res) => {
       status: 'ok',
       service: 'SmartFlow Core Backend',
       version: '1.0.0-stage1',
+      // Which commit is running (Railway sets this): shows whether the latest merge reached the server
+      commit: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || null,
       environment: config.nodeEnv,
       database: {
         driver: activeDriver,

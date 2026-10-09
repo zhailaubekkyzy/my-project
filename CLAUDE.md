@@ -35,7 +35,7 @@ Telegram → Cloudflare Worker (фронтенд, статика) → Railway (�
 - Railway: `TELEGRAM_BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`, `CORS_ORIGINS` (через запятую: `https://app.techsmartflow.com,https://my-project.gzhailaubekkyzy.workers.dev`),
   `DATABASE_URL` (Supabase Session pooler), `DB_DRIVER=postgres` (ровно это слово),
   `OPENAI_API_KEY` (сервер понимает и `OPEN_API_KEY`), необязательно `OPENAI_MODEL` (по умолчанию `gpt-4o-mini`), `POSTHOG_API_KEY`, `POSTHOG_HOST`.
-  Проверка: `/api/health` → `openai.configured: true` значит, что сервер видит ключ.
+  Проверка: `/api/health` → `openai.configured: true` значит, что сервер видит ключ; `commit` — первые 7 знаков запущенной версии (сверять с последним вливанием в `main`).
 - Cloudflare (переменная сборки): `SMARTFLOW_API_URL` = адрес Railway с `https://`, без `/` в конце и без пробелов.
 
 ## Код
@@ -80,6 +80,7 @@ Telegram → Cloudflare Worker (фронтенд, статика) → Railway (�
 - Проверка «Workers Builds» Cloudflare на pull request и сборки рабочих веток краснеют (`SMARTFLOW_API_URL is not set`): переменная сборки задана только для `main`. Это настройка Cloudflare, не код; владелице предложено отключить сборку других веток (Settings → Build → Branch control). Сборка проверяется локально: `SMARTFLOW_API_URL=https://example.up.railway.app npm run build:pages`.
 - SI-мозг: хранится только текст материалов (решение владелицы), файлы не сохраняются. Поиск по смыслу считается в Node (работает и на SQLite, и на PostgreSQL); при большом объёме — перейти на pgvector. Материалы клиентам не отдаются, SI пересказывает их своими словами.
 - Сервер требует Node 22+ (`engines` в package.json): библиотека чтения PDF `unpdf` на старых версиях не работает.
+- Railway обновляется сам только при связи с GitHub (Settings → Source: «Auto deploys when pushed to GitHub»). 9–10 окт. связь терялась («Could not load branches»): вливания #6–#8 не доехали, сервер работал на #5. Починили переустановкой приложения Railway в GitHub. Если `/api/health` → `commit` не совпадает с `main` — проверять эту связь.
 - Неверный `DB_DRIVER` → сервер молча работает на SQLite (стоит исправить на явную ошибку).
 - `.antigravity/` в репозитории содержит логи чатов другого инструмента; в истории git есть старый токен бота (уже отозван).
 
