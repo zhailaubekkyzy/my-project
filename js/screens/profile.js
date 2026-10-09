@@ -91,6 +91,14 @@
         <button onclick="SF.showToast('SI-брендолог проведёт короткое интервью и соберёт профиль сам — на следующем шаге')" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><span class="si-dot"></span>SI-брендолог ${SF.soonBadge()}</button>
       </div>
 
+      ${SF.botCanWrite() !== null ? `
+        <div class="glass-card-3d p-3 flex items-center justify-between gap-2 text-xs">
+          <span class="text-muted">Уведомления в Telegram</span>
+          ${SF.botCanWrite()
+            ? '<span class="text-brand font-semibold">Включены ✓</span>'
+            : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>'}
+        </div>` : ''}
+
       <div class="glass-card-3d p-3 flex items-center justify-between text-xs">
         <span class="text-muted">Язык интерфейса</span>
         <span class="text-ink-2 font-semibold">Русский ${SF.soonBadge('EN скоро')}</span>
@@ -229,6 +237,14 @@
     }
     store().popRoute();
     showToast(savedOnServer ? 'Профиль сохранён' : 'Профиль сохранён на этом устройстве');
+  };
+
+  // For people who declined before: Telegram asks again, one tap "Разрешить"
+  SF.actions.enableNotifications = () => {
+    SF.askWriteAccess((allowed) => {
+      showToast(allowed ? 'Готово! Уведомления будут приходить в Telegram' : 'Без разрешения бот не сможет писать вам. Можно включить позже');
+      store().notify();
+    });
   };
 
   SF.actions.openOffer = () => {

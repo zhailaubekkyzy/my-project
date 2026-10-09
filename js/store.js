@@ -69,7 +69,7 @@ const defaultData = {
     seen: {},                // { [slug]: lastActivity seen } for unread marks
     hiddenBanners: {},       // { [slug]: true } "Не интересно" on the buy banner
     assistant: [
-      { id: 'a-1', sender: 'ai', text: 'Привет! Я SI-ассистент SmartFlow. Сюда можно написать жалобу на SI или человека, предложение или вопрос по платформе — я передам команде.' }
+      { id: 'a-1', sender: 'ai', text: 'Здравствуйте! Это поддержка SmartFlow. Напишите сюда жалобу, предложение или вопрос — передам команде и помогу разобраться.' }
     ]
   }
 };

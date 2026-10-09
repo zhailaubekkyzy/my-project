@@ -55,7 +55,7 @@
       const fromExpert = /^\[Эксперт\]/.test(c.lastMessage || '');
       list.push({
         kind: fromExpert ? 'human' : 'si',
-        text: fromExpert ? `${c.expertName || 'Эксперт'} ответил(а) вам лично` : `${c.roleTitle} · ${c.name} ответил вам`,
+        text: fromExpert ? `${c.expertName || 'Эксперт'} ответил(а) вам лично` : `${c.name}: новое сообщение`,
         action: `SF.actions.openChat('${SF.js(c.slug)}')`
       });
     });
@@ -136,7 +136,7 @@
           icon: 'messages-square',
           title: 'Чаты',
           tone: 'si',
-          body: unread ? `Новых ответов: ${unread}` : (chats.length ? `Переписок: ${chats.length}` : 'Переписки с SI и людьми'),
+          body: unread ? `Новых сообщений: ${unread}` : (chats.length ? `Переписок: ${chats.length}` : 'Ваши переписки'),
           action: "SF.go('chats')"
         })}
         ${widget({
@@ -170,7 +170,7 @@
           icon: 'life-buoy',
           title: 'Помощь',
           tone: 'si',
-          body: 'SI-ассистент примет жалобу или предложение',
+          body: 'Поддержка примет жалобу или предложение',
           action: "SF.actions.openChat('assistant')"
         })}
       </div>

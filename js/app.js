@@ -82,12 +82,27 @@ function loadNonCriticalScripts() {
 
 // The bot may write to a person only with their permission. Telegram shows a one-tap
 // "Allow messages" prompt; asked when notifications start to matter (Office, "Связаться с человеком").
-SF.askWriteAccess = function () {
+SF.askWriteAccess = function (onResult) {
   const tg = window.Telegram?.WebApp;
   try {
-    if (!tg || !tg.initData || tg.initDataUnsafe?.user?.allows_write_to_pm) return;
-    if (typeof tg.requestWriteAccess === 'function') tg.requestWriteAccess();
+    if (!tg || !tg.initData) return;
+    if (tg.initDataUnsafe?.user?.allows_write_to_pm) {
+      if (onResult) onResult(true);
+      return;
+    }
+    if (typeof tg.requestWriteAccess === 'function') {
+      tg.requestWriteAccess((allowed) => {
+        if (allowed && tg.initDataUnsafe?.user) tg.initDataUnsafe.user.allows_write_to_pm = true;
+        if (onResult) onResult(Boolean(allowed));
+      });
+    }
   } catch (e) {}
+};
+
+// true / false when known (inside Telegram), null outside Telegram
+SF.botCanWrite = function () {
+  const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  return user ? Boolean(user.allows_write_to_pm) : null;
 };
 
 // -------------------------------------------------------------

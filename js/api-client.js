@@ -204,6 +204,11 @@
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/messages`);
     },
 
+    // First visit by the consultant's link: the SI writes first
+    async startChat(slug) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/start`, { method: 'POST' });
+    },
+
     async sendChatMessage(slug, text) {
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/messages`, {
         method: 'POST',

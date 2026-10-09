@@ -146,6 +146,19 @@ async function handleClientMessage(project, lead, text) {
 }
 
 /**
+ * The person opened the consultant's link: the SI writes first (once, only into an empty chat).
+ * Returns the opening message or null if the chat already has messages.
+ */
+async function startConversation(project, lead) {
+  const past = await history(project.id, lead.id);
+  if (past.length) return null;
+  const result = await siEngine.generateOpener({ project, expertName: await expertNameOf(project) });
+  // Another request may have started the chat meanwhile: keep a single opener
+  if ((await history(project.id, lead.id)).length) return null;
+  return saveMessage(project.id, lead.id, 'ai', result.text);
+}
+
+/**
  * "Связаться с человеком": a request for the expert, the SI pauses, the expert gets a bot message
  * with a button that opens this request in the Mini App.
  */
@@ -200,6 +213,7 @@ module.exports = {
   history,
   saveMessage,
   handleClientMessage,
+  startConversation,
   createHumanRequest,
   expertReply
 };

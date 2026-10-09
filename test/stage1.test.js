@@ -455,6 +455,13 @@ async function runAllTests() {
   await test('15. Чат с SI-консультантом: только после входа, каждый видит только свою переписку', async () => {
     assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/messages`, null, { text: 'Привет' })).status, 401);
 
+    // Opening the consultant's link: the SI writes first, only once
+    const start = await api('POST', `/api/chat/${projectA.slug}/start`, tokenClient);
+    assert.strictEqual(start.status, 201);
+    assert.strictEqual(start.body.opener.sender, 'ai', 'The SI starts the conversation');
+    const again = await api('POST', `/api/chat/${projectA.slug}/start`, tokenClient);
+    assert.strictEqual(again.body.opener, null, 'No second greeting');
+
     const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Сколько стоит?' });
     assert.strictEqual(sent.status, 201);
     assert.strictEqual(sent.body.message.sender, 'client');
@@ -462,7 +469,7 @@ async function runAllTests() {
     assert.strictEqual(sent.body.source, 'fallback', 'Without an OpenAI key the reply is the honest fallback');
 
     const mine = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient);
-    assert.deepStrictEqual(mine.body.messages.map(m => m.sender), ['client', 'ai'], 'Messages in the right order');
+    assert.deepStrictEqual(mine.body.messages.map(m => m.sender), ['ai', 'client', 'ai'], 'Messages in the right order');
     const other = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenB);
     assert.strictEqual(other.body.messages.length, 0, 'Another person sees none of my messages');
 

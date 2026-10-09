@@ -95,6 +95,22 @@ router.get('/:slug/messages', async (req, res, next) => {
 });
 
 /**
+ * POST /api/chat/:slug/start
+ * First visit by the consultant's link: the SI greets the person and asks a first question
+ */
+router.post('/:slug/start', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId);
+    const opener = await chatService.startConversation(project, lead);
+    res.status(opener ? 201 : 200).json({ opener, messages: await chatService.history(project.id, lead.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/chat/:slug/messages  { text }
  * Saves my message; the SI answers (unless the expert took over or the limit is used up)
  */
