@@ -24,14 +24,15 @@ Telegram → Cloudflare Worker (фронтенд, статика) → Railway (�
 
 | Что | Где |
 |---|---|
-| Фронтенд | https://my-project.gzhailaubekkyzy.workers.dev (Cloudflare Worker `my-project`, собирается из `main`) |
+| Фронтенд | https://app.techsmartflow.com (свой домен, Cloudflare Worker `my-project`, собирается из `main`); запасной адрес https://my-project.gzhailaubekkyzy.workers.dev |
 | Сервер | https://my-project-production-f83d.up.railway.app (проверка: `/api/health`) |
 | База | Supabase, проект `bcaipxnztlusjpppkhpj`, подключение через Session pooler |
-| Бот | @smartflow_ai_support_bot, Mini App `t.me/smartflow_ai_support_bot/app` |
+| Бот | @smartflow_ai_support_bot, Mini App `t.me/smartflow_ai_support_bot/app` (Web App URL в BotFather = https://app.techsmartflow.com) |
+| Домен | `techsmartflow.com` куплен в Cloudflare; `app.` — приложение, корень свободен под будущий лендинг |
 | Репозиторий | github.com/zhailaubekkyzy/my-project |
 
 ## Переменные окружения (только имена)
-- Railway: `TELEGRAM_BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`, `CORS_ORIGINS` (адрес workers.dev),
+- Railway: `TELEGRAM_BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`, `CORS_ORIGINS` (через запятую: `https://app.techsmartflow.com,https://my-project.gzhailaubekkyzy.workers.dev`),
   `DATABASE_URL` (Supabase Session pooler), `DB_DRIVER=postgres` (ровно это слово),
   `OPENAI_API_KEY` (сервер понимает и `OPEN_API_KEY`), необязательно `OPENAI_MODEL` (по умолчанию `gpt-4o-mini`), `POSTHOG_API_KEY`, `POSTHOG_HOST`.
   Проверка: `/api/health` → `openai.configured: true` значит, что сервер видит ключ.
