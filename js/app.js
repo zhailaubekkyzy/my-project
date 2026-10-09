@@ -47,7 +47,7 @@ async function initTelegramAuth() {
       store.setAuth(await api.loginDev('expert'));
     } catch (err) {
       api.clearToken();
-      store.setAuthOffline('Автономный демо-режим');
+      store.setAuthOffline('Откройте приложение в Telegram');
     }
   }
 }
@@ -60,29 +60,7 @@ window.reconnectTelegramAuth = () => {
 // -------------------------------------------------------------
 // Scripts that are not needed for the first screen
 // -------------------------------------------------------------
-const deferredScripts = {};
-function loadScriptOnce(src) {
-  if (!deferredScripts[src]) {
-    deferredScripts[src] = new Promise((resolve, reject) => {
-      const el = document.createElement('script');
-      el.src = src;
-      el.async = true;
-      el.onload = resolve;
-      el.onerror = reject;
-      document.head.appendChild(el);
-    });
-  }
-  return deferredScripts[src];
-}
-
-const AI_ENGINE_SRC = 'js/ai-engine.js';
 const CONFETTI_SRC = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
-
-// Run fn with window.aiEngine available (the demo SI replies, until OpenAI is connected)
-SF.withAiEngine = function (fn) {
-  if (window.aiEngine) return fn(window.aiEngine);
-  loadScriptOnce(AI_ENGINE_SRC).then(() => fn(window.aiEngine));
-};
 
 SF.confetti = function () {
   if (window.confetti) window.confetti({ particleCount: 70, spread: 60 });
@@ -90,8 +68,10 @@ SF.confetti = function () {
 
 function loadNonCriticalScripts() {
   const run = () => {
-    loadScriptOnce(AI_ENGINE_SRC).catch(() => {});
-    loadScriptOnce(CONFETTI_SRC).catch(() => {});
+    const el = document.createElement('script');
+    el.src = CONFETTI_SRC;
+    el.async = true;
+    document.head.appendChild(el);
   };
   if ('requestIdleCallback' in window) {
     window.requestIdleCallback(run, { timeout: 1500 });
@@ -99,6 +79,16 @@ function loadNonCriticalScripts() {
     setTimeout(run, 300);
   }
 }
+
+// The bot may write to a person only with their permission. Telegram shows a one-tap
+// "Allow messages" prompt; asked when notifications start to matter (Office, "Связаться с человеком").
+SF.askWriteAccess = function () {
+  const tg = window.Telegram?.WebApp;
+  try {
+    if (!tg || !tg.initData || tg.initDataUnsafe?.user?.allows_write_to_pm) return;
+    if (typeof tg.requestWriteAccess === 'function') tg.requestWriteAccess();
+  } catch (e) {}
+};
 
 // -------------------------------------------------------------
 // Navigation helpers used by screens (onclick="SF.go('chats')")
@@ -124,19 +114,26 @@ SF.openIn = (tab, screen, params = {}) => {
   store.pushRoute({ screen, ...params }, tab);
 };
 
-// Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=c_<consultantId>
+// Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=<param>
+//   (no param)      → Buddy
+//   C_<projectId>   → consultant card in the Marketplace
+//   P_<userId>      → a person's profile
+//   I_<projectId>   → "Мне написали" in the Office (bot notification button)
+//   <slug>          → chat with that SI-consultant (the consultant's own link)
+// Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
   const param = tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
-  if (!param) return;
-  const store = window.funnelStore;
-  if (param.startsWith('c_')) {
-    const id = param.slice(2);
-    if (store.data.marketplace.consultants.some(c => c.id === id)) {
-      SF.openIn('marketplace', 'consultant', { id });
-    }
+  if (!param || !/^[A-Za-z0-9_-]{1,64}$/.test(param)) return;
+  if (param.startsWith('C_')) {
+    SF.openIn('marketplace', 'consultant', { id: param.slice(2) });
+  } else if (param.startsWith('P_')) {
+    SF.openIn('marketplace', 'person', { id: param.slice(2) });
+  } else if (param.startsWith('I_')) {
+    SF.openIn('marketplace', 'office', { section: 'inbox' });
+  } else {
+    SF.openIn('chats', 'chat', { slug: param });
   }
-  // Other links (a consultant's own slug, a profile) open the Buddy screen for now.
 }
 
 // -------------------------------------------------------------
@@ -152,11 +149,16 @@ function renderApp(state) {
   const stack = state.ui.routes[tab];
   const route = stack[stack.length - 1];
   const screen = SF.screens[tab];
-  const routeKey = `${tab}:${stack.length}:${route.screen}:${route.id || ''}`;
+  const routeKey = `${tab}:${stack.length}:${route.screen}:${route.id || route.slug || ''}`;
 
   // Keep the scroll position when the same screen re-renders (e.g. after ticking a box)
   const body = document.getElementById('screen-body');
   const keepScroll = body && routeKey === lastRouteKey ? body.scrollTop : 0;
+
+  // Keep what is being typed in fields marked data-keep (a new chat message arrives meanwhile)
+  const kept = routeKey === lastRouteKey
+    ? [...document.querySelectorAll('[data-keep]')].map(el => ({ key: el.dataset.keep, value: el.value, focused: el === document.activeElement }))
+    : [];
 
   const title = screen.title ? screen.title(route, state) : '';
   const canGoBack = stack.length > 1;
@@ -193,16 +195,25 @@ function renderApp(state) {
 
   const newBody = document.getElementById('screen-body');
   if (newBody && keepScroll) newBody.scrollTop = keepScroll;
+  kept.forEach(({ key, value, focused }) => {
+    const el = document.querySelector(`[data-keep="${key}"]`);
+    if (!el) return;
+    el.value = value;
+    if (focused) el.focus();
+  });
   lastRouteKey = routeKey;
 
   syncTelegramBackButton(canGoBack);
+  if (!(tab === 'chats' && route.screen === 'chat') && !(tab === 'marketplace' && route.screen === 'office-client')) {
+    SF.data.stopPolling();
+  }
   if (screen.afterRender) screen.afterRender(route, state);
   if (window.lucide) window.lucide.createIcons();
 }
 
 function renderBottomNav(state) {
   const badges = {
-    chats: state.chats.list.reduce((n, c) => n + (c.unread || 0), 0)
+    chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length
   };
   return `
     <nav class="tg-nav-bar grid grid-cols-5 items-end">

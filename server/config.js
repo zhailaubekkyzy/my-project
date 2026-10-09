@@ -29,6 +29,14 @@ const config = {
   jwtExpiresIn: '7d',
   telegramMaxAgeSeconds: 86400, // 24 hours max age for initData
 
+  // Telegram bot that sends notifications and opens the Mini App (t.me/<bot>/<app>)
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || 'smartflow_ai_support_bot',
+  telegramAppShortName: process.env.TELEGRAM_APP_SHORT_NAME || 'app',
+
+  // OpenAI for SI replies. The key may have been saved in Railway as OPEN_API_KEY.
+  openaiApiKey: process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || '',
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+
   // Frontend origins allowed by CORS (Cloudflare Pages domain, custom domain)
   corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean),
 

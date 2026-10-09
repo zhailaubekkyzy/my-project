@@ -153,7 +153,7 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
       cleanSlug,
       niche || 'Экспертные продажи',
       JSON.stringify(templateCloneSettings),
-      JSON.stringify(pricingOptions || [{ id: 'p1', name: 'Консультация', price: 15000 }]),
+      JSON.stringify(pricingOptions || []), // no made-up prices: the expert sets the price on the card
       JSON.stringify({ traffic: 0, leads: 0, qualified: 0, bookings: 0, cr: 0, revenueRub: 0, savedHours: 0 })
     ]
   );
@@ -175,6 +175,13 @@ async function updateProject(projectId, updateData) {
   if (updateData.niche !== undefined) {
     fields.push('niche = ?');
     values.push(updateData.niche);
+  }
+  // Marketplace card (validated in routes/projects.js)
+  for (const key of ['offer', 'description', 'price_label', 'payment_url', 'trial_days', 'category', 'is_listed']) {
+    if (updateData[key] !== undefined) {
+      fields.push(`${key} = ?`);
+      values.push(updateData[key]);
+    }
   }
   if (updateData.role_title !== undefined) {
     fields.push('role_title = ?');

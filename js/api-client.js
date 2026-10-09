@@ -134,13 +134,21 @@
     },
 
     async getMessages(projectId, clientId) {
-      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/messages`);
+      return await apiFetch(`/api/projects/${projectId}/conversations/${clientId}/messages`);
     },
 
-    async sendMessage(projectId, clientId, messageData) {
-      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/messages`, {
+    // The expert answers a client personally (SI pauses for this client)
+    async sendMessage(projectId, clientId, text) {
+      return await apiFetch(`/api/projects/${projectId}/conversations/${clientId}/messages`, {
         method: 'POST',
-        body: JSON.stringify(messageData)
+        body: JSON.stringify({ text })
+      });
+    },
+
+    async setClientSi(projectId, clientId, enabled) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/si`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled })
       });
     },
 
@@ -170,22 +178,50 @@
       });
     },
 
-    // Public Client Endpoints
-    async getPublicFunnel(slug) {
-      return await apiFetch(`/api/public/funnels/${slug}`);
+    // Marketplace and public profiles (no login needed)
+    async getMarketplace() {
+      return await apiFetch('/api/marketplace');
     },
 
-    async sendClientChat(slug, chatPayload) {
-      return await apiFetch(`/api/public/funnels/${slug}/chat`, {
+    async getMarketplaceCard(projectId) {
+      return await apiFetch(`/api/marketplace/consultants/${encodeURIComponent(projectId)}`);
+    },
+
+    async getPublicProfile(userId) {
+      return await apiFetch(`/api/marketplace/profiles/${encodeURIComponent(userId)}`);
+    },
+
+    // My chats with SI-consultants (as a client)
+    async getMyChats() {
+      return await apiFetch('/api/chat');
+    },
+
+    async getConsultantBySlug(slug) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}`);
+    },
+
+    async getChatMessages(slug) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/messages`);
+    },
+
+    async sendChatMessage(slug, text) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/messages`, {
         method: 'POST',
-        body: JSON.stringify(chatPayload)
+        body: JSON.stringify({ text })
       });
     },
 
-    async requestHumanContact(slug, payload) {
-      return await apiFetch(`/api/public/funnels/${slug}/human-request`, {
+    async requestHuman(slug, reason) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/human`, {
         method: 'POST',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ reason })
+      });
+    },
+
+    async sendFeedback(text) {
+      return await apiFetch('/api/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ text })
       });
     },
 

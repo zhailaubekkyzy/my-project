@@ -55,6 +55,31 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
 });
 
 /**
+ * POST /api/projects/:projectId/clients/:clientId/si  { enabled }
+ * Turn the SI back on for a client (or pause it while the expert answers personally)
+ */
+router.post('/:clientId/si', requireProjectPermission('conversations:write'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
+    const enabled = Boolean(req.body && req.body.enabled);
+    await db.run(
+      'UPDATE clients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [enabled ? 'active' : 'human_needed', client.id]
+    );
+    if (enabled) {
+      await db.run(
+        `UPDATE direct_inquiries SET status = 'answered', updated_at = CURRENT_TIMESTAMP WHERE client_id = ? AND status = 'waiting'`,
+        [client.id]
+      );
+    }
+    res.json({ clientId: client.id, siEnabled: enabled });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/projects/:projectId/inquiries
  * List priority direct inquiries ("Кто написал лично 👤")
  */

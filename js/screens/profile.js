@@ -28,7 +28,7 @@
     const me = state.me;
     const p = me.profile;
     const trust = SF.trustScore(me);
-    const consultants = me.business.active ? state.office.consultants : [];
+    const consultants = state.office.consultants.filter(c => c.isListed);
     const offer = p.offerButton;
 
     return `
@@ -96,7 +96,12 @@
         <span class="text-ink-2 font-semibold">Русский ${SF.soonBadge('EN скоро')}</span>
       </div>
 
-      <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Сбросить демо-данные на этом устройстве</button>
+      ${me.id ? `
+        <button onclick="SF.copyText('https://t.me/smartflow_ai_support_bot/app?startapp=P_${SF.js(me.id)}', 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться профилем
+        </button>` : ''}
+
+      <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Очистить данные на этом устройстве</button>
     `;
   }
 
@@ -107,7 +112,7 @@
     const links = [...(p.links || [])];
     while (links.length < 3) links.push({ label: '', url: '' });
     const offer = p.offerButton || {};
-    const consultants = me.business.active ? state.office.consultants : [];
+    const consultants = state.office.consultants.filter(c => c.isListed);
     const field = (name, label, value, placeholder, rows = 0, max = 800) => `
       <label class="block space-y-1">
         <span class="font-semibold text-ink-2">${label}</span>
@@ -152,7 +157,7 @@
           ${consultants.length ? `
             <select name="offerConsultant" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               <option value="">Ведёт на ссылку ниже</option>
-              ${consultants.map(c => `<option value="${SF.esc(c.id)}" ${offer.consultantId === c.id ? 'selected' : ''}>Ведёт к моему SI: ${SF.esc(c.name)}</option>`).join('')}
+              ${consultants.map(c => `<option value="${SF.esc(c.slug)}" ${offer.consultantId === c.slug ? 'selected' : ''}>Ведёт в чат с моим SI: ${SF.esc(c.name)}</option>`).join('')}
             </select>` : ''}
           <input name="offerUrl" value="${SF.esc(offer.url || '')}" maxlength="300" placeholder="https://... (ссылка на оплату или запись)" inputmode="url" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
         </div>
@@ -208,7 +213,9 @@
       offerButton: offerUrl || offerConsultant
         ? { label: f.offerLabel.value.trim() || 'Мой оффер', url: offerUrl || null, consultantId: offerConsultant || null }
         : null,
-      language: store().data.me.profile.language || 'ru'
+      language: store().data.me.profile.language || 'ru',
+      // PUT replaces the whole profile: keep the Office consent
+      businessAgreedAt: store().data.me.profile.businessAgreedAt || null
     };
 
     store().updateProfile(profile);
@@ -228,16 +235,16 @@
     const offer = store().data.me.profile.offerButton;
     if (!offer) return;
     if (offer.consultantId) {
-      SF.openIn('marketplace', 'office-consultant', { id: offer.consultantId, tab: 'methodology' });
+      SF.actions.openChat(offer.consultantId); // consultantId holds the consultant's slug
     } else if (offer.url) {
       SF.openLink(offer.url);
     }
   };
 
   SF.actions.resetDemo = () => {
-    if (confirm('Сбросить демо-данные на этом устройстве? Данные на сервере не пострадают.')) {
+    if (confirm('Очистить данные на этом устройстве? Всё сохранённое на сервере останется.')) {
       store().resetToDefault();
-      showToast('Демо-данные сброшены');
+      showToast('Данные на устройстве очищены');
       if (typeof window.reconnectTelegramAuth === 'function') window.reconnectTelegramAuth();
     }
   };

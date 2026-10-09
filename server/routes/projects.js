@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
 const mediaService = require('../services/media-service');
+const { cleanUrl, cleanText } = require('../services/profile-service');
 const { readImageBody } = require('../middleware/image-upload');
 
 // All project routes require valid authenticated user session
@@ -47,6 +48,36 @@ router.post('/', async (req, res, next) => {
 });
 
 /**
+ * Marketplace card fields of an SI-consultant. Each consultant has its own payment link
+ * (SmartFlow does not take payments): only https:// links are accepted.
+ */
+function readCardFields(body, project) {
+  const fields = {};
+  if (body.offer !== undefined) fields.offer = cleanText(body.offer, 200);
+  if (body.description !== undefined) fields.description = cleanText(body.description, 1000);
+  if (body.price_label !== undefined) fields.price_label = cleanText(body.price_label, 80);
+  if (body.payment_url !== undefined) {
+    const raw = String(body.payment_url || '').trim();
+    if (raw && !cleanUrl(raw)) return { error: 'Ссылка на оплату должна начинаться с https://' };
+    fields.payment_url = raw ? cleanUrl(raw) : null;
+  }
+  if (body.trial_days !== undefined) {
+    fields.trial_days = Math.max(0, Math.min(60, parseInt(body.trial_days, 10) || 0));
+  }
+  if (body.category !== undefined) {
+    fields.category = body.category === 'warmup' ? 'warmup' : 'sales';
+  }
+  if (body.is_listed !== undefined) {
+    fields.is_listed = body.is_listed ? 1 : 0;
+    const offer = fields.offer !== undefined ? fields.offer : project.offer;
+    if (fields.is_listed && !offer) {
+      return { error: 'Чтобы показать консультанта в Маркетплейсе, заполните оффер' };
+    }
+  }
+  return { fields };
+}
+
+/**
  * GET /api/projects/:projectId
  * Get details of a specific project (requires funnel:read permission)
  */
@@ -66,14 +97,17 @@ router.get('/:projectId', requireProjectPermission('funnel:read'), async (req, r
 router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, res, next) => {
   try {
     const { name, niche, custom_ai_settings, pricing_options, status, role_title } = req.body;
+    const card = readCardFields(req.body, req.project);
+    if (card.error) return res.status(400).json({ error: 'bad_request', message: card.error });
 
     const updated = await projectService.updateProject(req.params.projectId, {
-      name,
+      name: name !== undefined ? cleanText(name, 80) || req.project.name : undefined,
       niche,
       custom_ai_settings,
       pricing_options,
       status,
-      role_title
+      role_title,
+      ...card.fields
     });
 
     res.json(projectService.decorateProject(updated || req.project));
@@ -117,19 +151,23 @@ router.get('/:projectId/analytics', requireProjectPermission('analytics:read'), 
     savedHours: 0
   });
 
-  // Calculate live counts from database
-  const leadCount = await db.get('SELECT COUNT(*) as count FROM clients WHERE project_id = ?', [p.id]);
-  const waitingInquiries = await db.get(
-    'SELECT COUNT(*) as count FROM direct_inquiries WHERE project_id = ? AND status = ?',
-    [p.id, 'waiting']
-  );
+  // Live counts from the database (real numbers only)
+  const count = async (sql, params) => ((await db.get(sql, params)) || {}).count || 0;
+  const clients = await count('SELECT COUNT(*) as count FROM clients WHERE project_id = ?', [p.id]);
+  const talked = await count(
+    `SELECT COUNT(DISTINCT client_id) as count FROM conversations WHERE project_id = ? AND sender = 'client'`, [p.id]);
+  const clientMessages = await count(`SELECT COUNT(*) as count FROM conversations WHERE project_id = ? AND sender = 'client'`, [p.id]);
+  const siReplies = await count(`SELECT COUNT(*) as count FROM conversations WHERE project_id = ? AND sender = 'ai'`, [p.id]);
+  const humanRequests = await count('SELECT COUNT(*) as count FROM direct_inquiries WHERE project_id = ?', [p.id]);
+  const waiting = await count(`SELECT COUNT(*) as count FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [p.id]);
 
   res.json({
     stats: {
       ...stats,
-      totalLeadsInDb: leadCount ? leadCount.count : 0,
-      activeHumanInquiries: waitingInquiries ? waitingInquiries.count : 0
-    }
+      totalLeadsInDb: clients,
+      activeHumanInquiries: waiting
+    },
+    live: { clients, talked, clientMessages, siReplies, humanRequests, waiting }
   });
 });
 

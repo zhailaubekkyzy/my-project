@@ -48,7 +48,20 @@ function sanitizeProfile(input = {}) {
     ? { label: cleanText(offer.label, 40) || 'Мой оффер', url: offerUrl, consultantId: cleanText(offer.consultantId, 64) || null }
     : null;
   profile.language = LANGUAGES.includes(input.language) ? input.language : 'ru';
+  // When the person accepted the business-profile terms (opens the Office)
+  const agreed = typeof input.businessAgreedAt === 'string' ? new Date(input.businessAgreedAt) : null;
+  profile.businessAgreedAt = agreed && !isNaN(agreed) ? agreed.toISOString() : null;
   return profile;
+}
+
+/**
+ * Trust percent of a profile (same rules as SF.trustScore in js/ui.js).
+ */
+function trustScore(user) {
+  const p = parseJson(user.profile, {});
+  const hasPhoto = Boolean(user.photo_media_id || user.avatar_url);
+  return (hasPhoto ? 20 : 0) + (p.headline ? 10 : 0) + (p.bio ? 15 : 0) + (p.regalia ? 15 : 0) +
+    (p.results ? 20 : 0) + ((p.links || []).length ? 10 : 0) + (p.offerButton ? 10 : 0);
 }
 
 /**
@@ -82,6 +95,9 @@ async function updateProfile(userId, input) {
 }
 
 module.exports = {
+  cleanUrl,
+  cleanText,
+  trustScore,
   sanitizeProfile,
   toPublicUser,
   updateProfile

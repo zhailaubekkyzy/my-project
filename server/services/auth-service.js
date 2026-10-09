@@ -154,10 +154,7 @@ async function findOrCreateTelegramUser(tgUser, requestedRole = 'expert') {
             нет_времени: 'Формат гибкий и адаптирован под занятых людей'
           }
         }),
-        JSON.stringify([
-          { id: 'p1', name: 'Базовый тариф', price: 50000 },
-          { id: 'p2', name: 'VIP Менторство', price: 200000 }
-        ]),
+        JSON.stringify([]), // no made-up prices: the expert sets the price on the card
         JSON.stringify({ traffic: 0, leads: 0, qualified: 0, bookings: 0, cr: 0, revenueRub: 0, savedHours: 0 })
       ]
     );
