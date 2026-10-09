@@ -1,6 +1,7 @@
 // server/services/project-service.js - Project Access Control & Data Isolation
 const crypto = require('crypto');
 const db = require('../db');
+const { mediaUrl } = require('./media-service');
 
 /**
  * Unified Access Control Verification for Project Actions
@@ -70,6 +71,31 @@ async function checkProjectAccess(userId, projectId, requiredAction = 'funnel:re
 }
 
 /**
+ * Role shown to clients must start with "SI" (SI-консультант, SI-помощник, SI-менеджер...).
+ */
+function normalizeRoleTitle(value) {
+  if (typeof value !== 'string') return null;
+  const title = value.trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!title) return null;
+  if (/^SI(\b|-)/i.test(title)) return 'SI' + title.slice(2);
+  return `SI-${title.charAt(0).toLowerCase()}${title.slice(1)}`;
+}
+
+/**
+ * Project row as returned to the Mini App (JSON fields parsed, photo URL resolved).
+ */
+function decorateProject(p) {
+  return {
+    ...p,
+    custom_ai_settings: safeJsonParse(p.custom_ai_settings),
+    pricing_options: safeJsonParse(p.pricing_options),
+    stats: safeJsonParse(p.stats),
+    role_title: p.role_title || 'SI-консультант',
+    photo_url: mediaUrl(p.photo_media_id)
+  };
+}
+
+/**
  * Retrieve projects accessible to a user (as owner or active collaborator)
  */
 async function getUserProjects(userId) {
@@ -88,17 +114,9 @@ async function getUserProjects(userId) {
   );
 
   return {
-    owned: ownedProjects.map(p => ({
-      ...p,
-      custom_ai_settings: safeJsonParse(p.custom_ai_settings),
-      pricing_options: safeJsonParse(p.pricing_options),
-      stats: safeJsonParse(p.stats)
-    })),
+    owned: ownedProjects.map(decorateProject),
     shared: sharedProjects.map(p => ({
-      ...p,
-      custom_ai_settings: safeJsonParse(p.custom_ai_settings),
-      pricing_options: safeJsonParse(p.pricing_options),
-      stats: safeJsonParse(p.stats),
+      ...decorateProject(p),
       member_permissions: safeJsonParse(p.member_permissions)
     }))
   };
@@ -109,10 +127,12 @@ async function getUserProjects(userId) {
  */
 async function createProject(userId, { name, templateId, niche, customAiSettings, pricingOptions }) {
   const projectId = `proj_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-  const cleanSlug = (name || 'project')
+  // Latin letters and digits only (Telegram start links allow [A-Za-z0-9_-]); a Cyrillic name leaves "si"
+  const slugBase = (name || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '') + `-${Date.now().toString(36)}`;
+    .replace(/(^-+|-+$)/g, '') || 'si';
+  const cleanSlug = `${slugBase}-${Date.now().toString(36)}`;
 
   let templateCloneSettings = customAiSettings || {};
   if (templateId) {
@@ -133,7 +153,7 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
       cleanSlug,
       niche || 'Экспертные продажи',
       JSON.stringify(templateCloneSettings),
-      JSON.stringify(pricingOptions || [{ id: 'p1', name: 'Консультация', price: 15000 }]),
+      JSON.stringify(pricingOptions || []), // no made-up prices: the expert sets the price on the card
       JSON.stringify({ traffic: 0, leads: 0, qualified: 0, bookings: 0, cr: 0, revenueRub: 0, savedHours: 0 })
     ]
   );
@@ -155,6 +175,17 @@ async function updateProject(projectId, updateData) {
   if (updateData.niche !== undefined) {
     fields.push('niche = ?');
     values.push(updateData.niche);
+  }
+  // Marketplace card (validated in routes/projects.js)
+  for (const key of ['offer', 'description', 'price_label', 'payment_url', 'trial_days', 'category', 'is_listed']) {
+    if (updateData[key] !== undefined) {
+      fields.push(`${key} = ?`);
+      values.push(updateData[key]);
+    }
+  }
+  if (updateData.role_title !== undefined) {
+    fields.push('role_title = ?');
+    values.push(normalizeRoleTitle(updateData.role_title));
   }
   if (updateData.status !== undefined) {
     fields.push('status = ?');
@@ -191,8 +222,9 @@ async function updateProject(projectId, updateData) {
  */
 async function getPublicProjectBySlug(slug) {
   const project = await db.get(
-    `SELECT p.id, p.name, p.slug, p.niche, p.pricing_options, p.custom_ai_settings,
-            u.display_name as expert_name, u.avatar_url as expert_avatar, u.username as expert_username
+    `SELECT p.id, p.name, p.slug, p.niche, p.pricing_options, p.custom_ai_settings, p.role_title, p.photo_media_id,
+            u.display_name as expert_name, u.avatar_url as expert_avatar, u.photo_media_id as expert_photo_media_id,
+            u.username as expert_username
      FROM projects p
      JOIN users u ON p.owner_id = u.id
      WHERE p.slug = ? AND p.status = 'active'`,
@@ -204,8 +236,9 @@ async function getPublicProjectBySlug(slug) {
   let aiSettings = safeJsonParse(project.custom_ai_settings);
   // Only expose public-facing parts of the AI seller
   const publicAiSeller = {
-    greeting: aiSettings.greeting || `Здравствуйте! Я AI-продавец эксперта ${project.expert_name}. Чем могу помочь?`,
-    roleTitle: aiSettings.systemRole || `AI-консультант ${project.expert_name}`,
+    greeting: aiSettings.greeting || `Здравствуйте! Я SI-консультант эксперта ${project.expert_name}. Чем могу помочь?`,
+    roleTitle: project.role_title || 'SI-консультант',
+    photoUrl: mediaUrl(project.photo_media_id),
     suggestedTopics: ['Узнать стоимость', 'Записаться на разбор', 'Задать вопрос']
   };
 
@@ -216,7 +249,7 @@ async function getPublicProjectBySlug(slug) {
     niche: project.niche,
     expert: {
       name: project.expert_name,
-      avatar: project.expert_avatar,
+      avatar: mediaUrl(project.expert_photo_media_id) || project.expert_avatar,
       username: project.expert_username
     },
     pricingOptions: safeJsonParse(project.pricing_options),
@@ -240,5 +273,7 @@ module.exports = {
   createProject,
   updateProject,
   getPublicProjectBySlug,
+  decorateProject,
+  normalizeRoleTitle,
   safeJsonParse
 };

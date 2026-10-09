@@ -80,7 +80,9 @@ async function runAllTests() {
     assert(applied.length >= 2, 'Should apply at least 2 migrations');
 
     const versions = await migrator.getAppliedMigrations();
-    assert.deepStrictEqual(versions, [1, 2], 'Migrations 1 and 2 must be recorded');
+    const expected = require('fs').readdirSync(require('path').join(__dirname, '../server/db/migrations'))
+      .filter(f => /^\d+_.+\.sql$/.test(f)).map(f => parseInt(f, 10)).sort((a, b) => a - b);
+    assert.deepStrictEqual(versions, expected, 'Every migration file must be recorded in order');
   });
 
   // 2. Telegram Auth HMAC Validation
@@ -338,41 +340,263 @@ async function runAllTests() {
     assert.strictEqual(responseBody.error, 'forbidden');
   });
 
-  // 10. "Contact a human" request is stored even without a known lead
-  await test('15. Кнопка «Связаться с человеком» сохраняет заявку (с clientId и без)', async () => {
-    const publicRoutes = require('../server/routes/public');
-    const layer = publicRoutes.stack.find(l => l.route && l.route.path === '/funnels/:slug/human-request');
-    assert(layer, 'human-request route exists');
-
-    const call = async (body) => {
-      let status = 200;
-      let payload = null;
-      let error = null;
-      const res = {
-        status(s) { status = s; return this; },
-        json(b) { payload = b; return this; }
-      };
-      await layer.route.stack[0].handle({ params: { slug: 'elena-mentor' }, body }, res, (err) => { error = err; });
-      if (error) throw error;
-      return { status, payload };
-    };
-
-    // Exactly what the Mini App sends today: no clientId
-    const anonymous = await call({ reason: 'Связаться', leadName: 'Посетитель Telegram' });
-    assert.strictEqual(anonymous.status, 200);
-    assert.strictEqual(anonymous.payload.success, true);
-    const anonInquiry = await db.get('SELECT * FROM direct_inquiries WHERE id = ?', [anonymous.payload.inquiryId]);
-    const anonLead = await db.get('SELECT * FROM clients WHERE id = ?', [anonInquiry.client_id]);
-    assert(anonLead, 'Inquiry must reference an existing lead');
-    assert.strictEqual(anonLead.status, 'human_needed');
-
-    // Repeat request with an external id reuses the same lead instead of creating duplicates
-    const first = await call({ clientId: 'tg_test_777', reason: 'Первый раз' });
-    const second = await call({ clientId: 'tg_test_777', reason: 'Второй раз' });
-    const firstInquiry = await db.get('SELECT client_id FROM direct_inquiries WHERE id = ?', [first.payload.inquiryId]);
-    const secondInquiry = await db.get('SELECT client_id FROM direct_inquiries WHERE id = ?', [second.payload.inquiryId]);
-    assert.strictEqual(firstInquiry.client_id, secondInquiry.client_id, 'Same lead for the same external id');
+  // 11. Photos and profile over real HTTP (the same Express app the server runs)
+  const { app } = require('../server/index');
+  const httpServer = await new Promise(resolve => {
+    const srv = app.listen(0, () => resolve(srv));
   });
+  const baseUrl = `http://127.0.0.1:${httpServer.address().port}`;
+  const tokenFor = async (tgUser) => authService.generateSessionToken(await authService.findOrCreateTelegramUser(tgUser, 'expert'));
+  const tokenA = await tokenFor(expertA_Tg);
+  const tokenB = await tokenFor(expertB_Tg);
+  // Smallest valid JPEG header + filler: enough for the server's file-type check
+  const fakeJpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+  const upload = (url, token, body, type = 'image/jpeg') => fetch(baseUrl + url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': type },
+    body
+  });
+
+  await test('16. Загрузка своего фото: сохраняется и отдаётся по ссылке', async () => {
+    const res = await upload('/api/me/photo', tokenA, fakeJpeg);
+    assert.strictEqual(res.status, 201);
+    const { photoUrl } = await res.json();
+    assert(/^\/api\/media\/med_[a-f0-9]{32}$/.test(photoUrl), 'photo URL points to /api/media');
+
+    const img = await fetch(baseUrl + photoUrl);
+    assert.strictEqual(img.status, 200);
+    assert.strictEqual(img.headers.get('content-type'), 'image/jpeg');
+    assert.strictEqual(img.headers.get('x-content-type-options'), 'nosniff');
+    assert(Buffer.from(await img.arrayBuffer()).equals(fakeJpeg), 'Served bytes equal uploaded bytes');
+
+    // A new Telegram login (with a Telegram photo) must not replace the uploaded photo
+    await authService.findOrCreateTelegramUser({ ...expertA_Tg, photo_url: 'https://t.me/i/userpic/320/a.jpg' }, 'expert');
+    const me = await fetch(baseUrl + '/api/me/profile', { headers: { Authorization: `Bearer ${tokenA}` } }).then(r => r.json());
+    assert.strictEqual(me.user.photoUrl, photoUrl, 'Uploaded photo wins over the Telegram photo');
+
+    // Replacing the photo removes the old file
+    const second = await upload('/api/me/photo', tokenA, fakeJpeg).then(r => r.json());
+    assert.notStrictEqual(second.photoUrl, photoUrl);
+    assert.strictEqual((await fetch(baseUrl + photoUrl)).status, 404, 'Old photo is deleted');
+  });
+
+  await test('17. Не-картинки и чужие консультанты отклоняются', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    assert.strictEqual((await upload('/api/me/photo', tokenA, svg, 'image/svg+xml')).status, 400, 'SVG is rejected');
+    assert.strictEqual((await upload('/api/me/photo', tokenA, Buffer.from('hello world, not an image'))).status, 400);
+    assert.strictEqual((await upload('/api/me/photo', 'bad-token', fakeJpeg)).status, 401, 'Login required');
+    const big = Buffer.concat([fakeJpeg, Buffer.alloc(2 * 1024 * 1024)]);
+    assert.strictEqual((await upload('/api/me/photo', tokenA, big)).status, 413, 'More than 2 MB is rejected');
+
+    const projectB = (await projectService.getUserProjects(expertB_InternalId)).owned[0];
+    const foreign = await upload(`/api/projects/${projectB.id}/photo`, tokenA, fakeJpeg);
+    assert.strictEqual(foreign.status, 403, 'Expert A cannot change the photo of Expert B consultant');
+
+    const own = await upload(`/api/projects/${projectB.id}/photo`, tokenB, fakeJpeg);
+    assert.strictEqual(own.status, 201);
+    const { photoUrl } = await own.json();
+    const after = (await projectService.getUserProjects(expertB_InternalId)).owned.find(p => p.id === projectB.id);
+    assert.strictEqual(after.photo_url, photoUrl, 'Consultant photo is returned with the project');
+    const publicView = await projectService.getPublicProjectBySlug(after.slug);
+    assert.strictEqual(publicView.aiSeller.photoUrl, photoUrl, 'Clients see the consultant photo');
+  });
+
+  await test('18. Профиль: сохраняется, опасные ссылки отбрасываются, роль начинается с SI', async () => {
+    const res = await fetch(baseUrl + '/api/me/profile', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName: 'Алексей Эксперт',
+        bio: 'Помогаю экспертам продавать',
+        links: [
+          { label: 'Instagram', url: 'https://instagram.com/alexey' },
+          { label: 'Плохая', url: 'javascript:alert(1)' }
+        ],
+        isAdmin: true
+      })
+    });
+    assert.strictEqual(res.status, 200);
+    const { user } = await res.json();
+    assert.strictEqual(user.displayName, 'Алексей Эксперт');
+    assert.strictEqual(user.profile.bio, 'Помогаю экспертам продавать');
+    assert.deepStrictEqual(user.profile.links, [{ label: 'Instagram', url: 'https://instagram.com/alexey' }]);
+    assert.strictEqual(user.profile.isAdmin, undefined, 'Unknown fields are dropped');
+
+    // A Telegram re-login keeps the name chosen in the app
+    await authService.findOrCreateTelegramUser(expertA_Tg, 'expert');
+    const me = await fetch(baseUrl + '/api/me/profile', { headers: { Authorization: `Bearer ${tokenA}` } }).then(r => r.json());
+    assert.strictEqual(me.user.displayName, 'Алексей Эксперт');
+
+    assert.strictEqual(projectService.normalizeRoleTitle('помощник'), 'SI-помощник');
+    assert.strictEqual(projectService.normalizeRoleTitle('si-менеджер'), 'SI-менеджер');
+    assert.strictEqual(projectService.normalizeRoleTitle('SI-консультант'), 'SI-консультант');
+  });
+
+  await test('19. Миграции: блоки только для PostgreSQL (RLS) не выполняются в SQLite', async () => {
+    const sql = 'CREATE TABLE a (id TEXT);\n-- postgres-only:begin\nALTER TABLE a ENABLE ROW LEVEL SECURITY;\n-- postgres-only:end\n';
+    assert(!migrator.sqlForDriver(sql, 'sqlite').includes('ROW LEVEL SECURITY'));
+    assert(migrator.sqlForDriver(sql, 'postgres').includes('ROW LEVEL SECURITY'));
+  });
+
+  // 12. Chats with SI-consultants, "Связаться с человеком", bot notifications, Marketplace
+  const config = require('../server/config');
+  const telegramBot = require('../server/services/telegram-bot');
+  const chatService = require('../server/services/chat-service');
+  const clientTg = { id: 300003, first_name: 'Клиент', last_name: 'Сергей', username: 'client_sergey' };
+  const tokenClient = await tokenFor(clientTg);
+  const clientUser = await authService.findOrCreateTelegramUser(clientTg, 'expert');
+  const api = (method, url, token, body) => fetch(baseUrl + url, {
+    method,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(async r => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const projectA = (await projectService.getUserProjects(expertA_InternalId)).owned[0];
+
+  await test('15. Чат с SI-консультантом: только после входа, каждый видит только свою переписку', async () => {
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/messages`, null, { text: 'Привет' })).status, 401);
+
+    // Opening the consultant's link: the SI writes first, only once
+    const start = await api('POST', `/api/chat/${projectA.slug}/start`, tokenClient);
+    assert.strictEqual(start.status, 201);
+    assert.strictEqual(start.body.opener.sender, 'ai', 'The SI starts the conversation');
+    const again = await api('POST', `/api/chat/${projectA.slug}/start`, tokenClient);
+    assert.strictEqual(again.body.opener, null, 'No second greeting');
+
+    const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Сколько стоит?' });
+    assert.strictEqual(sent.status, 201);
+    assert.strictEqual(sent.body.message.sender, 'client');
+    assert.strictEqual(sent.body.reply.sender, 'ai', 'SI answers');
+    assert.strictEqual(sent.body.source, 'fallback', 'Without an OpenAI key the reply is the honest fallback');
+
+    const mine = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient);
+    assert.deepStrictEqual(mine.body.messages.map(m => m.sender), ['ai', 'client', 'ai'], 'Messages in the right order');
+    const other = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenB);
+    assert.strictEqual(other.body.messages.length, 0, 'Another person sees none of my messages');
+
+    const list = await api('GET', '/api/chat', tokenClient);
+    assert(list.body.chats.some(c => c.slug === projectA.slug), 'The chat appears in my chat list');
+  });
+
+  await test('20. OpenAI: SI получает оффер, правила и историю переписки', async () => {
+    await projectService.updateProject(projectA.id, {
+      offer: 'Разбор бизнеса за 60 минут',
+      // Old auto-filled tariffs (never typed by the expert) must not reach the SI
+      pricing_options: [{ id: 'p1', name: 'VIP Менторство', price: 200000 }]
+    });
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    let sentToOpenAI = null;
+    config.openaiApiKey = 'sk-test-not-real';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        sentToOpenAI = { url, headers: options.headers, body: JSON.parse(options.body) };
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'Разбор стоит 15 000 ₽.' } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Что вы предлагаете?' });
+      assert.strictEqual(sent.body.source, 'openai');
+      assert.strictEqual(sent.body.reply.text, 'Разбор стоит 15 000 ₽.');
+      const system = sentToOpenAI.body.messages[0].content;
+      assert(system.includes('Разбор бизнеса за 60 минут'), 'The offer is given to the SI');
+      assert(system.includes('Не выдумывай'), 'The SI is told not to invent facts');
+      assert(!system.includes('VIP Менторство'), 'Auto-filled tariffs are not used');
+      assert.strictEqual(sentToOpenAI.body.messages.at(-1).content, 'Что вы предлагаете?');
+      assert(sentToOpenAI.body.messages.some(m => m.role === 'assistant'), 'Earlier replies are sent as context');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
+  await test('21. «Связаться с человеком»: эксперту пишет бот, SI молчит, ответ эксперта приходит клиенту', async () => {
+    telegramBot.testOutbox.length = 0;
+    const req = await api('POST', `/api/chat/${projectA.slug}/human`, tokenClient, { reason: 'Хочу обсудить договор' });
+    assert.strictEqual(req.status, 201);
+    assert.strictEqual(req.body.notified, true);
+    const toExpert = telegramBot.testOutbox.find(m => m.userId === expertA_InternalId);
+    assert(toExpert && toExpert.text.includes('Хочу обсудить договор'), 'The expert gets a Telegram message');
+    assert.strictEqual(toExpert.chat_id, String(expertA_Tg.id));
+    assert.strictEqual(toExpert.reply_markup.inline_keyboard[0][0].url, `https://t.me/smartflow_ai_support_bot/app?startapp=I_${projectA.id}`);
+
+    const paused = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Вы тут?' });
+    assert.strictEqual(paused.body.reply, null, 'SI is paused while the expert answers');
+
+    const inquiries = await api('GET', `/api/projects/${projectA.id}/clients/inquiries/list`, tokenA);
+    const inquiry = inquiries.body.find(i => i.id === req.body.inquiryId);
+    assert.strictEqual(inquiry.status, 'waiting');
+    const foreign = await api('GET', `/api/projects/${projectA.id}/clients/inquiries/list`, tokenB);
+    assert.strictEqual(foreign.status, 403, 'Another expert cannot see these requests');
+
+    const reply = await api('POST', `/api/projects/${projectA.id}/conversations/${inquiry.client_id}/messages`, tokenA, { text: 'Здравствуйте! Давайте созвонимся.' });
+    assert.strictEqual(reply.status, 201);
+    const toClient = telegramBot.testOutbox.find(m => m.userId === clientUser.id);
+    assert(toClient, 'The client gets a Telegram message about the reply');
+    assert.strictEqual(toClient.reply_markup.inline_keyboard[0][0].url, `https://t.me/smartflow_ai_support_bot/app?startapp=${projectA.slug}`);
+    const after = await api('GET', `/api/projects/${projectA.id}/clients/inquiries/list`, tokenA);
+    assert.strictEqual(after.body.find(i => i.id === inquiry.id).status, 'answered');
+    const history = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient);
+    assert.strictEqual(history.body.messages.at(-1).sender, 'expert_human', 'The client sees the expert reply');
+
+    await api('POST', `/api/projects/${projectA.id}/clients/${inquiry.client_id}/si`, tokenA, { enabled: true });
+    const resumed = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Спасибо!' });
+    assert(resumed.body.reply, 'SI answers again after the expert turns it on');
+  });
+
+  await test('22. Лимит сообщений SI на клиента', async () => {
+    const settings = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    await projectService.updateProject(projectA.id, { custom_ai_settings: { ...settings, clientLimit: 1 } });
+    const first = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenB, { text: 'Вопрос 1' });
+    assert(first.body.reply && first.body.reply.text !== chatService.LIMIT_TEXT);
+    const second = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenB, { text: 'Вопрос 2' });
+    assert.strictEqual(second.body.reply.text, chatService.LIMIT_TEXT, 'Limit message once');
+    const third = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenB, { text: 'Вопрос 3' });
+    assert.strictEqual(third.body.reply, null, 'Then the SI stays silent');
+    await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
+  await test('23. Маркетплейс: только включённые владельцем, у каждого своя ссылка на оплату', async () => {
+    const before = await api('GET', '/api/marketplace');
+    assert(!before.body.consultants.some(c => c.id === projectA.id), 'Not listed until the owner turns it on');
+    assert(!before.body.consultants.some(c => c.slug === 'elena-mentor'), 'Demo rows never appear');
+
+    const badLink = await api('PUT', `/api/projects/${projectA.id}`, tokenA, { payment_url: 'javascript:alert(1)' });
+    assert.strictEqual(badLink.status, 400);
+    const noOffer = await api('PUT', `/api/projects/${projectA.id}`, tokenA, { offer: '', is_listed: true });
+    assert.strictEqual(noOffer.status, 400, 'An offer is required to be listed');
+    const foreign = await api('PUT', `/api/projects/${projectA.id}`, tokenB, { is_listed: false });
+    assert.strictEqual(foreign.status, 403);
+
+    const ok = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      offer: 'Разбор бизнеса за 60 минут', price_label: '15 000 ₽', payment_url: 'https://pay.example.com/alexey', is_listed: true
+    });
+    assert.strictEqual(ok.status, 200);
+    const projectB = (await projectService.getUserProjects(expertB_InternalId)).owned[0];
+    await api('PUT', `/api/projects/${projectB.id}`, tokenB, { offer: 'Другой оффер', payment_url: 'https://pay.example.com/boris', is_listed: true });
+
+    const list = await api('GET', '/api/marketplace');
+    const cardA = list.body.consultants.find(c => c.id === projectA.id);
+    const cardB = list.body.consultants.find(c => c.id === projectB.id);
+    assert.strictEqual(cardA.paymentUrl, 'https://pay.example.com/alexey');
+    assert.strictEqual(cardB.paymentUrl, 'https://pay.example.com/boris', 'Each consultant has its own payment link');
+    assert(cardA.stats.dialogs >= 2, 'Real number of dialogs');
+    assert.strictEqual(cardA.custom_ai_settings, undefined, 'Instructions never leave the server');
+
+    const profile = await api('GET', `/api/marketplace/profiles/${expertA_InternalId}`);
+    assert.strictEqual(profile.status, 200);
+    assert(profile.body.profile.consultants.some(c => c.id === projectA.id));
+    assert(typeof profile.body.profile.trust === 'number');
+  });
+
+  await test('24. Жалобы и предложения SI-ассистенту сохраняются', async () => {
+    const res = await api('POST', '/api/feedback', tokenClient, { text: 'Добавьте казахский язык' });
+    assert.strictEqual(res.status, 201);
+    const row = await db.get('SELECT * FROM feedback WHERE id = ?', [res.body.id]);
+    assert.strictEqual(row.user_id, clientUser.id);
+  });
+
+  await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
   console.log(`  TEST RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);

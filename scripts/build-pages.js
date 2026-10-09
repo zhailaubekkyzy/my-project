@@ -30,7 +30,7 @@ if (!/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(apiUrl)) {
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'assets'), { recursive: true });
 
-// Plain copies: runtime-loaded files such as js/ai-engine.js keep their usual paths.
+// Plain copies: files loaded at runtime (images, mascots) keep their usual paths.
 for (const dir of PUBLIC_DIRS) {
   fs.cpSync(path.join(ROOT, dir), path.join(DIST, dir), { recursive: true });
 }

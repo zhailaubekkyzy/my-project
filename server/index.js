@@ -17,6 +17,12 @@ const conversationRoutes = require('./routes/conversations');
 const templateRoutes = require('./routes/templates');
 const subscriptionRoutes = require('./routes/subscriptions');
 const publicRoutes = require('./routes/public');
+const meRoutes = require('./routes/me');
+const mediaRoutes = require('./routes/media');
+const chatRoutes = require('./routes/chat');
+const marketplaceRoutes = require('./routes/marketplace');
+const feedbackRoutes = require('./routes/feedback');
+const siEngine = require('./services/si-engine');
 
 const app = express();
 
@@ -49,7 +55,12 @@ app.get('/api/health', async (req, res) => {
       },
       telegramBot: {
         configured: Boolean(config.telegramBotToken),
-        botUsername: 'smartflow_ai_support_bot'
+        botUsername: config.telegramBotUsername
+      },
+      // true = the server sees the OpenAI key (the key itself is never shown)
+      openai: {
+        configured: siEngine.isConfigured(),
+        model: config.openaiModel
       },
       timestamp: new Date().toISOString()
     });
@@ -66,6 +77,11 @@ app.use('/api/projects/:projectId/conversations', conversationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/me', meRoutes);
+app.use('/api/media', mediaRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.

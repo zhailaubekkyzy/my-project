@@ -19,6 +19,13 @@ async function getAppliedMigrations() {
   return rows.map(r => r.version);
 }
 
+// Blocks between "-- postgres-only:begin" and "-- postgres-only:end" run on PostgreSQL only
+// (e.g. Row Level Security for Supabase); SQLite does not support those statements.
+function sqlForDriver(sql, driver) {
+  if (driver === 'postgres') return sql;
+  return sql.replace(/--\s*postgres-only:begin[\s\S]*?--\s*postgres-only:end/g, '');
+}
+
 async function runMigrations(options = { silent: false }) {
   await ensureMigrationTable();
   const appliedVersions = await getAppliedMigrations();
@@ -47,7 +54,7 @@ async function runMigrations(options = { silent: false }) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
       
       // Execute the migration SQL
-      await db.exec(sql);
+      await db.exec(sqlForDriver(sql, db.getDatabase().activeDriver));
       await db.run('INSERT INTO schema_migrations (version, name) VALUES (?, ?)', [version, name]);
       
       newlyApplied.push({ version, name, file });
@@ -64,5 +71,6 @@ async function runMigrations(options = { silent: false }) {
 
 module.exports = {
   runMigrations,
+  sqlForDriver,
   getAppliedMigrations
 };

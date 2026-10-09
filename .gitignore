@@ -17,6 +17,8 @@ DerivedData/
 !.env.example
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 data/*.db
 data/*.sqlite

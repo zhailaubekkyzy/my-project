@@ -1,9 +1,26 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>SmartFlow — Autonomous AI Sales Agent Engine (Telegram Mini App)</title>
+  <title>SmartFlow — From idea to selling. Faster.</title>
+
+  <!-- Theme: light by default, dark when Telegram is in dark mode. Set before first paint. -->
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams((location.hash || '').slice(1));
+        var themeParams = params.get('tgWebAppThemeParams');
+        var bg = themeParams ? JSON.parse(themeParams).bg_color : null;
+        var isDark = false;
+        if (bg && /^#[0-9a-f]{6}$/i.test(bg)) {
+          var n = parseInt(bg.slice(1), 16);
+          isDark = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 128;
+        }
+        if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (e) {}
+    })();
+  </script>
 
   <!-- Telegram WebApp SDK (must load before app scripts) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -19,15 +36,15 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"></noscript>
 </head>
-<body class="bg-[#060911] text-slate-100 min-h-screen select-none antialiased flex flex-col justify-between font-sans">
+<body class="bg-page text-ink h-full overflow-hidden select-none antialiased flex flex-col font-sans">
 
   <!-- Root mount point for SmartFlow Telegram Mini App -->
   <div id="app-root" class="w-full flex-1 flex flex-col items-center">
     <!-- Content will be rendered by js/app.js -->
-    <div class="p-16 text-center text-slate-400">
-      <div class="animate-spin w-9 h-9 border-3 border-[#81D8D0] border-t-transparent rounded-full mx-auto mb-3"></div>
-      <div class="text-sm font-semibold text-white">SmartFlow AI Engine</div>
-      <div class="text-xs text-[#81D8D0] mt-1 font-handwritten text-base">From idea to selling. Faster.</div>
+    <div class="p-16 text-center text-muted">
+      <img src="images/mascots/si-buddy.webp" alt="" width="96" height="96" class="w-24 h-24 mx-auto mb-3 animate-pulse" />
+      <div class="text-sm font-semibold text-ink">SmartFlow</div>
+      <div class="text-xs text-brand mt-1 font-handwritten text-base">From idea to selling. Faster.</div>
     </div>
   </div>
 
@@ -37,13 +54,31 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       if (!tg) return;
       try { tg.ready(); tg.expand(); } catch (e) { console.log('Running outside native Telegram container'); }
+      // Follow Telegram's light/dark mode, also when the user switches it while the app is open.
+      function applyTheme() {
+        var dark = tg.colorScheme === 'dark';
+        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+        var bg = dark ? '#090f17' : '#f6f9fa';
+        try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } catch (e) {}
+      }
+      applyTheme();
+      try { tg.onEvent('themeChanged', applyTheme); } catch (e) {}
     })();
   </script>
 
-  <!-- Application Logic (ai-engine.js and confetti are loaded after first render) -->
+  <!-- Application Logic (confetti is loaded after first render) -->
   <script src="js/api-client.js"></script>
   <script src="js/store.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/media.js"></script>
+  <script src="js/screens/buddy.js"></script>
+  <script src="js/screens/marketplace.js"></script>
+  <script src="js/screens/office.js"></script>
+  <script src="js/screens/chats.js"></script>
+  <script src="js/screens/profile.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

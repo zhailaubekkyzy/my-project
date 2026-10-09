@@ -4,6 +4,7 @@ const router = express.Router();
 const authService = require('../services/auth-service');
 const projectService = require('../services/project-service');
 const subscriptionService = require('../services/subscription-service');
+const profileService = require('../services/profile-service');
 const { requireAuth } = require('../middleware/auth');
 const config = require('../config');
 const db = require('../db');
@@ -54,14 +55,7 @@ router.post('/telegram', async (req, res, next) => {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        displayName: user.display_name,
-        username: user.username,
-        avatarUrl: user.avatar_url,
-        roles: user.roles,
-        telegramId: user.telegramId
-      },
+      user: { ...profileService.toPublicUser(user), telegramId: user.telegramId },
       projects,
       subscription
     });
@@ -85,20 +79,8 @@ router.get('/me', requireAuth, async (req, res, next) => {
     const subscription = await subscriptionService.getPlatformSubscription(user.id);
     const funnelSubs = await subscriptionService.getExpertFunnelSubscriptions(user.id);
 
-    let roles = ['expert'];
-    try {
-      roles = JSON.parse(user.roles);
-    } catch (e) {}
-
     res.json({
-      user: {
-        id: user.id,
-        displayName: user.display_name,
-        username: user.username,
-        avatarUrl: user.avatar_url,
-        roles,
-        status: user.status
-      },
+      user: profileService.toPublicUser(user),
       projects,
       subscription,
       funnelSubscriptions: funnelSubs
@@ -149,13 +131,7 @@ router.post('/dev-login', async (req, res, next) => {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        displayName: user.display_name,
-        username: user.username,
-        avatarUrl: user.avatar_url,
-        roles
-      },
+      user: profileService.toPublicUser(user),
       projects,
       subscription,
       isDevBypass: true
