@@ -197,6 +197,7 @@ SF.openIn = (tab, screen, params = {}) => {
 //   I_<projectId>   → "Мне написали" in the Office (bot notification button)
 //   A_<feedbackId>  → a complaint in the support panel (bot message to the team)
 //   S_support       → the "Поддержка" chat (bot message with the team's answer)
+//   ADMIN           → the support panel (link for the support team)
 //   <slug>          → chat with that SI-consultant (the consultant's own link)
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
@@ -211,6 +212,8 @@ function handleStartParam() {
     SF.openIn('marketplace', 'office', { section: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
+  } else if (param === 'ADMIN') {
+    SF.openIn('profile', 'admin');
   } else if (param.startsWith('S_')) {
     SF.openIn('chats', 'chat', { slug: 'assistant' });
   } else {

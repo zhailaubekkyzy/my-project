@@ -24,6 +24,14 @@
   }
 
   // ---------------- List ----------------
+  // Visible way to create your own SI-consultant (Office terms first, if not accepted yet)
+  function createButton() {
+    return `
+      <button onclick="SF.actions.startCreateConsultant()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
+        <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-консультанта
+      </button>`;
+  }
+
   function officeEntry(state) {
     if (store().isBusinessActive()) {
       const waiting = SF.data.waitingInquiries(state).length;
@@ -72,6 +80,7 @@
     const items = (all || []).filter(c => filter === 'all' || c.category === filter);
     return `
       ${officeEntry(state)}
+      ${createButton()}
 
       <div class="flex gap-1.5 overflow-x-auto pb-1">
         ${CATEGORIES.map(cat => `

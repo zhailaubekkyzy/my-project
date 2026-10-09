@@ -472,7 +472,19 @@
     SF.askWriteAccess(); // the bot will tell about new requests from clients
     SF.confetti();
     showToast('Офис открыт! Заполните карточку своего SI-консультанта');
-    SF.patch({ section: 'consultants' });
+    const next = store().currentRoute().next;
+    SF.patch({ section: 'consultants', next: null });
+    if (next === 'create') SF.push('office-create');
+  };
+
+  // "Создать своего SI-консультанта" in the Marketplace: the form, or the Office terms first
+  SF.actions.startCreateConsultant = () => {
+    if (store().isBusinessActive()) {
+      SF.openIn('marketplace', 'office', { section: 'consultants' });
+      SF.push('office-create');
+    } else {
+      SF.openIn('marketplace', 'office', { section: 'consultants', next: 'create' });
+    }
   };
 
   SF.actions.createConsultant = async (e) => {
