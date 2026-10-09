@@ -1,7 +1,7 @@
 // app.js - SmartFlow shell: bottom navigation, screen routing, Telegram login and back button.
 //
 // Structure (see docs/ARCHITECTURE.md):
-//   Комьюнити (later) · Маркетплейс (+ Офис) · Бадди (center, home) · Чаты · Профиль
+//   Инкубатор (later) · Маркетплейс (+ Офис) · Бадди (center, home) · Чаты · Профиль
 // Every tab keeps a stack of screens in store.data.ui.routes[tab]; screens are rendered by
 // window.SF.screens[tab].render(route, state) from js/screens/*.js.
 
@@ -9,7 +9,7 @@ const SF = window.SF;
 
 // Bottom navigation, left to right. Community is planned: switch `enabled` on when it is built.
 const TABS = [
-  { id: 'community', label: 'Комьюнити', icon: 'users-round', enabled: false },
+  { id: 'incubator', label: 'Инкубатор', icon: 'sprout', enabled: false },
   { id: 'marketplace', label: 'Маркетплейс', icon: 'store', enabled: true },
   { id: 'buddy', label: 'Бадди', icon: 'sparkles', enabled: true, center: true },
   { id: 'chats', label: 'Чаты', icon: 'messages-square', enabled: true },
@@ -107,7 +107,7 @@ SF.go = (tab) => {
   const def = TABS.find(t => t.id === tab);
   if (!def) return;
   if (!def.enabled) {
-    SF.showToast(`${def.label} появится в следующих версиях — я напомню`);
+    SF.showToast(`${def.label} появится в следующих версиях`);
     return;
   }
   window.funnelStore.setTab(tab);
