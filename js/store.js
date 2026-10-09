@@ -61,7 +61,8 @@ const defaultData = {
     clients: {},             // { [projectId]: [...] } my consultants' clients
     inquiries: {},           // { [projectId]: [...] } "Мне написали"
     clientMessages: {},      // { [clientId]: [...] }
-    analytics: {}            // { [projectId]: live numbers }
+    analytics: {},           // { [projectId]: live numbers }
+    brain: null              // my SI-brain materials (only their text is stored)
   },
 
   // Chats that live only in the app

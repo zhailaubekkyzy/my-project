@@ -22,6 +22,7 @@ const mediaRoutes = require('./routes/media');
 const chatRoutes = require('./routes/chat');
 const marketplaceRoutes = require('./routes/marketplace');
 const feedbackRoutes = require('./routes/feedback');
+const brainRoutes = require('./routes/brain');
 const siEngine = require('./services/si-engine');
 
 const app = express();
@@ -82,6 +83,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/brain', brainRoutes);
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.

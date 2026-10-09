@@ -1,5 +1,5 @@
 // screens/office.js - Office (business profile) inside the Marketplace tab. Real data only.
-// Sections: Мои смарт-консультанты · Мой SI-мозг · Мне написали.
+// Sections: Мои смарт-консультанты · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали.
 // Each SI-consultant has four tabs: Карточка и методология · Аналитика · Клиенты · Рассылки.
 
 (function (window) {
@@ -95,7 +95,7 @@
     const waiting = SF.data.waitingInquiries(state).length;
     let body = '';
     if (section === 'consultants') body = renderConsultantList(state);
-    if (section === 'brain') body = renderBrain();
+    if (section === 'brain') body = renderBrain(state);
     if (section === 'inbox') body = renderInbox(state);
     return `
       <div class="grid grid-cols-3 gap-1.5 bg-raised p-1.5 rounded-2xl border border-line">
@@ -131,16 +131,96 @@
     `;
   }
 
-  function renderBrain() {
+  // ---------------- SI-brain: materials the SI answers from ----------------
+  const BRAIN_ACCEPT = '.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain';
+  const MAX_BRAIN_FILE = 10 * 1024 * 1024;
+  const SOURCE_LABELS = { pdf: 'PDF', docx: 'Word', txt: 'Текст' };
+  let brainBusy = null; // name of the file being read right now
+
+  function brainUploadButtons(consultantId = '') {
     return `
-      <div class="glass-card-3d p-4 space-y-2">
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="SF.actions.uploadBrainFile('${SF.js(consultantId)}')" ${brainBusy ? 'disabled' : ''} class="py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">
+          <i data-lucide="upload" class="w-3.5 h-3.5"></i> Загрузить файл
+        </button>
+        <button onclick="SF.actions.pasteBrainText('${SF.js(consultantId)}')" ${brainBusy ? 'disabled' : ''} class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">
+          <i data-lucide="type" class="w-3.5 h-3.5"></i> Вставить текст
+        </button>
+      </div>
+      ${brainBusy ? `<div class="text-[11px] text-si flex items-center gap-1.5"><span class="si-dot"></span>Читаю «${SF.esc(brainBusy)}»… Это может занять до минуты.</div>` : ''}`;
+  }
+
+  function renderBrain(state) {
+    const materials = state.remote.brain;
+    const consultants = state.office.consultants;
+    return `
+      <div class="glass-card-3d p-4 space-y-3">
         <div class="flex items-center gap-2">
           <span class="si-dot"></span>
           <span class="text-sm font-bold text-ink">Мой SI-мозг</span>
-          ${SF.soonBadge()}
         </div>
-        <p class="text-xs text-muted leading-relaxed">Здесь будут все ваши материалы: PDF, тексты, аудио и видео с расшифровкой. Каждый SI-консультант будет знать только то, что вы ему откроете.</p>
-        <p class="text-xs text-muted leading-relaxed">Пока SI отвечает по карточке и методологии консультанта: оффер, описание, цена, цель и инструкции. Чем подробнее вы их заполните, тем точнее ответы.</p>
+        <p class="text-xs text-muted leading-relaxed">Загрузите то, что знаете вы: программу, прайс, ответы на частые вопросы, кейсы. SI будет отвечать клиентам по этим материалам своими словами. Каждый SI знает только то, что вы ему откроете.</p>
+        ${brainUploadButtons()}
+        <div class="text-[10px] text-faint">PDF, Word (.docx) или текст, до 10 МБ. Сохраняется только текст — сами файлы не хранятся. Сканы и картинки без текста не подойдут.</div>
+      </div>
+      ${!materials ? `<div class="text-xs text-muted px-1">${SF.data.signedIn() ? 'Загружаю…' : 'Откройте приложение в Telegram, чтобы увидеть свои материалы.'}</div>` : ''}
+      ${materials && !materials.length ? SF.emptyState('consultant', 'Материалов пока нет', 'Начните с самого частого: что входит в ваш продукт, сколько стоит, кому подходит. Можно просто вставить текст.') : ''}
+      ${(materials || []).map(m => renderMaterial(m, consultants)).join('')}
+    `;
+  }
+
+  function renderMaterial(m, consultants) {
+    const meta = [SOURCE_LABELS[m.sourceType] || 'Текст', `${Number(m.charCount || 0).toLocaleString('ru-RU')} знаков`, timeLabel(m.createdAt)].filter(Boolean).join(' · ');
+    return `
+      <div class="glass-card-3d p-3.5 space-y-2">
+        <div class="flex items-start gap-2.5">
+          <i data-lucide="file-text" class="w-5 h-5 text-si flex-shrink-0 mt-0.5"></i>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold text-ink truncate">${SF.esc(m.title)}</div>
+            <div class="text-[10px] text-muted">${meta}</div>
+          </div>
+          <button onclick="SF.actions.deleteBrainMaterial('${SF.js(m.id)}')" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить материал">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+        ${m.preview ? `<div class="text-[11px] text-muted leading-snug line-clamp-3 whitespace-pre-line">${SF.esc(m.preview)}</div>` : ''}
+        <div class="pt-1 border-t border-line space-y-1.5">
+          <div class="text-[10px] font-semibold text-ink-2">Этот материал знают:</div>
+          ${consultants.length ? `
+            <div class="flex flex-wrap gap-1.5">
+              ${consultants.map(c => {
+                const on = (m.consultantIds || []).includes(c.id);
+                return `
+                <label class="flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] cursor-pointer ${on ? 'bg-[var(--si-bubble)] border-[var(--si-bubble-line)] text-ink' : 'bg-sunken border-line text-muted'}">
+                  <input type="checkbox" ${on ? 'checked' : ''} onchange="SF.actions.toggleMaterialConsultant('${SF.js(m.id)}', '${SF.js(c.id)}', this.checked)" class="w-3.5 h-3.5 accent-[#0d9488]" />
+                  ${SF.esc(c.name)}
+                </label>`;
+              }).join('')}
+            </div>
+            ${!(m.consultantIds || []).length ? '<div class="text-[10px] text-faint">Пока ни один SI не знает этот материал — отметьте нужных.</div>' : ''}`
+          : '<div class="text-[10px] text-faint">Создайте SI-консультанта, чтобы открыть ему этот материал.</div>'}
+        </div>
+      </div>`;
+  }
+
+  // In the consultant's tab: which materials this SI knows
+  function renderConsultantBrain(c, state) {
+    const materials = state.remote.brain;
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        ${SF.sectionTitle('brain', 'SI-мозг: что знает этот SI')}
+        ${!materials ? '<div class="text-muted">Загружаю…</div>' : ''}
+        ${materials && !materials.length ? '<div class="text-muted leading-snug">Материалов пока нет. Загрузите программу, прайс или ответы на частые вопросы — SI будет отвечать по ним.</div>' : ''}
+        ${(materials || []).map(m => `
+          <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
+            <input type="checkbox" ${(m.consultantIds || []).includes(c.id) ? 'checked' : ''} onchange="SF.actions.toggleMaterialConsultant('${SF.js(m.id)}', '${SF.js(c.id)}', this.checked)" class="w-4 h-4 accent-[#0d9488]" />
+            <span class="flex-1 min-w-0">
+              <span class="block font-semibold text-ink truncate">${SF.esc(m.title)}</span>
+              <span class="block text-[10px] text-muted">${SOURCE_LABELS[m.sourceType] || 'Текст'} · ${Number(m.charCount || 0).toLocaleString('ru-RU')} знаков</span>
+            </span>
+          </label>`).join('')}
+        ${brainUploadButtons(c.id)}
+        <div class="text-[10px] text-faint">Новый материал отсюда сразу откроется этому SI. Все материалы — в Офисе, раздел «SI-мозг».</div>
       </div>
     `;
   }
@@ -194,7 +274,7 @@
     if (!c) return SF.emptyState('assistant', 'Консультант не найден', 'Вернитесь в Офис и выберите другого.');
     const tab = route.tab || 'methodology';
     let body = '';
-    if (tab === 'methodology') body = renderMethodology(c);
+    if (tab === 'methodology') body = renderMethodology(c) + renderConsultantBrain(c, state);
     if (tab === 'analytics') body = renderAnalytics(c, state);
     if (tab === 'income') body = renderClients(c, state);
     if (tab === 'broadcasts') body = renderBroadcasts();
@@ -535,6 +615,119 @@
     }
   };
 
+  // ---------------- SI-brain actions ----------------
+  function pickFile(accept) {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = accept;
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        resolve(input.files && input.files[0] ? input.files[0] : null);
+        input.remove();
+      });
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+
+  function replaceMaterial(material) {
+    const list = (store().data.remote.brain || []).filter(m => m.id !== material.id);
+    store().setRemote('brain', [material, ...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
+  }
+
+  // consultantId: upload from a consultant's tab (only this SI gets it); empty: all my SI get it
+  async function uploadMaterial(file, { name, title = '', consultantId = '' }) {
+    const consultantIds = consultantId ? [consultantId] : store().data.office.consultants.map(c => c.id);
+    brainBusy = title || name;
+    store().notify();
+    try {
+      const res = await api().uploadBrainMaterial(file, { name, title, consultantIds });
+      replaceMaterial(res.material);
+      const known = res.material.consultantIds.length;
+      showToast(consultantId
+        ? 'Материал добавлен. Этот SI уже отвечает по нему'
+        : (known ? 'Материал добавлен. Его знают все ваши SI — снимите галочку, если кому-то не нужен' : 'Материал добавлен. Отметьте, какие SI его знают'));
+      return true;
+    } catch (err) {
+      showToast(err.message || 'Не удалось загрузить материал');
+      return false;
+    } finally {
+      brainBusy = null;
+      store().notify();
+    }
+  }
+
+  SF.actions.uploadBrainFile = async (consultantId) => {
+    if (needServer() || brainBusy) return;
+    const file = await pickFile(BRAIN_ACCEPT);
+    if (!file) return;
+    if (file.size > MAX_BRAIN_FILE) {
+      showToast('Файл больше 10 МБ. Разделите его на части');
+      return;
+    }
+    await uploadMaterial(file, { name: file.name, consultantId });
+  };
+
+  SF.actions.pasteBrainText = (consultantId) => {
+    if (needServer() || brainBusy) return;
+    SF.openModal(`
+      <form onsubmit="SF.actions.saveBrainText(event, '${SF.js(consultantId)}')" class="space-y-3 text-xs">
+        <h3 class="text-sm font-bold text-ink">Текст для SI-мозга</h3>
+        ${field('title', 'Название', '', { placeholder: 'Например: Частые вопросы', max: 120 })}
+        <label class="block space-y-1">
+          <span class="font-semibold text-ink-2">Текст</span>
+          <textarea name="text" rows="9" maxlength="400000" required placeholder="Вставьте сюда программу, прайс, ответы на вопросы клиентов…" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink"></textarea>
+        </label>
+        <div class="flex gap-2">
+          <button type="button" onclick="SF.closeModal()" class="flex-1 py-2.5 rounded-xl btn-3d-dark">Отмена</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany">Сохранить</button>
+        </div>
+      </form>
+    `);
+  };
+
+  SF.actions.saveBrainText = async (e, consultantId) => {
+    e.preventDefault();
+    const title = e.target.title.value.trim() || 'Текст';
+    const text = e.target.text.value.trim();
+    if (text.length < 20) {
+      showToast('Текст слишком короткий');
+      return;
+    }
+    SF.closeModal();
+    const blob = new Blob([text], { type: 'text/plain' });
+    await uploadMaterial(blob, { name: 'text.txt', title, consultantId });
+  };
+
+  SF.actions.toggleMaterialConsultant = async (materialId, consultantId, on) => {
+    if (needServer()) return;
+    const material = (store().data.remote.brain || []).find(m => m.id === materialId);
+    if (!material) return;
+    const ids = new Set(material.consultantIds || []);
+    if (on) ids.add(consultantId); else ids.delete(consultantId);
+    try {
+      const res = await api().setMaterialConsultants(materialId, [...ids]);
+      replaceMaterial(res.material);
+    } catch (err) {
+      store().notify(); // put the checkbox back
+      showToast(err.message || 'Не удалось сохранить');
+    }
+  };
+
+  SF.actions.deleteBrainMaterial = async (materialId) => {
+    if (needServer()) return;
+    const material = (store().data.remote.brain || []).find(m => m.id === materialId);
+    if (!material || !confirm(`Удалить «${material.title}»? SI перестанут отвечать по этому материалу.`)) return;
+    try {
+      await api().deleteBrainMaterial(materialId);
+      store().setRemote('brain', (store().data.remote.brain || []).filter(m => m.id !== materialId));
+      showToast('Материал удалён');
+    } catch (err) {
+      showToast(err.message || 'Не удалось удалить');
+    }
+  };
+
   // ---------------- Screen registration (rendered inside the Marketplace tab) ----------------
   const TITLES = {
     office: 'Офис',
@@ -559,7 +752,9 @@
       if (!store().isBusinessActive()) return;
       if (route.screen === 'office') {
         SF.data.allInquiries();
+        if (route.section === 'brain') SF.data.brain();
       } else if (route.screen === 'office-consultant') {
+        if (!route.tab || route.tab === 'methodology') SF.data.brain();
         if (route.tab === 'analytics') SF.data.analytics(route.id);
         if (route.tab === 'income') SF.data.clients(route.id);
       } else if (route.screen === 'office-client') {
