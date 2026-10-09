@@ -5,6 +5,8 @@ const projectService = require('../services/project-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
+const mediaService = require('../services/media-service');
+const { readImageBody } = require('../middleware/image-upload');
 
 // All project routes require valid authenticated user session
 router.use(requireAuth);
@@ -49,12 +51,8 @@ router.post('/', async (req, res, next) => {
  * Get details of a specific project (requires funnel:read permission)
  */
 router.get('/:projectId', requireProjectPermission('funnel:read'), async (req, res) => {
-  const p = req.project;
   res.json({
-    ...p,
-    custom_ai_settings: projectService.safeJsonParse(p.custom_ai_settings),
-    pricing_options: projectService.safeJsonParse(p.pricing_options),
-    stats: projectService.safeJsonParse(p.stats),
+    ...projectService.decorateProject(req.project),
     userRole: req.projectRole,
     permissions: req.projectPermissions
   });
@@ -67,23 +65,38 @@ router.get('/:projectId', requireProjectPermission('funnel:read'), async (req, r
  */
 router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, res, next) => {
   try {
-    const { name, niche, custom_ai_settings, pricing_options, status } = req.body;
+    const { name, niche, custom_ai_settings, pricing_options, status, role_title } = req.body;
 
     const updated = await projectService.updateProject(req.params.projectId, {
       name,
       niche,
       custom_ai_settings,
       pricing_options,
-      status
+      status,
+      role_title
     });
 
-    res.json({
-      ...updated,
-      custom_ai_settings: projectService.safeJsonParse(updated.custom_ai_settings),
-      pricing_options: projectService.safeJsonParse(updated.pricing_options),
-      stats: projectService.safeJsonParse(updated.stats)
-    });
+    res.json(projectService.decorateProject(updated || req.project));
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/photo
+ * Photo of the SI-consultant (requires funnel:write). Body: the image file itself.
+ */
+router.post('/:projectId/photo', requireProjectPermission('funnel:write'), readImageBody, async (req, res, next) => {
+  try {
+    const previous = req.project.photo_media_id;
+    const saved = await mediaService.saveImage(req.user.userId, req.body, 'consultant_photo');
+    await db.run('UPDATE projects SET photo_media_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [saved.id, req.project.id]);
+    await mediaService.deleteImage(previous);
+    res.status(201).json({ photoUrl: saved.url });
+  } catch (err) {
+    if (err instanceof mediaService.MediaError) {
+      return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    }
     next(err);
   }
 });

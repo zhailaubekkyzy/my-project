@@ -1,16 +1,11 @@
 // store.js - Central State Management for SmartFlow Telegram Mini App
 
-const STORAGE_KEY = 'smartflow_tma_v3'; // v3: SI wording in demo data
+const STORAGE_KEY = 'smartflow_tma_v4'; // v4: new structure (Marketplace, Buddy, Chats, Profile)
 
 const defaultData = {
   appName: 'SmartFlow',
   appSlogan: 'From idea to selling. Faster.',
-  activeRole: 'marketer', // 'marketer' | 'expert' | 'client' | 'investor'
-  currentFunnelId: 'funnel-ht',
-  currentExpertId: 'exp-elena',
-  currentClientChatId: 'chat-lead-1',
-  showDevRoleSwitcher: true, // Allows toggling roles for pitch demo, but user mode is isolated
-  
+
   // Telegram Authentication & Core Backend Identity
   auth: {
     status: 'checking', // 'checking' | 'authenticated' | 'expired' | 'offline_demo'
@@ -20,252 +15,180 @@ const defaultData = {
     error: null
   },
 
-  // Y Combinator & Google Tier Investor Data Room
-  investorData: {
-    round: 'Seed Round ($3.5M at $28M Cap)',
-    targetInvestors: 'Y Combinator S26 • Google Ventures • a16z Speedrun',
-    deckHeadline: 'SmartFlow: The Autonomous Conversational SI Sales Engine for the $52B Creator Economy',
-    
-    // Core SaaS / Fintech Metrics
-    financials: {
-      mrr: '$328,500',
-      mrrRub: '31,200,000 ₽',
-      arrRunRate: '$3,942,000',
-      momGrowth: '+34.2%',
-      grossMargin: '89.4%',
-      netRevenueRetention: '146%', // Top decile YC benchmark
-      quickRatio: '4.8',
-      magicNumber: '2.14', // Extreme GTM efficiency
-      paybackPeriod: '21 days',
-      cac: '$168',
-      ltv: '$1,480',
-      ltvCacRatio: '8.8x'
+  // Navigation: the open tab and a stack of screens inside every tab (last = visible).
+  ui: {
+    tab: 'buddy',
+    routes: {
+      marketplace: [{ screen: 'list' }],
+      buddy: [{ screen: 'home' }],
+      chats: [{ screen: 'list' }],
+      profile: [{ screen: 'view' }]
     },
+    marketplaceFilter: 'all'
+  },
 
-    // Viral Bottom-Up Flywheel (Product-Led Growth)
-    growthFlywheel: {
-      kFactor: '1.68', // Viral loop
-      organicLeadConversion: '3.4%', // Leads who convert into new paying experts/marketers
-      avgFunnelImpressionsPerExpert: '480 / mo',
-      zeroPaidMarketing: '84% of new experts join via "Powered by SmartFlow" badge in chat'
+  // The person using the app. Filled from the server after login (setAuth); demo values offline.
+  me: {
+    displayName: 'Гость SmartFlow',
+    username: null,
+    photoUrl: null,
+    hasUploadedPhoto: false,
+    profile: {
+      displayName: '',
+      headline: '',
+      bio: '',
+      regalia: '',
+      results: '',
+      links: [],
+      offerButton: null,
+      language: 'ru'
     },
+    // Business profile: the Office opens in the Marketplace after the person accepts the terms
+    business: { active: false, agreedAt: null }
+  },
 
-    // Market Sizing (TAM / SAM / SOM)
-    marketSize: {
-      tam: '$52.4B',
-      tamDesc: 'Global Creator Economy & Conversational SI Sales Platforms',
-      sam: '$14.2B',
-      samDesc: 'Social-First Creators & Online Academies across Telegram, WhatsApp, IG',
-      som: '$850M',
-      somDesc: 'High-Ticket Mentorship & EdTech Beachhead in EMEA & LATAM'
-    },
-
-    // AI Sales Agent Benchmarks vs Traditional Human Sales
-    benchmarks: [
-      { metric: 'Скорость первого ответа', human: '48 минут', smartFlow: '1.8 секунды', delta: 'В 1600 раз быстрее' },
-      { metric: 'Конверсия лида в созвон/оплату', human: '4.2%', smartFlow: '18.4%', delta: '+340% рост' },
-      { metric: 'Точность отработки возражений', human: '62%', smartFlow: '96.8%', delta: 'База знаний эксперта' },
-      { metric: 'Доступность для лидов', human: 'Пн-Пт 10:00-19:00', smartFlow: '24/7/365 без сна', delta: '100% покрытие ночного трафика' }
+  // Marketplace of SI-consultants (demo until the catalog comes from the server)
+  marketplace: {
+    consultants: [
+      {
+        id: 'mc-elena',
+        name: 'Елена Смирнова',
+        roleTitle: 'SI-консультант',
+        photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+        category: 'sales',
+        offer: 'Выйти из операционки за 8 недель без падения выручки',
+        description: 'Менторство для фаундеров и топ-менеджеров. SI-консультант разберёт вашу ситуацию, ответит на вопросы о программе и запишет на стратегический разбор.',
+        stats: { conversion: '14.6%', dialogs: 392, sales: 36 },
+        rating: 4.9,
+        reviews: [
+          { author: 'Марк Л***', stars: 5, text: 'Ответил на все вопросы за 5 минут, записался на разбор в тот же вечер.' },
+          { author: 'Анна Б***', stars: 5, text: 'Понравилось, что без давления и честно про рассрочку.' }
+        ],
+        price: 25000,
+        priceLabel: 'Стратегический разбор — 25 000 ₽',
+        trialDays: 0,
+        benefits: ['Разбор архитектуры бизнеса 1-на-1', 'План делегирования на 8 недель', '25 000 ₽ зачитываются в программу'],
+        process: ['Оплата напрямую эксперту', 'Выбор времени созвона', 'Созвон 90 минут в Zoom'],
+        paymentUrl: 'https://pay.prodamus.ru/elena_smirnova',
+        author: { name: 'Елена Смирнова', trust: 86 },
+        chatId: 'si-elena'
+      },
+      {
+        id: 'mc-elena-mini',
+        name: 'Мини-курс «Делегирование»',
+        roleTitle: 'SI-помощник',
+        photoUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80',
+        category: 'sales',
+        offer: 'Освободить 10 часов в неделю за 14 дней',
+        description: 'Короткий курс для тех, кому пока рано в менторство. SI-помощник подберёт уроки под вашу команду.',
+        stats: { conversion: '22.1%', dialogs: 518, sales: 114 },
+        rating: 4.8,
+        reviews: [{ author: 'Ирина К***', stars: 5, text: 'Сделала первые 3 шага за выходные.' }],
+        price: 4900,
+        priceLabel: 'Мини-курс — 4 900 ₽',
+        trialDays: 3,
+        benefits: ['7 уроков по 15 минут', 'Шаблоны регламентов', 'Проверка домашних заданий SI-помощником'],
+        process: ['Оплата напрямую автору', 'Доступ к урокам сразу', 'SI-помощник ведёт по шагам'],
+        paymentUrl: 'https://pay.prodamus.ru/delegation_mini',
+        author: { name: 'Олег Ветров', trust: 74 },
+        closesObjection: 'дорого'
+      },
+      {
+        id: 'mc-nutri',
+        name: 'Айгерим Нурланова',
+        roleTitle: 'SI-помощник',
+        photoUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80',
+        category: 'warmup',
+        offer: 'Бесплатная диагностика питания за 10 минут',
+        description: 'Задаст несколько вопросов о привычках и пришлёт персональный разбор. Цель — записать на консультацию нутрициолога.',
+        stats: { conversion: '31.0%', dialogs: 240, sales: 74 },
+        rating: 4.7,
+        reviews: [{ author: 'Дана С***', stars: 4, text: 'Полезный разбор, дальше пошла на консультацию.' }],
+        price: 0,
+        priceLabel: 'Бесплатно',
+        trialDays: 0,
+        benefits: ['Персональный разбор рациона', 'Список продуктов на неделю'],
+        process: ['Ответить на 7 вопросов', 'Получить разбор в чат'],
+        paymentUrl: null,
+        author: { name: 'Айгерим Нурланова', trust: 69 }
+      },
+      {
+        id: 'mc-gromov-sales',
+        name: 'Продавец для экспертов',
+        roleTitle: 'SI-менеджер',
+        photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+        category: 'sales',
+        offer: 'Готовый SI-консультант: квалифицирует и доводит до оплаты',
+        description: 'Внутри методология маркетолога и продавца. Вы даёте доступ к своему SI-мозгу — он продаёт ваши услуги. Ваши клиенты остаются вашими.',
+        stats: { conversion: '19.4%', dialogs: 3120, sales: 605 },
+        rating: 4.9,
+        reviews: [{ author: 'Елена С***', stars: 5, text: 'Подключила за вечер, первые заявки на следующий день.' }],
+        price: 9900,
+        priceLabel: '9 900 ₽ в месяц',
+        trialDays: 7,
+        benefits: ['Методология квалификации и закрытия возражений', 'Обновления от автора', 'Аналитика воронки'],
+        process: ['Оплата напрямую автору', 'Распаковка: ответы на вопросы о продукте', 'Ссылка на вашего SI-консультанта'],
+        paymentUrl: 'https://tribute.tg/gromov_sales',
+        author: { name: 'Александр Громов', trust: 91 },
+        isTemplate: true
+      }
     ]
   },
 
-  // Marketer Profile & Funnels
-  marketer: {
-    id: 'mkt-1',
-    name: 'Александр Громов',
-    tag: '@gromov_smartflow',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    title: 'Top Funnel Architect & SI Strategist',
-    bio: 'Специализация: Воронки на высокий чек и EdTech с SI-агентами SmartFlow',
-    balance: 237600,
-    mrr: 237600,
-    activeSubscribersCount: 24,
-    bankCard: '•••• 8831'
+  // Office = business profile: my SI-consultants, my SI-brain, "Мне написали"
+  office: {
+    section: 'consultants',
+    consultants: [
+      {
+        id: 'oc-elena',
+        serverProjectId: null,
+        name: 'Елена · менторство',
+        roleTitle: 'SI-консультант',
+        photoUrl: null,
+        source: 'created',
+        author: null,
+        category: 'sales',
+        link: 'https://t.me/smartflow_ai_support_bot/app?startapp=elena-mentor',
+        goal: 'Записать на стратегический разбор за 25 000 ₽',
+        instructions: 'Не больше 3 вопросов до пользы. Не обещать результат в цифрах. Если спрашивают про договор с юрлицом — передать Елене.',
+        clientLimit: 40,
+        scenarios: [
+          { when: 'Клиент говорит «дорого»', then: 'Рассказать про рассрочку 15 000 ₽/мес и зачёт разбора' },
+          { when: 'Оборот меньше 1,5 млн ₽/мес', then: 'Предложить мини-курс вместо менторства' },
+          { when: 'Просит созвон с Еленой', then: 'Передать в «Мне написали»' }
+        ],
+        brainAccess: ['m1', 'm2', 'm3']
+      }
+    ],
+    brain: {
+      materials: [
+        { id: 'm1', title: 'Гайд «5 скрытых утечек времени фаундера»', type: 'PDF', topic: 'Лид-магнит', size: '1,2 МБ' },
+        { id: 'm2', title: 'Программа менторства на 8 недель', type: 'PDF', topic: 'Продукт', size: '0,8 МБ' },
+        { id: 'm3', title: 'Ответы на частые возражения', type: 'Текст', topic: 'Продажи', size: '12 КБ' },
+        { id: 'm4', title: 'Интервью с резидентом: рост с 2 до 7 млн ₽', type: 'Видео', topic: 'Кейсы', size: '240 МБ' }
+      ]
+    }
   },
 
-  funnels: [
-    {
-      id: 'funnel-ht',
-      title: 'High-Ticket: Воронка на высокий чек 100k-500k ₽',
-      niche: 'Эксперты, премиум-коучи, менторы, консалтинг',
-      tagline: 'Автоквалификация платежеспособных клиентов и закрытие на стратегическую сессию',
-      monthlyPrice: 9900,
-      badge: 'ТОП Выручка',
-      description: 'Воронка построена по методологии кастдева и быстрой квалификации. Лид проходит через ценностный лид-магнит, глубокий фильтр по доходу/болям, получает разбор своего кейса и выходит на созвон уже прогретым и согласным с чеком.',
-      
-      // AI Cloned Marketer settings
-      aiClone: {
-        personality: 'Уверенный, структурный стратег с акцентом на ROI и ценность времени',
-        knowledgeBase: [
-          'Методология кастдев-квалификации B2B/B2C',
-          'Фреймворк закрытия возражений "дорого", "нет времени", "я уже пробовал"',
-          'Триггеры доверия: кейсы с твердыми цифрами, разбор ошибок',
-          'Правило "Не продавать созвон, а продавать решение проблемы"'
-        ]
-      },
-
-      // Funnel Detailed Structure (Critical requirement)
-      steps: [
-        {
-          number: 1,
-          name: 'Захват внимания & Лид-магнит',
-          goal: 'Крючок интереса, выдача ценного PDF/видео разбора без воды',
-          aiPrompt: 'Поприветствовать лида, выдать заявленный аудит/гайд, зафиксировать интерес к росту дохода',
-          dropOffRate: '12%',
-          conversionRate: '88%'
-        },
-        {
-          number: 2,
-          name: 'Кастдев & Экспресс-квалификация',
-          goal: 'Выяснить точку А, текущий оборот, нишу и главное узкое горлышко',
-          aiPrompt: 'Задать 3 интерактивных вопроса. Отсеять нецелевых без бюджета, выделить платежеспособных',
-          dropOffRate: '28%',
-          conversionRate: '72%'
-        },
-        {
-          number: 3,
-          name: 'Пруфы & Демонстрация PMF',
-          goal: 'Показать релевантный кейс именно под нишу и масштаб клиента',
-          aiPrompt: 'Подобрать аналогичный кейс из базы знаний эксперта. Показать путь до результата',
-          dropOffRate: '16%',
-          conversionRate: '84%'
-        },
-        {
-          number: 4,
-          name: 'Оффер & Снятие возражений',
-          goal: 'Разбить сомнения (рассрочка, гарантии, личное участие эксперта)',
-          aiPrompt: 'Презентовать программу трансформации. На возражение дать твердый контр-довод эксперта',
-          dropOffRate: '24%',
-          conversionRate: '76%'
-        },
-        {
-          number: 5,
-          name: 'Закрытие на созвон / Предоплату',
-          goal: 'Фиксация брони в календаре эксперта или прием предоплаты',
-          aiPrompt: 'Предложить конкретные слоты, взять контактный телефон/Telegram, уведомить эксперта',
-          dropOffRate: '18%',
-          conversionRate: '82%'
-        }
+  // Chats tab: SI chats (soft red) and chats with people (Tiffany)
+  chats: {
+    list: [
+      { id: 'si-elena', kind: 'si', consultantId: 'mc-elena', title: 'Елена Смирнова', roleTitle: 'SI-консультант', photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80', unread: 1 },
+      { id: 'si-assistant', kind: 'si', title: 'SmartFlow', roleTitle: 'SI-ассистент', photoUrl: 'images/mascots/si-assistant.webp', subtitle: 'Жалобы и предложения по платформе', unread: 0 },
+      { id: 'h-elena', kind: 'human', title: 'Елена Смирнова', roleTitle: 'Эксперт', photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80', unread: 0 }
+    ],
+    // Messages of chats other than the main SI chat (that one lives in clientSession)
+    threads: {
+      'si-assistant': [
+        { id: 't-a1', sender: 'ai', text: 'Привет! Я SI-ассистент SmartFlow. Сюда можно написать жалобу на SI или человека, предложение или вопрос по платформе — я передам команде.', time: 'Сегодня' }
       ],
-
-      // Aggregated metrics (WITHOUT clients personal data)
-      analytics: {
-        activeExpertsCount: 16,
-        totalLeadsProcessed: 2840,
-        avgFunnelConversion: '19.4%',
-        totalExpertsRevenue: '14,820,000 ₽',
-        avgDealCheck: '185,000 ₽',
-        stepDropOffs: [
-          { step: '1. Лид-магнит', entered: 2840, passed: 2499, cr: '88.0%' },
-          { step: '2. Квалификация', entered: 2499, passed: 1799, cr: '72.0%' },
-          { step: '3. Кейсы & PMF', entered: 1799, passed: 1511, cr: '84.0%' },
-          { step: '4. Оффер & Возражения', entered: 1511, passed: 1148, cr: '76.0%' },
-          { step: '5. Запись на созвон', entered: 1148, passed: 551, cr: '48.0%' }
-        ]
-      },
-
-      // AI Analyzer recommendations for the marketer
-      analyzerRecommendations: [
-        {
-          id: 'rec-mkt-1',
-          urgency: 'high',
-          title: 'Высокий отвал на Шаге 2 (Квалификация: -28%)',
-          observation: 'Лиды спотыкаются на прямом вопросе о текущем доходе ("Сколько вы зарабатываете сейчас?").',
-          solution: 'Размягчить вопрос диапазонами в виде кнопок ("До 100k", "100-300k", "300k+") вместо открытого ввода текста. Это поднимет конверсию шага на ~14%.'
-        },
-        {
-          id: 'rec-mkt-2',
-          urgency: 'medium',
-          title: 'Потенциал роста чека: добавление микро-трипвайера',
-          observation: 'Часть лидов (18%) не готова сразу на созвон за 180k, но готова купить мини-разбор за 4,900 ₽.',
-          solution: 'Внедрить ветку Downsell на шаге 4: при отказе от созвона предлагать экспресс-диагностику.'
-        },
-        {
-          id: 'rec-mkt-3',
-          urgency: 'tip',
-          title: 'Внедрение триггера "Дедлайн слотов"',
-          observation: 'Эксперты закрывают на созвон на 22% лучше, если SI-консультант говорит: "На эту неделю у эксперта осталось всего 2 свободных слота".',
-          solution: 'Включено в стандартный промпт шага 5.'
-        }
-      ],
-
-      // Subscribed Experts list
-      subscribers: [
-        {
-          id: 'exp-elena',
-          name: 'Елена Смирнова',
-          niche: 'Психолог & Коуч лидеров',
-          avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
-          joinDate: '12 мая 2026',
-          status: 'active',
-          monthsActive: 5,
-          cardLast4: '4242',
-          leadsProcessed: 438,
-          closedDeals: 36,
-          revenueGenerated: '5,400,000 ₽',
-          avgCheck: '150,000 ₽',
-          crOverall: '18.2%'
-        },
-        {
-          id: 'exp-alexey',
-          name: 'Алексей Волков',
-          niche: 'B2B Консалтинг & Системные продажи',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-          joinDate: '28 июня 2026',
-          status: 'active',
-          monthsActive: 4,
-          cardLast4: '9912',
-          leadsProcessed: 612,
-          closedDeals: 42,
-          revenueGenerated: '6,300,000 ₽',
-          avgCheck: '210,000 ₽',
-          crOverall: '20.5%'
-        },
-        {
-          id: 'exp-dmitry',
-          name: 'Дмитрий Ковалев',
-          niche: 'Финансовый советник & Инвестиции',
-          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-          joinDate: '15 июля 2026',
-          status: 'active',
-          monthsActive: 3,
-          cardLast4: '3145',
-          leadsProcessed: 280,
-          closedDeals: 19,
-          revenueGenerated: '2,850,000 ₽',
-          avgCheck: '150,000 ₽',
-          crOverall: '16.8%'
-        },
-        {
-          id: 'exp-marina',
-          name: 'Марина Соколова',
-          niche: 'Бренд-стратег & Продюсер смыслов',
-          avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80',
-          joinDate: '04 августа 2026',
-          status: 'active',
-          monthsActive: 2,
-          cardLast4: '7721',
-          leadsProcessed: 195,
-          closedDeals: 14,
-          revenueGenerated: '1,400,000 ₽',
-          avgCheck: '100,000 ₽',
-          crOverall: '15.4%'
-        }
-      ],
-
-      cohortRetention: {
-        cohorts: [
-          { month: 'Май 2026', users: 6, m1: '100%', m2: '100%', m3: '83%', m4: '83%', m5: '83%' },
-          { month: 'Июнь 2026', users: 8, m1: '100%', m2: '88%', m3: '88%', m4: '88%', m5: '-' },
-          { month: 'Июль 2026', users: 5, m1: '100%', m2: '100%', m3: '80%', m4: '-', m5: '-' },
-          { month: 'Авг 2026', users: 7, m1: '100%', m2: '86%', m3: '-', m4: '-', m5: '-' },
-          { month: 'Сент 2026', users: 4, m1: '100%', m2: '-', m3: '-', m4: '-', m5: '-' }
-        ],
-        avgLtv: '42,800 ₽',
-        churnRate: '4.8%'
-      }
-    }
-  ],
+      'h-elena': [
+        { id: 't-h1', sender: 'them', text: 'Здравствуйте! Видела, что вы спрашивали про программу. Если удобно, созвонимся в четверг?', time: '12:40' }
+      ]
+    },
+    // Platform offer shown above an SI chat: one at a time, can be hidden ("Не интересно")
+    banner: { 'si-elena': null }
+  },
 
   // Expert Workplace State
   expert: {
@@ -564,7 +487,10 @@ class Store {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        // Sections added later get their defaults; every open starts on the Buddy screen.
+        const data = { ...JSON.parse(JSON.stringify(defaultData)), ...JSON.parse(saved) };
+        data.ui = JSON.parse(JSON.stringify(defaultData.ui));
+        return data;
       }
     } catch (e) {
       console.warn('Failed to load from localStorage', e);
@@ -610,8 +536,8 @@ class Store {
   // Fields of auth/profile state that affect what is rendered (the token does not).
   visibleAuthSnapshot() {
     const auth = this.data.auth || {};
-    const expert = this.data.expert || {};
-    return JSON.stringify([auth.status, auth.internalUserId, auth.telegramUser, auth.error, expert.name, expert.avatar]);
+    const me = this.data.me || {};
+    return JSON.stringify([auth.status, auth.internalUserId, auth.error, me.displayName, me.photoUrl, me.profile, this.data.office.consultants]);
   }
 
   setAuth(authData) {
@@ -622,12 +548,8 @@ class Store {
     this.data.auth.telegramUser = authData.user || authData.telegramUser;
     this.data.auth.token = authData.token;
     this.data.auth.error = null;
-    if (authData.user?.displayName) {
-      if (this.data.activeRole === 'expert' && this.data.expert) {
-        this.data.expert.name = authData.user.displayName;
-        if (authData.user.avatarUrl) this.data.expert.avatar = authData.user.avatarUrl;
-      }
-    }
+    if (authData.user) this.applyServerUser(authData.user);
+    if (authData.projects?.owned) this.setServerConsultants(authData.projects.owned);
     // Repeat opens: the screen was already rendered from the cached state. If the login
     // result changes nothing visible, persist the new token without a full re-render.
     if (this.visibleAuthSnapshot() === before) {
@@ -651,70 +573,185 @@ class Store {
     this.saveData();
   }
 
-  setRole(role) {
-    if (['marketer', 'expert', 'client', 'investor'].includes(role)) {
-      this.data.activeRole = role;
+  // ---------------------------------------------------------------
+  // Navigation (not saved: every open starts on the Buddy screen)
+  // ---------------------------------------------------------------
+  currentRoute(tab = this.data.ui.tab) {
+    const stack = this.data.ui.routes[tab] || [];
+    return stack[stack.length - 1] || {};
+  }
+
+  setTab(tab) {
+    if (this.data.ui.tab === tab) {
+      // Tapping the open tab again returns to its first screen
+      this.data.ui.routes[tab] = this.data.ui.routes[tab].slice(0, 1);
+    }
+    this.data.ui.tab = tab;
+    this.notify();
+  }
+
+  pushRoute(route, tab = this.data.ui.tab) {
+    this.data.ui.tab = tab;
+    this.data.ui.routes[tab].push(route);
+    this.notify();
+  }
+
+  // Replace the visible screen's parameters (e.g. the selected sub-tab)
+  patchRoute(patch) {
+    Object.assign(this.currentRoute(), patch);
+    this.notify();
+  }
+
+  popRoute() {
+    const stack = this.data.ui.routes[this.data.ui.tab];
+    if (stack.length > 1) {
+      stack.pop();
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------
+  // Me & profile
+  // ---------------------------------------------------------------
+  applyServerUser(user) {
+    const me = this.data.me;
+    me.displayName = user.displayName || me.displayName;
+    me.username = user.username || null;
+    me.photoUrl = user.photoUrl || null;
+    me.hasUploadedPhoto = Boolean(user.hasUploadedPhoto);
+    if (user.profile) me.profile = { ...me.profile, ...user.profile };
+  }
+
+  updateProfile(profile) {
+    this.data.me.profile = { ...this.data.me.profile, ...profile };
+    if (profile.displayName) this.data.me.displayName = profile.displayName;
+    this.saveData();
+  }
+
+  setMyPhoto(photoUrl) {
+    this.data.me.photoUrl = photoUrl;
+    this.data.me.hasUploadedPhoto = true;
+    this.saveData();
+  }
+
+  activateBusiness() {
+    this.data.me.business = { active: true, agreedAt: new Date().toISOString() };
+    this.saveData();
+  }
+
+  // ---------------------------------------------------------------
+  // Office: my SI-consultants and SI-brain
+  // ---------------------------------------------------------------
+  // Real consultants (server projects) replace the demo list; demo methodology fills the gaps.
+  setServerConsultants(projects) {
+    if (!projects.length) return;
+    const demo = defaultData.office.consultants[0];
+    const existing = Object.fromEntries(this.data.office.consultants.map(c => [c.serverProjectId || c.id, c]));
+    this.data.office.consultants = projects.map(p => {
+      const local = existing[p.id] || {};
+      const settings = p.custom_ai_settings || {};
+      return {
+        ...JSON.parse(JSON.stringify(demo)),
+        ...local,
+        id: p.id,
+        serverProjectId: p.id,
+        name: p.name,
+        roleTitle: p.role_title || 'SI-консультант',
+        photoUrl: p.photo_url || null,
+        link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
+        goal: settings.goal || local.goal || demo.goal,
+        instructions: settings.instructions || local.instructions || demo.instructions,
+        clientLimit: settings.clientLimit || local.clientLimit || demo.clientLimit,
+        category: settings.category || local.category || demo.category
+      };
+    });
+  }
+
+  findOfficeConsultant(id) {
+    return this.data.office.consultants.find(c => c.id === id);
+  }
+
+  addOfficeConsultant(consultant) {
+    this.data.office.consultants.unshift(consultant);
+    this.saveData();
+    return consultant;
+  }
+
+  updateOfficeConsultant(id, patch) {
+    const c = this.findOfficeConsultant(id);
+    if (!c) return null;
+    Object.assign(c, patch);
+    this.saveData();
+    return c;
+  }
+
+  toggleBrainAccess(consultantId, materialId) {
+    const c = this.findOfficeConsultant(consultantId);
+    if (!c) return;
+    const set = new Set(c.brainAccess || []);
+    if (set.has(materialId)) set.delete(materialId); else set.add(materialId);
+    c.brainAccess = [...set];
+    this.saveData();
+  }
+
+  // ---------------------------------------------------------------
+  // Chats
+  // ---------------------------------------------------------------
+  findChat(chatId) {
+    return this.data.chats.list.find(c => c.id === chatId);
+  }
+
+  // Chat with an SI-consultant from the Marketplace ("Спросить"); created on first use
+  openConsultantChat(consultant) {
+    if (consultant.chatId) return consultant.chatId;
+    const chatId = `si-${consultant.id}`;
+    if (!this.findChat(chatId)) {
+      this.data.chats.list.unshift({
+        id: chatId, kind: 'si', consultantId: consultant.id, title: consultant.name,
+        roleTitle: consultant.roleTitle, photoUrl: consultant.photoUrl, unread: 0
+      });
+      this.data.chats.threads[chatId] = [{
+        id: `t-${Date.now()}`, sender: 'ai', time: 'Сейчас',
+        text: `Здравствуйте! Я ${consultant.roleTitle} · ${consultant.name}. ${consultant.offer}. Расскажите, что для вас сейчас важнее всего?`
+      }];
       this.saveData();
+    }
+    return chatId;
+  }
+
+  addThreadMessage(chatId, sender, text) {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (!this.data.chats.threads[chatId]) this.data.chats.threads[chatId] = [];
+    const msg = { id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, sender, text, time };
+    this.data.chats.threads[chatId].push(msg);
+    this.saveData();
+    return msg;
+  }
+
+  markChatRead(chatId) {
+    const chat = this.findChat(chatId);
+    if (chat && chat.unread) {
+      chat.unread = 0;
+      this.persist();
     }
   }
 
-  selectFunnel(funnelId) {
-    this.data.currentFunnelId = funnelId;
+  // banner: { type: 'cta' | 'alternative', consultantId, reason } or null; hidden stays hidden
+  setChatBanner(chatId, banner) {
+    const current = this.data.chats.banner[chatId];
+    if (current && current.hidden && banner && current.consultantId === banner.consultantId) return;
+    this.data.chats.banner[chatId] = banner;
     this.saveData();
   }
 
-  createFunnel(funnelData) {
-    const id = 'funnel-' + Date.now();
-    const newFunnel = {
-      id,
-      title: funnelData.title || 'Новая воронка SmartFlow',
-      niche: funnelData.niche || 'Общая ниша',
-      tagline: funnelData.tagline || 'Автоматическая воронка для экспертов',
-      monthlyPrice: Number(funnelData.monthlyPrice) || 7900,
-      badge: 'Новая',
-      description: funnelData.description || 'Описание структуры воронки',
-      aiClone: {
-        personality: funnelData.personality || 'Профессиональный наставник',
-        knowledgeBase: funnelData.knowledgeBase ? funnelData.knowledgeBase.split('\n').filter(Boolean) : ['Ключевые офферы', 'Скрипт квалификации']
-      },
-      steps: funnelData.steps || [
-        { number: 1, name: 'Лид-магнит & Приветствие', goal: 'Захват контакта', dropOffRate: '10%', conversionRate: '90%' },
-        { number: 2, name: 'Квалификация лида', goal: 'Определение платежеспособности', dropOffRate: '25%', conversionRate: '75%' },
-        { number: 3, name: 'Оффер & Продажа', goal: 'Закрытие сделки', dropOffRate: '20%', conversionRate: '80%' }
-      ],
-      analytics: {
-        activeExpertsCount: 1,
-        totalLeadsProcessed: 45,
-        avgFunnelConversion: '21.0%',
-        totalExpertsRevenue: '250,000 ₽',
-        avgDealCheck: '120,000 ₽',
-        stepDropOffs: [
-          { step: '1. Лид-магнит', entered: 45, passed: 41, cr: '91.1%' },
-          { step: '2. Квалификация', entered: 41, passed: 31, cr: '75.6%' },
-          { step: '3. Оффер & Продажа', entered: 31, passed: 9, cr: '29.0%' }
-        ]
-      },
-      analyzerRecommendations: [
-        {
-          id: 'rec-' + Date.now(),
-          urgency: 'high',
-          title: 'Оптимизировать вопрос о бюджете',
-          observation: 'Первые лиды медленно отвечают на вопрос о готовности инвестировать.',
-          solution: 'Добавить варианты ответа кнопками.'
-        }
-      ],
-      subscribers: [],
-      cohortRetention: {
-        cohorts: [{ month: 'Текущий', users: 1, m1: '100%' }],
-        avgLtv: `${funnelData.monthlyPrice || 7900} ₽`,
-        churnRate: '0%'
-      }
-    };
-
-    this.data.funnels.unshift(newFunnel);
-    this.data.currentFunnelId = id;
-    this.saveData();
-    return newFunnel;
+  hideChatBanner(chatId) {
+    const current = this.data.chats.banner[chatId];
+    if (current) {
+      current.hidden = true;
+      this.saveData();
+    }
   }
 
   // Handle direct inquiry when lead clicks "Связаться с человеком"

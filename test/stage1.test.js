@@ -80,7 +80,9 @@ async function runAllTests() {
     assert(applied.length >= 2, 'Should apply at least 2 migrations');
 
     const versions = await migrator.getAppliedMigrations();
-    assert.deepStrictEqual(versions, [1, 2], 'Migrations 1 and 2 must be recorded');
+    const expected = require('fs').readdirSync(require('path').join(__dirname, '../server/db/migrations'))
+      .filter(f => /^\d+_.+\.sql$/.test(f)).map(f => parseInt(f, 10)).sort((a, b) => a - b);
+    assert.deepStrictEqual(versions, expected, 'Every migration file must be recorded in order');
   });
 
   // 2. Telegram Auth HMAC Validation
@@ -373,6 +375,106 @@ async function runAllTests() {
     const secondInquiry = await db.get('SELECT client_id FROM direct_inquiries WHERE id = ?', [second.payload.inquiryId]);
     assert.strictEqual(firstInquiry.client_id, secondInquiry.client_id, 'Same lead for the same external id');
   });
+
+  // 11. Photos and profile over real HTTP (the same Express app the server runs)
+  const { app } = require('../server/index');
+  const httpServer = await new Promise(resolve => {
+    const srv = app.listen(0, () => resolve(srv));
+  });
+  const baseUrl = `http://127.0.0.1:${httpServer.address().port}`;
+  const tokenFor = async (tgUser) => authService.generateSessionToken(await authService.findOrCreateTelegramUser(tgUser, 'expert'));
+  const tokenA = await tokenFor(expertA_Tg);
+  const tokenB = await tokenFor(expertB_Tg);
+  // Smallest valid JPEG header + filler: enough for the server's file-type check
+  const fakeJpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+  const upload = (url, token, body, type = 'image/jpeg') => fetch(baseUrl + url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': type },
+    body
+  });
+
+  await test('16. Загрузка своего фото: сохраняется и отдаётся по ссылке', async () => {
+    const res = await upload('/api/me/photo', tokenA, fakeJpeg);
+    assert.strictEqual(res.status, 201);
+    const { photoUrl } = await res.json();
+    assert(/^\/api\/media\/med_[a-f0-9]{32}$/.test(photoUrl), 'photo URL points to /api/media');
+
+    const img = await fetch(baseUrl + photoUrl);
+    assert.strictEqual(img.status, 200);
+    assert.strictEqual(img.headers.get('content-type'), 'image/jpeg');
+    assert.strictEqual(img.headers.get('x-content-type-options'), 'nosniff');
+    assert(Buffer.from(await img.arrayBuffer()).equals(fakeJpeg), 'Served bytes equal uploaded bytes');
+
+    // A new Telegram login (with a Telegram photo) must not replace the uploaded photo
+    await authService.findOrCreateTelegramUser({ ...expertA_Tg, photo_url: 'https://t.me/i/userpic/320/a.jpg' }, 'expert');
+    const me = await fetch(baseUrl + '/api/me/profile', { headers: { Authorization: `Bearer ${tokenA}` } }).then(r => r.json());
+    assert.strictEqual(me.user.photoUrl, photoUrl, 'Uploaded photo wins over the Telegram photo');
+
+    // Replacing the photo removes the old file
+    const second = await upload('/api/me/photo', tokenA, fakeJpeg).then(r => r.json());
+    assert.notStrictEqual(second.photoUrl, photoUrl);
+    assert.strictEqual((await fetch(baseUrl + photoUrl)).status, 404, 'Old photo is deleted');
+  });
+
+  await test('17. Не-картинки и чужие консультанты отклоняются', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    assert.strictEqual((await upload('/api/me/photo', tokenA, svg, 'image/svg+xml')).status, 400, 'SVG is rejected');
+    assert.strictEqual((await upload('/api/me/photo', tokenA, Buffer.from('hello world, not an image'))).status, 400);
+    assert.strictEqual((await upload('/api/me/photo', 'bad-token', fakeJpeg)).status, 401, 'Login required');
+    const big = Buffer.concat([fakeJpeg, Buffer.alloc(2 * 1024 * 1024)]);
+    assert.strictEqual((await upload('/api/me/photo', tokenA, big)).status, 413, 'More than 2 MB is rejected');
+
+    const projectB = (await projectService.getUserProjects(expertB_InternalId)).owned[0];
+    const foreign = await upload(`/api/projects/${projectB.id}/photo`, tokenA, fakeJpeg);
+    assert.strictEqual(foreign.status, 403, 'Expert A cannot change the photo of Expert B consultant');
+
+    const own = await upload(`/api/projects/${projectB.id}/photo`, tokenB, fakeJpeg);
+    assert.strictEqual(own.status, 201);
+    const { photoUrl } = await own.json();
+    const after = (await projectService.getUserProjects(expertB_InternalId)).owned.find(p => p.id === projectB.id);
+    assert.strictEqual(after.photo_url, photoUrl, 'Consultant photo is returned with the project');
+    const publicView = await projectService.getPublicProjectBySlug(after.slug);
+    assert.strictEqual(publicView.aiSeller.photoUrl, photoUrl, 'Clients see the consultant photo');
+  });
+
+  await test('18. Профиль: сохраняется, опасные ссылки отбрасываются, роль начинается с SI', async () => {
+    const res = await fetch(baseUrl + '/api/me/profile', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName: 'Алексей Эксперт',
+        bio: 'Помогаю экспертам продавать',
+        links: [
+          { label: 'Instagram', url: 'https://instagram.com/alexey' },
+          { label: 'Плохая', url: 'javascript:alert(1)' }
+        ],
+        isAdmin: true
+      })
+    });
+    assert.strictEqual(res.status, 200);
+    const { user } = await res.json();
+    assert.strictEqual(user.displayName, 'Алексей Эксперт');
+    assert.strictEqual(user.profile.bio, 'Помогаю экспертам продавать');
+    assert.deepStrictEqual(user.profile.links, [{ label: 'Instagram', url: 'https://instagram.com/alexey' }]);
+    assert.strictEqual(user.profile.isAdmin, undefined, 'Unknown fields are dropped');
+
+    // A Telegram re-login keeps the name chosen in the app
+    await authService.findOrCreateTelegramUser(expertA_Tg, 'expert');
+    const me = await fetch(baseUrl + '/api/me/profile', { headers: { Authorization: `Bearer ${tokenA}` } }).then(r => r.json());
+    assert.strictEqual(me.user.displayName, 'Алексей Эксперт');
+
+    assert.strictEqual(projectService.normalizeRoleTitle('помощник'), 'SI-помощник');
+    assert.strictEqual(projectService.normalizeRoleTitle('si-менеджер'), 'SI-менеджер');
+    assert.strictEqual(projectService.normalizeRoleTitle('SI-консультант'), 'SI-консультант');
+  });
+
+  await test('19. Миграции: блоки только для PostgreSQL (RLS) не выполняются в SQLite', async () => {
+    const sql = 'CREATE TABLE a (id TEXT);\n-- postgres-only:begin\nALTER TABLE a ENABLE ROW LEVEL SECURITY;\n-- postgres-only:end\n';
+    assert(!migrator.sqlForDriver(sql, 'sqlite').includes('ROW LEVEL SECURITY'));
+    assert(migrator.sqlForDriver(sql, 'postgres').includes('ROW LEVEL SECURITY'));
+  });
+
+  await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
   console.log(`  TEST RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);

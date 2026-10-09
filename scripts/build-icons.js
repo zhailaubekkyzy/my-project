@@ -1,5 +1,5 @@
 // scripts/build-icons.js - Bundle only the Lucide icons the app actually uses.
-// Scans index.html and js/*.js for icon names and writes js/icons.js, which exposes
+// Scans index.html and js/**/*.js for icon names and writes js/icons.js, which exposes
 // the same `window.lucide.createIcons()` API the app used with the full CDN build.
 // Run: npm run build:icons
 const fs = require('fs');
@@ -8,12 +8,12 @@ const lucide = require('lucide/dist/umd/lucide.js');
 
 const ROOT = path.join(__dirname, '..');
 const OUT_FILE = path.join(ROOT, 'js/icons.js');
-const SOURCES = [
-  path.join(ROOT, 'index.html'),
-  ...fs.readdirSync(path.join(ROOT, 'js'))
-    .filter(f => f.endsWith('.js') && f !== 'icons.js')
-    .map(f => path.join(ROOT, 'js', f))
-];
+const listJs = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+  const full = path.join(dir, entry.name);
+  if (entry.isDirectory()) return listJs(full);
+  return entry.name.endsWith('.js') && full !== OUT_FILE ? [full] : [];
+});
+const SOURCES = [path.join(ROOT, 'index.html'), ...listJs(path.join(ROOT, 'js'))];
 
 const toPascalCase = name => name.split(/[-_]/).filter(Boolean)
   .map(part => part[0].toUpperCase() + part.slice(1)).join('');
@@ -22,6 +22,10 @@ const toPascalCase = name => name.split(/[-_]/).filter(Boolean)
 const names = new Set();
 for (const file of SOURCES) {
   const src = fs.readFileSync(file, 'utf8');
+  // Icons named in data, e.g. the tab list: { id: 'chats', icon: 'messages-square' }
+  for (const m of src.matchAll(/\bicon:\s*'([a-z0-9-]+)'/g)) names.add(m[1]);
+  // ...and section headers: SF.sectionTitle('bell', 'Уведомления')
+  for (const m of src.matchAll(/sectionTitle\('([a-z0-9-]+)'/g)) names.add(m[1]);
   for (const m of src.matchAll(/data-lucide="([^"]+)"/g)) {
     const value = m[1];
     if (value.includes('${')) {

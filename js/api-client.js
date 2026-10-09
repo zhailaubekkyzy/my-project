@@ -189,6 +189,52 @@
       });
     },
 
+    // Profile & photos
+    async getMyProfile() {
+      return await apiFetch('/api/me/profile');
+    },
+
+    async updateMyProfile(profile) {
+      return await apiFetch('/api/me/profile', {
+        method: 'PUT',
+        body: JSON.stringify(profile)
+      });
+    },
+
+    // image: a Blob (already resized by js/media.js)
+    async uploadMyPhoto(image) {
+      return await apiFetch('/api/me/photo', {
+        method: 'POST',
+        headers: { 'Content-Type': image.type || 'image/jpeg' },
+        body: image
+      });
+    },
+
+    async uploadConsultantPhoto(projectId, image) {
+      return await apiFetch(`/api/projects/${projectId}/photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': image.type || 'image/jpeg' },
+        body: image
+      });
+    },
+
+    async createProject(data) {
+      return await apiFetch('/api/projects', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    },
+
+    // Server paths like /api/media/... live on the API host (Railway), not on the frontend host
+    mediaUrl(path) {
+      if (!path) return null;
+      return path.startsWith('/api/') ? `${API_BASE}${path}` : path;
+    },
+
+    isSignedIn() {
+      return Boolean(sessionToken);
+    },
+
     async checkHealth() {
       return await apiFetch('/api/health');
     }

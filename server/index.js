@@ -17,6 +17,8 @@ const conversationRoutes = require('./routes/conversations');
 const templateRoutes = require('./routes/templates');
 const subscriptionRoutes = require('./routes/subscriptions');
 const publicRoutes = require('./routes/public');
+const meRoutes = require('./routes/me');
+const mediaRoutes = require('./routes/media');
 
 const app = express();
 
@@ -66,6 +68,8 @@ app.use('/api/projects/:projectId/conversations', conversationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/me', meRoutes);
+app.use('/api/media', mediaRoutes);
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.

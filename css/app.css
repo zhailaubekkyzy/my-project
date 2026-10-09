@@ -259,6 +259,31 @@ body {
   background: transparent;
 }
 
+.tg-nav-item {
+  min-width: 0;
+  padding: 6px 2px;
+  font-size: 10px;
+}
+
+/* Buddy: the raised center button of the bottom navigation */
+.buddy-nav-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--c-card));
+  border: 2px solid rgb(var(--c-line));
+  box-shadow: var(--shadow-lift);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.buddy-nav-btn.active {
+  border-color: var(--sf-tiffany);
+  transform: translateY(-2px);
+}
+
 .tg-nav-item.active {
   color: rgb(var(--c-brand));
   background: rgb(129 216 208 / 0.18);
