@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const { mediaUrl } = require('./media-service');
+const businessService = require('./business-service');
 
 /**
  * Unified Access Control Verification for Project Actions
@@ -32,7 +33,17 @@ async function checkProjectAccess(userId, projectId, requiredAction = 'funnel:re
     };
   }
 
-  // 2. Check project_members table for invited collaborators (e.g. invited marketer)
+  // 2. Assistant of the business this SI-seller belongs to: client conversations only
+  //    (no money, payment links, SI-brain, SI-seller settings or analytics)
+  if (project.business_id && await businessService.roleIn(project.business_id, userId) === businessService.ROLES.ASSISTANT) {
+    const permissions = businessService.ASSISTANT_PERMISSIONS;
+    if (!permissions.includes(requiredAction)) {
+      return { allowed: false, reason: 'insufficient_permissions', requiredAction, memberRole: 'assistant', project };
+    }
+    return { allowed: true, role: 'assistant', permissions, project };
+  }
+
+  // 3. Check project_members table for invited collaborators (e.g. invited marketer)
   const member = await db.get(
     'SELECT * FROM project_members WHERE project_id = ? AND user_id = ? AND status = ?',
     [projectId, userId, 'active']
@@ -113,11 +124,34 @@ async function getUserProjects(userId) {
     [userId]
   );
 
+  // SI-sellers of businesses where I am the assistant: only what the assistant needs to answer
+  // clients (no offer, price, payment link or SI settings)
+  const assistedProjects = await db.all(
+    `SELECT p.id, p.slug, p.name, p.status, p.role_title, p.photo_media_id, p.business_id, p.owner_id,
+            u.display_name AS owner_display_name, u.profile AS owner_profile
+     FROM projects p
+     JOIN business_members m ON m.business_id = p.business_id
+     JOIN users u ON u.id = p.owner_id
+     WHERE m.user_id = ? AND m.role = 'assistant' AND m.status = 'active' AND p.owner_id <> ?
+     ORDER BY p.created_at DESC`,
+    [userId, userId]
+  );
+
   return {
     owned: ownedProjects.map(decorateProject),
     shared: sharedProjects.map(p => ({
       ...decorateProject(p),
       member_permissions: safeJsonParse(p.member_permissions)
+    })),
+    assisting: assistedProjects.map(p => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      status: p.status,
+      role_title: p.role_title || 'SI-консультант',
+      photo_url: mediaUrl(p.photo_media_id),
+      business_id: p.business_id,
+      owner_name: (safeJsonParse(p.owner_profile).displayName || '').trim() || p.owner_display_name
     }))
   };
 }
@@ -142,12 +176,16 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
     }
   }
 
+  // The expert turns a new SI-seller on: their business exists from now on
+  const business = await businessService.ensureBusiness(userId);
+
   await db.run(
-    `INSERT INTO projects (id, owner_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 0)`,
+    `INSERT INTO projects (id, owner_id, business_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 0)`,
     [
       projectId,
       userId,
+      business.id,
       templateId || null,
       name || 'Новый проект',
       cleanSlug,

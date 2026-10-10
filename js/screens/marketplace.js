@@ -33,7 +33,7 @@
   }
 
   function officeEntry(state) {
-    if (store().isBusinessActive()) {
+    if (store().isBusinessActive() || store().isAssistant()) {
       const waiting = SF.data.waitingInquiries(state).length;
       return `
         <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
@@ -247,7 +247,7 @@
     afterRender(route, state) {
       if (route.screen === 'list') {
         SF.data.marketplace();
-        if (store().isBusinessActive()) SF.data.allInquiries();
+        if (store().isBusinessActive() || store().isAssistant()) SF.data.allInquiries();
       } else if (route.screen === 'consultant') {
         if (!findCard(state, route.id)) SF.data.cardById(route.id);
       } else if (route.screen === 'person') {

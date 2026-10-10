@@ -213,7 +213,7 @@ router.get('/users/:id', async (req, res, next) => {
     const consultants = [];
     for (const p of projects) {
       const stats = await db.get(
-        `SELECT COUNT(*) AS clients, SUM(CASE WHEN status = 'human_needed' THEN 1 ELSE 0 END) AS paused FROM clients WHERE project_id = ?`, [p.id]
+        `SELECT COUNT(*) AS clients, SUM(CASE WHEN responsible_type = 'human' THEN 1 ELSE 0 END) AS paused FROM clients WHERE project_id = ?`, [p.id]
       );
       const waiting = await db.get(`SELECT COUNT(*) AS count FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [p.id]);
       const settings = parseJson(p.custom_ai_settings, {}) || {};
@@ -245,7 +245,7 @@ router.get('/users/:id', async (req, res, next) => {
     );
 
     const chatsAsClient = await db.all(
-      `SELECT c.id, c.status, c.last_activity, p.name AS project_name, p.slug, p.status AS project_status,
+      `SELECT c.id, c.responsible_type, c.last_activity, p.name AS project_name, p.slug, p.status AS project_status,
               (SELECT COUNT(*) FROM conversations m WHERE m.client_id = c.id) AS messages
        FROM clients c JOIN projects p ON p.id = c.project_id
        WHERE c.external_client_id = ? ORDER BY c.last_activity DESC LIMIT 50`, [user.id]
@@ -253,10 +253,10 @@ router.get('/users/:id', async (req, res, next) => {
 
     // The expert's clients: paused SI first (most common complaint), then the latest
     const myClients = projects.length ? await db.all(
-      `SELECT c.id, c.name, c.username, c.status, c.last_activity, p.name AS project_name,
+      `SELECT c.id, c.name, c.username, c.responsible_type, c.last_activity, p.name AS project_name,
               (SELECT COUNT(*) FROM conversations m WHERE m.client_id = c.id) AS messages
        FROM clients c JOIN projects p ON p.id = c.project_id
-       WHERE p.owner_id = ? ORDER BY CASE WHEN c.status = 'human_needed' THEN 0 ELSE 1 END, c.last_activity DESC LIMIT 30`, [user.id]
+       WHERE p.owner_id = ? ORDER BY CASE WHEN c.responsible_type = 'human' THEN 0 ELSE 1 END, c.last_activity DESC LIMIT 30`, [user.id]
     ) : [];
 
     const feedback = await db.all('SELECT id, text, status, created_at, reply FROM feedback WHERE user_id = ? ORDER BY created_at DESC LIMIT 20', [user.id]);
@@ -286,11 +286,11 @@ router.get('/users/:id', async (req, res, next) => {
       })),
       chatsAsClient: chatsAsClient.map(c => ({
         clientId: c.id, consultantName: c.project_name, slug: c.slug, consultantActive: c.project_status === 'active',
-        siPaused: c.status === 'human_needed', messages: Number(c.messages) || 0, lastActivity: c.last_activity
+        siPaused: c.responsible_type === 'human', messages: Number(c.messages) || 0, lastActivity: c.last_activity
       })),
       myClients: myClients.map(c => ({
         clientId: c.id, name: c.name, username: c.username, consultantName: c.project_name,
-        siPaused: c.status === 'human_needed', messages: Number(c.messages) || 0, lastActivity: c.last_activity
+        siPaused: c.responsible_type === 'human', messages: Number(c.messages) || 0, lastActivity: c.last_activity
       })),
       feedback: feedback.map(f => ({ id: f.id, text: f.text, status: f.status, createdAt: f.created_at, replied: Boolean(f.reply) })),
       errors: errors.map(toError),
@@ -313,12 +313,12 @@ router.get('/users/:id/chats/:clientId', async (req, res, next) => {
     );
     if (!chat) return res.status(404).json({ error: 'not_found', message: 'Чат не найден у этого человека' });
     const messages = await db.all(
-      'SELECT id, sender, text, created_at FROM conversations WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 200', [chat.id]
+      'SELECT id, sender, author_type, text, created_at FROM conversations WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 200', [chat.id]
     );
     await supportService.logAction(req.staff.userId, req.params.id, 'view_chat', { clientId: chat.id, consultant: chat.project_name });
     res.json({
-      chat: { clientId: chat.id, consultantName: chat.project_name, clientName: chat.name, siPaused: chat.status === 'human_needed' },
-      messages: messages.reverse().map(m => ({ id: m.id, sender: m.sender, text: m.text, createdAt: m.created_at }))
+      chat: { clientId: chat.id, consultantName: chat.project_name, clientName: chat.name, siPaused: chat.responsible_type === 'human' },
+      messages: messages.reverse().map(m => ({ id: m.id, sender: m.sender, authorType: m.author_type || null, text: m.text, createdAt: m.created_at }))
     });
   } catch (err) {
     next(err);

@@ -22,7 +22,7 @@ router.get('/:clientId/messages', requireProjectPermission('conversations:read')
 
 /**
  * POST /api/projects/:projectId/conversations/:clientId/messages
- * Send message from expert/human takeover (requires conversations:write)
+ * Send message from the owner or the assistant personally (requires conversations:write)
  */
 router.post('/:clientId/messages', requireProjectPermission('conversations:write'), async (req, res, next) => {
   try {
@@ -33,8 +33,10 @@ router.post('/:clientId/messages', requireProjectPermission('conversations:write
     const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
     if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
 
-    // The expert answers personally: SI pauses for this client, the client gets a Telegram message
-    const message = await chatService.expertReply(req.project, client, text);
+    // The owner or the assistant answers personally: they become responsible for the dialog
+    // (SI pauses for this client), the client gets a Telegram message
+    const member = { userId: req.user.userId, role: req.projectRole === 'assistant' ? 'assistant' : 'owner' };
+    const message = await chatService.humanReply(req.project, client, text, member);
     res.status(201).json(message);
   } catch (err) {
     next(err);

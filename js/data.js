@@ -113,11 +113,25 @@
       store().setRemote('myFeedback', res.feedback || []);
     }, maxAge),
 
+    // My business: owner + assistant
+    business: () => ensure('business', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('business', await api().getBusiness());
+    }, 30000),
+
+    // My consultants and the ones I assist, refreshed once a minute while the Office is open
+    officeLists: () => ensure('officeLists', async () => {
+      if (!signedIn()) return false;
+      const res = await api().getProjects();
+      store().setServerConsultants(res.owned || [], res.assisting || []);
+      store().saveData();
+    }, 60000),
+
     // My consultants again (after creating or editing one)
     myConsultants: () => ensure('consultants', async () => {
       if (!signedIn()) return false;
       const res = await api().getProjects();
-      store().setServerConsultants(res.owned || []);
+      store().setServerConsultants(res.owned || [], res.assisting || []);
       store().saveData();
     }, 0)
   };
@@ -145,7 +159,7 @@
 
   // Chats with a new SI/expert message I have not opened yet
   function isUnread(state, chat) {
-    const fromOther = /^\[(SI|Эксперт)\]/.test(chat.lastMessage || '');
+    const fromOther = /^\[(SI|Эксперт|Помощник)\]/.test(chat.lastMessage || '');
     return fromOther && state.chats.seen[chat.slug] !== chat.lastActivity;
   }
 

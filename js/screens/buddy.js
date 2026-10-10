@@ -27,7 +27,7 @@
         secondary: { label: 'Не сейчас', action: 'SF.actions.dismissBuddyHint()' }
       };
     }
-    const consultants = state.office.consultants;
+    const consultants = store().ownConsultants();
     const unfinished = consultants.find(c => !c.offer || !c.paymentUrl);
     if (!consultants.length || unfinished) {
       return {

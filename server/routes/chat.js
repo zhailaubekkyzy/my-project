@@ -28,7 +28,7 @@ async function loadConsultant(req, res) {
 router.get('/', async (req, res, next) => {
   try {
     const rows = await db.all(
-      `SELECT c.id AS client_id, c.status, c.last_message, c.last_activity,
+      `SELECT c.id AS client_id, c.responsible_type, c.last_message, c.last_activity,
               p.slug, p.name, p.role_title, p.photo_media_id, p.owner_id,
               (SELECT COUNT(*) FROM conversations m WHERE m.client_id = c.id AND m.sender = 'expert_human') AS expert_messages
        FROM clients c
@@ -50,7 +50,7 @@ router.get('/', async (req, res, next) => {
         expertName,
         lastMessage: r.last_message || '',
         lastActivity: r.last_activity,
-        siPaused: r.status === 'human_needed',
+        siPaused: r.responsible_type === 'human',
         expertReplied: Number(r.expert_messages) > 0
       });
     }
@@ -70,7 +70,7 @@ router.get('/:slug', async (req, res, next) => {
     if (!card) return res.status(404).json({ error: 'not_found', message: 'SI-продавец не найден или выключен' });
     const project = await chatService.activeProjectBySlug(req.params.slug);
     const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
-    res.json({ consultant: card, siPaused: Boolean(lead && lead.status === 'human_needed') });
+    res.json({ consultant: card, siPaused: chatService.isSiPaused(lead) });
   } catch (err) {
     next(err);
   }
@@ -87,7 +87,7 @@ router.get('/:slug/messages', async (req, res, next) => {
     const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
     res.json({
       messages: lead ? await chatService.history(project.id, lead.id) : [],
-      siPaused: Boolean(lead && lead.status === 'human_needed')
+      siPaused: chatService.isSiPaused(lead)
     });
   } catch (err) {
     next(err);

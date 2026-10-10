@@ -48,7 +48,8 @@ const defaultData = {
     }
   },
 
-  // My SI-consultants (server projects), shown in the Office
+  // My SI-consultants (server projects), shown in the Office; also the SI-sellers of businesses
+  // where I am the assistant (assisting: true — only clients and "Мне написали")
   office: {
     consultants: []
   },
@@ -65,7 +66,8 @@ const defaultData = {
     clientMessages: {},      // { [clientId]: [...] }
     analytics: {},           // { [projectId]: live numbers }
     brain: null,             // my SI-brain materials (only their text is stored)
-    myFeedback: null         // my messages to support with the team's answers
+    myFeedback: null,        // my messages to support with the team's answers
+    business: null           // my business: members, and the businesses I assist
   },
 
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)
@@ -156,7 +158,7 @@ class Store {
     }
     this.data.auth = { status: 'authenticated', internalUserId: authData.user?.id || null, error: null };
     if (authData.user) this.applyServerUser(authData.user);
-    if (authData.projects?.owned) this.setServerConsultants(authData.projects.owned);
+    if (authData.projects?.owned) this.setServerConsultants(authData.projects.owned, authData.projects.assisting || []);
     this.saveData();
   }
 
@@ -242,10 +244,25 @@ class Store {
     return Boolean(this.data.me.profile.businessAgreedAt);
   }
 
+  // I am the assistant in someone's business: the Office opens without the owner's terms
+  isAssistant() {
+    return this.data.office.consultants.some(c => c.assisting);
+  }
+
   // ---------------------------------------------------------------
   // Office: my SI-consultants (server projects)
   // ---------------------------------------------------------------
-  setServerConsultants(projects) {
+  setServerConsultants(projects, assisting = []) {
+    const assisted = assisting.map(p => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      roleTitle: p.role_title || 'SI-консультант',
+      photoUrl: p.photo_url || null,
+      link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
+      assisting: true,
+      ownerName: p.owner_name || ''
+    }));
     this.data.office.consultants = projects.map(p => {
       const settings = p.custom_ai_settings || {};
       return {
@@ -266,7 +283,12 @@ class Store {
         trialDays: Number(p.trial_days) || 0,
         isListed: Boolean(p.is_listed)
       };
-    });
+    }).concat(assisted);
+  }
+
+  // Only my own SI-sellers (without the ones I assist in someone else's business)
+  ownConsultants() {
+    return this.data.office.consultants.filter(c => !c.assisting);
   }
 
   findOfficeConsultant(id) {
