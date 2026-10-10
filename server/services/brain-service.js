@@ -250,7 +250,7 @@ async function ownedProjectIds(ownerId, projectIds) {
   const rows = await db.all('SELECT id FROM projects WHERE owner_id = ?', [ownerId]);
   const owned = new Set(rows.map(r => r.id));
   const foreign = wanted.filter(id => !owned.has(id));
-  if (foreign.length) throw new BrainError('Можно выбрать только своих SI-консультантов.', 403, 'FOREIGN_CONSULTANT');
+  if (foreign.length) throw new BrainError('Можно выбрать только своих SI-продавцов.', 403, 'FOREIGN_CONSULTANT');
   return wanted;
 }
 

@@ -14,7 +14,7 @@
     const chats = state.remote.chats || [];
     if (!business && !chats.length) {
       return {
-        text: 'Найдите SI-консультанта под свою задачу в Маркетплейсе — он ответит за пару секунд.',
+        text: 'Найдите SI-продавца под свою задачу в Маркетплейсе — он ответит за пару секунд.',
         primary: { label: 'Открыть Маркетплейс', action: "SF.go('marketplace')" },
         secondary: { label: 'У меня свой продукт', action: "SF.openIn('marketplace', 'office')" }
       };
@@ -22,7 +22,7 @@
     if (!business) {
       if (hintDismissed) return null;
       return {
-        text: 'Хотите такого же SI-консультанта, чтобы он общался с вашими клиентами? У вас есть свой продукт или услуга?',
+        text: 'Хотите такого же SI-продавца, чтобы он общался с вашими клиентами? У вас есть свой продукт или услуга?',
         primary: { label: 'Да, есть продукт', action: "SF.openIn('marketplace', 'office')" },
         secondary: { label: 'Не сейчас', action: 'SF.actions.dismissBuddyHint()' }
       };
@@ -31,7 +31,7 @@
     const unfinished = consultants.find(c => !c.offer || !c.paymentUrl);
     if (!consultants.length || unfinished) {
       return {
-        text: 'Заполните карточку SI-консультанта: оффер, цену и свою ссылку на оплату. Потом отправьте его ссылку клиентам.',
+        text: 'Заполните карточку SI-продавца: оффер, цену и свою ссылку на оплату. Потом отправьте его ссылку клиентам.',
         primary: unfinished
           ? { label: 'Заполнить', action: `SF.openIn('marketplace', 'office-consultant', { id: '${SF.js(unfinished.id)}', tab: 'methodology' })` }
           : { label: 'Создать', action: "SF.openIn('marketplace', 'office-create')" }
@@ -44,7 +44,7 @@
       };
     }
     return {
-      text: 'Всё готово: консультант работает, профиль заполнен. Скоро здесь появится Инкубатор — группы с целью и серией дней.',
+      text: 'Всё готово: SI-продавец работает, профиль заполнен. Скоро здесь появится Инкубатор — группы с целью и серией дней.',
       primary: null
     };
   }
@@ -142,14 +142,14 @@
         ${widget({
           icon: 'store',
           title: 'Маркетплейс',
-          body: listed ? `SI-консультантов на витрине: ${listed}` : 'Витрина SI-консультантов экспертов',
+          body: listed ? `SI-продавцов на витрине: ${listed}` : 'Витрина SI-продавцов экспертов',
           action: "SF.go('marketplace')"
         })}
         ${widget({
           icon: 'briefcase',
           title: 'Офис',
           body: business
-            ? (waiting ? `Ждут ответа: ${waiting}` : `SI-консультантов: ${state.office.consultants.length}`)
+            ? (waiting ? `Ждут ответа: ${waiting}` : `SI-продавцов: ${state.office.consultants.length}`)
             : 'Откройте бизнес-профиль, чтобы продавать через SI',
           action: "SF.openIn('marketplace', 'office')"
         })}

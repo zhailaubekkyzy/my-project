@@ -15,7 +15,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 async function loadConsultant(req, res) {
   const project = await chatService.activeProjectBySlug(req.params.slug);
   if (!project) {
-    res.status(404).json({ error: 'not_found', message: 'SI-консультант не найден или выключен' });
+    res.status(404).json({ error: 'not_found', message: 'SI-продавец не найден или выключен' });
     return null;
   }
   return project;
@@ -67,7 +67,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:slug', async (req, res, next) => {
   try {
     const card = await marketplaceService.getCard({ slug: req.params.slug });
-    if (!card) return res.status(404).json({ error: 'not_found', message: 'SI-консультант не найден или выключен' });
+    if (!card) return res.status(404).json({ error: 'not_found', message: 'SI-продавец не найден или выключен' });
     const project = await chatService.activeProjectBySlug(req.params.slug);
     const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
     res.json({ consultant: card, siPaused: Boolean(lead && lead.status === 'human_needed') });

@@ -71,7 +71,7 @@ async function checkProjectAccess(userId, projectId, requiredAction = 'funnel:re
 }
 
 /**
- * Role shown to clients must start with "SI" (SI-консультант, SI-помощник, SI-менеджер...).
+ * Role shown to clients must start with "SI" (SI-продавец, SI-помощник, SI-менеджер...).
  */
 function normalizeRoleTitle(value) {
   if (typeof value !== 'string') return null;
@@ -236,7 +236,7 @@ async function getPublicProjectBySlug(slug) {
   let aiSettings = safeJsonParse(project.custom_ai_settings);
   // Only expose public-facing parts of the AI seller
   const publicAiSeller = {
-    greeting: aiSettings.greeting || `Здравствуйте! Я SI-консультант эксперта ${project.expert_name}. Чем могу помочь?`,
+    greeting: aiSettings.greeting || `Здравствуйте! Я ${project.role_title || 'SI-консультант'} эксперта ${project.expert_name}. Чем могу помочь?`,
     roleTitle: project.role_title || 'SI-консультант',
     photoUrl: mediaUrl(project.photo_media_id),
     suggestedTopics: ['Узнать стоимость', 'Записаться на разбор', 'Задать вопрос']

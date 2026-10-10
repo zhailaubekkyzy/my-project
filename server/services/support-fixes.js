@@ -26,7 +26,7 @@ const yesNo = (v) => (v ? 'да' : 'нет');
 
 async function ownProject(user, projectId) {
   const project = await db.get('SELECT * FROM projects WHERE id = ? AND owner_id = ?', [String(projectId || ''), user.id]);
-  if (!project) throw new FixError('Этот SI-консультант не принадлежит этому человеку.', 404, 'NOT_THIS_USER');
+  if (!project) throw new FixError('Этот SI-продавец не принадлежит этому человеку.', 404, 'NOT_THIS_USER');
   return project;
 }
 
@@ -108,8 +108,8 @@ const FIXES = {
   },
 
   consultant_listing: {
-    title: 'Показать / скрыть консультанта в Маркетплейсе',
-    help: 'Жалоба на карточку (обман, неприемлемый текст) — скрыть. Владелец просит вернуть — показать. Ссылка консультанта продолжает работать.',
+    title: 'Показать / скрыть SI-продавца в Маркетплейсе',
+    help: 'Жалоба на карточку (обман, неприемлемый текст) — скрыть. Владелец просит вернуть — показать. Ссылка SI-продавца продолжает работать.',
     async plan(user, { projectId, listed }) {
       const project = await ownProject(user, projectId);
       const want = Boolean(listed);
@@ -125,14 +125,14 @@ const FIXES = {
   },
 
   consultant_status: {
-    title: 'Выключить / включить SI-консультанта',
-    help: 'Выключенный консультант не отвечает и не открывается по ссылке (клиенты видят «не найден»). Для серьёзных жалоб. Переписки сохраняются.',
+    title: 'Выключить / включить SI-продавца',
+    help: 'Выключенный SI-продавец не отвечает и не открывается по ссылке (клиенты видят «не найден»). Для серьёзных жалоб. Переписки сохраняются.',
     async plan(user, { projectId, active }) {
       const project = await ownProject(user, projectId);
       const want = active ? 'active' : 'paused';
       return {
         count: project.status === want ? 0 : 1,
-        changes: [{ label: `SI-консультант «${project.name}»`, before: project.status === 'active' ? 'включён' : 'выключен', after: active ? 'включён' : 'выключен' }]
+        changes: [{ label: `SI-продавец «${project.name}»`, before: project.status === 'active' ? 'включён' : 'выключен', after: active ? 'включён' : 'выключен' }]
       };
     },
     async apply(user, { projectId, active }) {
@@ -142,8 +142,8 @@ const FIXES = {
   },
 
   consultant_remove_photo: {
-    title: 'Удалить фото SI-консультанта',
-    help: 'Фото консультанта сломано или неприемлемо. Будет стандартная картинка.',
+    title: 'Удалить фото SI-продавца',
+    help: 'Фото SI-продавца сломано или неприемлемо. Будет стандартная картинка.',
     async plan(user, { projectId }) {
       const project = await ownProject(user, projectId);
       return {

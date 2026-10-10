@@ -1,5 +1,5 @@
 // screens/office.js - Office (business profile) inside the Marketplace tab. Real data only.
-// Sections: Мои смарт-консультанты · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали.
+// Sections: Мои SI-продавцы · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали.
 // Each SI-consultant has four tabs: Карточка и методология · Аналитика · Клиенты · Рассылки.
 
 (function (window) {
@@ -19,7 +19,7 @@
     { id: 'broadcasts', label: 'Рассылки', icon: 'send-horizontal' }
   ];
 
-  const ROLE_SUGGESTIONS = ['SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
+  const ROLE_SUGGESTIONS = ['SI-продавец', 'SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
 
   const store = () => window.funnelStore;
   const api = () => window.smartFlowApi;
@@ -60,7 +60,7 @@
   // ---------------- Terms before the Office opens ----------------
   function renderTerms() {
     const terms = [
-      ['terms', 'Правила платформы SmartFlow', 'SI-консультанты отвечают только по моим данным и не обещают того, чего нет в методологии.'],
+      ['terms', 'Правила платформы SmartFlow', 'SI-продавцы отвечают только по моим данным и не обещают того, чего нет в методологии.'],
       ['data', 'Данные моих клиентов', 'Переписки хранятся в SmartFlow; рассылки — только после моего подтверждения.'],
       ['payments', 'Оплата напрямую', 'Клиенты платят мне по моей ссылке. SmartFlow не принимает платежи.']
     ];
@@ -70,7 +70,7 @@
           <img src="${SF.MASCOTS.consultant}" alt="" class="w-14 h-14" />
           <div>
             <div class="text-base font-extrabold text-ink">Бизнес-профиль</div>
-            <div class="text-xs text-muted">Офис: ваши SI-консультанты и личные обращения клиентов.</div>
+            <div class="text-xs text-muted">Офис: ваши SI-продавцы и личные обращения клиентов.</div>
           </div>
         </div>
         <form onsubmit="SF.actions.activateBusiness(event)" class="space-y-2">
@@ -113,7 +113,7 @@
     const list = state.office.consultants;
     return `
       <button onclick="SF.push('office-create')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-консультанта
+        <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-продавца
       </button>
       <div class="space-y-2.5">
         ${list.map(c => `
@@ -126,7 +126,7 @@
             </span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
           </button>`).join('')}
-        ${!list.length ? `<div class="text-xs text-muted px-1">${SF.data.signedIn() ? 'Пока нет консультантов — создайте первого.' : 'Откройте приложение в Telegram, чтобы увидеть своих консультантов.'}</div>` : ''}
+        ${!list.length ? `<div class="text-xs text-muted px-1">${SF.data.signedIn() ? 'Пока нет SI-продавцов — создайте первого.' : 'Откройте приложение в Telegram, чтобы увидеть своих SI-продавцов.'}</div>` : ''}
       </div>
     `;
   }
@@ -198,7 +198,7 @@
               }).join('')}
             </div>
             ${!(m.consultantIds || []).length ? '<div class="text-[10px] text-faint">Пока ни один SI не знает этот материал — отметьте нужных.</div>' : ''}`
-          : '<div class="text-[10px] text-faint">Создайте SI-консультанта, чтобы открыть ему этот материал.</div>'}
+          : '<div class="text-[10px] text-faint">Создайте SI-продавца, чтобы открыть ему этот материал.</div>'}
         </div>
       </div>`;
   }
@@ -254,11 +254,11 @@
   function renderCreate() {
     return `
       <form onsubmit="SF.actions.createConsultant(event)" class="glass-card-3d p-4 space-y-3 text-xs">
-        <div class="text-[11px] text-muted leading-snug">У каждого SI-консультанта есть цель, чёткие инструкции и лимит на клиента — он работает сам, без вашего участия.</div>
+        <div class="text-[11px] text-muted leading-snug">У каждого SI-продавца есть цель, чёткие инструкции и лимит на клиента — он работает сам, без вашего участия.</div>
         ${field('name', 'Имя для клиентов', '', { placeholder: 'Например: Елена · менторство', max: 60 })}
         <label class="block space-y-1">
           <span class="font-semibold text-ink-2">Роль (всегда начинается с SI)</span>
-          <input name="role" list="role-suggestions" value="SI-консультант" maxlength="40" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
+          <input name="role" list="role-suggestions" placeholder="SI-консультант" maxlength="40" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
           <datalist id="role-suggestions">${ROLE_SUGGESTIONS.map(r => `<option value="${r}"></option>`).join('')}</datalist>
         </label>
         ${field('goal', 'Цель', '', { placeholder: 'Например: записать на разбор', max: 160 })}
@@ -271,7 +271,7 @@
   // ---------------- One consultant ----------------
   function renderConsultant(route, state) {
     const c = store().findOfficeConsultant(route.id);
-    if (!c) return SF.emptyState('assistant', 'Консультант не найден', 'Вернитесь в Офис и выберите другого.');
+    if (!c) return SF.emptyState('assistant', 'SI-продавец не найден', 'Вернитесь в Офис и выберите другого.');
     const tab = route.tab || 'methodology';
     let body = '';
     if (tab === 'methodology') body = renderMethodology(c) + renderConsultantBrain(c, state);
@@ -297,7 +297,7 @@
           </button>
         </div>
         <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
-          <div class="text-[10px] text-muted">Ссылка для клиентов — открывает чат с этим консультантом:</div>
+          <div class="text-[10px] text-muted">Ссылка для клиентов — открывает чат с этим SI-продавцом:</div>
           <div class="flex items-center gap-2">
             <span class="text-xs font-mono text-brand truncate flex-1">${SF.esc(c.link)}</span>
             <button onclick="SF.copyText('${SF.js(c.link)}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[11px] flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i>Копировать</button>
@@ -324,7 +324,7 @@
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
           ${field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
-          ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого консультанта. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
+          ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого SI-продавца. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
           <div class="grid grid-cols-2 gap-2">
             <label class="block space-y-1">
               <span class="font-semibold text-ink-2">Тип</span>
@@ -370,7 +370,7 @@
         ${tile('Просили человека', a.humanRequests || 0)}
         ${tile('Ждут ответа', a.waiting || 0)}
       </div>
-      <div class="text-[10px] text-faint px-1">Только настоящие цифры этого консультанта. Оплаты идут вам напрямую, поэтому продажи здесь пока не считаются. Советы SI по воронке появятся позже.</div>
+      <div class="text-[10px] text-faint px-1">Только настоящие цифры этого SI-продавца. Оплаты идут вам напрямую, поэтому продажи здесь пока не считаются. Советы SI по воронке появятся позже.</div>
     `;
   }
 
@@ -378,7 +378,7 @@
     const clients = state.remote.clients[c.id];
     if (!clients) return '<div class="text-xs text-muted">Загружаю…</div>';
     if (!clients.length) {
-      return SF.emptyState('consultant', 'Клиентов пока нет', 'Отправьте ссылку консультанта в свой канал, сторис или рассылку — клиенты появятся здесь.');
+      return SF.emptyState('consultant', 'Клиентов пока нет', 'Отправьте ссылку SI-продавца в свой канал, сторис или рассылку — клиенты появятся здесь.');
     }
     return `
       <div class="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1">
@@ -471,13 +471,13 @@
     }
     SF.askWriteAccess(); // the bot will tell about new requests from clients
     SF.confetti();
-    showToast('Офис открыт! Заполните карточку своего SI-консультанта');
+    showToast('Офис открыт! Заполните карточку своего SI-продавца');
     const next = store().currentRoute().next;
     SF.patch({ section: 'consultants', next: null });
     if (next === 'create') SF.push('office-create');
   };
 
-  // "Создать своего SI-консультанта" in the Marketplace: the form, or the Office terms first
+  // "Создать своего SI-продавца" in the Marketplace: the form, or the Office terms first
   SF.actions.startCreateConsultant = () => {
     if (store().isBusinessActive()) {
       SF.openIn('marketplace', 'office', { section: 'consultants' });
@@ -501,9 +501,9 @@
       await SF.data.myConsultants();
       store().data.ui.routes.marketplace.pop(); // replace the form with the new consultant
       SF.push('office-consultant', { id: project.id, tab: 'methodology' });
-      showToast('SI-консультант создан. Добавьте фото, оффер и ссылку на оплату');
+      showToast('SI-продавец создан. Добавьте фото, оффер и ссылку на оплату');
     } catch (err) {
-      showToast(err.message || 'Не удалось создать консультанта');
+      showToast(err.message || 'Не удалось создать SI-продавца');
     }
   };
 
@@ -535,7 +535,7 @@
       SF.data.invalidate('consultants');
       SF.data.invalidate('marketplace');
       await SF.data.myConsultants();
-      showToast(f.isListed.checked ? 'Сохранено. Консультант виден в Маркетплейсе' : 'Сохранено');
+      showToast(f.isListed.checked ? 'Сохранено. SI-продавец виден в Маркетплейсе' : 'Сохранено');
     } catch (err) {
       showToast(err.message || 'Не удалось сохранить');
     }
@@ -552,7 +552,7 @@
       }
       store().updateOfficeConsultant(id, { photoUrl: result.url });
       SF.data.invalidate('marketplace');
-      showToast('Фото SI-консультанта сохранено');
+      showToast('Фото SI-продавца сохранено');
     } catch (err) {
       showToast(err.message || 'Не удалось загрузить фото');
     }
@@ -570,7 +570,7 @@
           <input name="role" list="role-suggestions-edit" maxlength="40" value="${SF.esc(c.roleTitle)}" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
           <datalist id="role-suggestions-edit">${ROLE_SUGGESTIONS.map(r => `<option value="${r}"></option>`).join('')}</datalist>
         </label>
-        <div class="text-[10px] text-faint">Внутри платформы все они — смарт-консультанты; клиенты видят это имя и роль.</div>
+        <div class="text-[10px] text-faint">Внутри платформы все они — SI-продавцы; клиенты видят это имя и роль.</div>
         <div class="flex gap-2">
           <button type="button" onclick="SF.closeModal()" class="flex-1 py-2.5 rounded-xl btn-3d-dark">Отмена</button>
           <button type="submit" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany">Сохранить</button>
@@ -743,8 +743,8 @@
   // ---------------- Screen registration (rendered inside the Marketplace tab) ----------------
   const TITLES = {
     office: 'Офис',
-    'office-create': 'Новый SI-консультант',
-    'office-consultant': 'SI-консультант',
+    'office-create': 'Новый SI-продавец',
+    'office-consultant': 'SI-продавец',
     'office-client': 'Клиент'
   };
 

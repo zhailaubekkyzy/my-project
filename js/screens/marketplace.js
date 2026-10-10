@@ -28,7 +28,7 @@
   function createButton() {
     return `
       <button onclick="SF.actions.startCreateConsultant()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-консультанта
+        <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-продавца
       </button>`;
   }
 
@@ -40,7 +40,7 @@
           <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
           <span class="flex-1">
             <span class="block text-sm font-bold text-ink">Мой Офис</span>
-            <span class="block text-[11px] text-muted">SI-консультантов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
+            <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
           </span>
           <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
         </button>`;
@@ -50,7 +50,7 @@
         <img src="${SF.MASCOTS.consultant}" alt="" class="w-14 h-14 flex-shrink-0" />
         <span class="flex-1">
           <span class="block text-sm font-extrabold">Офис для бизнеса</span>
-          <span class="block text-xs font-medium leading-snug">Свой SI-консультант продаёт ваши услуги 24/7. Откройте бизнес-профиль — это бесплатно.</span>
+          <span class="block text-xs font-medium leading-snug">Свой SI-продавец продаёт ваши услуги 24/7. Откройте бизнес-профиль — это бесплатно.</span>
         </span>
       </button>`;
   }
@@ -92,7 +92,7 @@
         ${all === null ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
         ${items.map(card).join('')}
         ${all && !items.length ? SF.emptyState('consultant', 'Витрина только открывается',
-          'Здесь появятся SI-консультанты экспертов. Своего консультанта можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».') : ''}
+          'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».') : ''}
       </div>
     `;
   }
@@ -101,7 +101,7 @@
   function renderConsultant(route, state) {
     const c = findCard(state, route.id);
     if (!c && SF.data.isMissing(state, route.id)) {
-      return SF.emptyState('assistant', 'Карточка не найдена', 'Возможно, автор снял SI-консультанта с витрины.');
+      return SF.emptyState('assistant', 'Карточка не найдена', 'Возможно, автор снял SI-продавца с витрины.');
     }
     if (!c) return '<div class="text-xs text-muted">Загружаю…</div>';
     return `
@@ -194,7 +194,7 @@
         </div>` : ''}
       ${p.consultants.length ? `
         <div class="space-y-2">
-          ${SF.sectionTitle('bot', 'SI-консультанты')}
+          ${SF.sectionTitle('bot', 'SI-продавцы')}
           ${p.consultants.map(card).join('')}
         </div>` : ''}
     `;
@@ -224,14 +224,14 @@
         <button onclick="SF.openLink('${SF.js(c.paymentUrl)}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Перейти к оплате</button>
         <button onclick="SF.copyText('${SF.js(c.paymentUrl)}', 'Ссылка на оплату скопирована')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Скопировать ссылку на оплату</button>
       ` : `
-        <div class="text-xs text-muted">Автор пока не добавил ссылку на оплату. Задайте вопрос SI-консультанту или свяжитесь с автором.</div>
+        <div class="text-xs text-muted">Автор пока не добавил ссылку на оплату. Задайте вопрос SI-продавцу или свяжитесь с автором.</div>
         <button onclick="SF.closeModal(); SF.actions.openChat('${SF.js(c.slug)}')" class="w-full py-3 rounded-2xl btn-3d-red text-sm">Спросить</button>
       `}
     `);
   };
 
   // ---------------- Screen ----------------
-  const OWN_TITLES = { list: 'Маркетплейс', consultant: 'Смарт-консультант', person: 'Профиль' };
+  const OWN_TITLES = { list: 'Маркетплейс', consultant: 'SI-продавец', person: 'Профиль' };
 
   SF.screens.marketplace = {
     title(route, state) {
