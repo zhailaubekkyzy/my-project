@@ -19,7 +19,7 @@
     { id: 'broadcasts', label: 'Рассылки', icon: 'send-horizontal' }
   ];
 
-  const ROLE_SUGGESTIONS = ['SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
+  const ROLE_SUGGESTIONS = ['SI-продавец', 'SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
 
   const store = () => window.funnelStore;
   const api = () => window.smartFlowApi;
@@ -258,7 +258,7 @@
         ${field('name', 'Имя для клиентов', '', { placeholder: 'Например: Елена · менторство', max: 60 })}
         <label class="block space-y-1">
           <span class="font-semibold text-ink-2">Роль (всегда начинается с SI)</span>
-          <input name="role" list="role-suggestions" value="SI-консультант" maxlength="40" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
+          <input name="role" list="role-suggestions" placeholder="SI-консультант" maxlength="40" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
           <datalist id="role-suggestions">${ROLE_SUGGESTIONS.map(r => `<option value="${r}"></option>`).join('')}</datalist>
         </label>
         ${field('goal', 'Цель', '', { placeholder: 'Например: записать на разбор', max: 160 })}
