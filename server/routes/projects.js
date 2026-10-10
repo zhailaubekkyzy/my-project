@@ -71,7 +71,7 @@ function readCardFields(body, project) {
     fields.is_listed = body.is_listed ? 1 : 0;
     const offer = fields.offer !== undefined ? fields.offer : project.offer;
     if (fields.is_listed && !offer) {
-      return { error: 'Чтобы показать консультанта в Маркетплейсе, заполните оффер' };
+      return { error: 'Чтобы показать SI-продавца в Маркетплейсе, заполните оффер' };
     }
   }
   return { fields };

@@ -75,7 +75,7 @@
 
       ${consultants.length ? `
         <div class="space-y-2">
-          ${SF.sectionTitle('bot', 'Мои SI-консультанты')}
+          ${SF.sectionTitle('bot', 'Мои SI-продавцы')}
           ${consultants.map(c => `
             <div class="p-3 rounded-2xl bg-[var(--si-bubble)] border border-[var(--si-bubble-line)] flex items-center gap-2.5">
               ${SF.avatar(c.photoUrl, { size: 36, kind: 'si' })}

@@ -186,7 +186,7 @@ async function createHumanRequest(project, lead, { reason, leadName, leadUsernam
 
   const notified = await telegramBot.notifyUser(
     project.owner_id,
-    `🔔 ${leadName || lead.name || 'Клиент'} просит связаться лично.\nSI-консультант: «${project.name}».\n\n«${text}»`,
+    `🔔 ${leadName || lead.name || 'Клиент'} просит связаться лично.\nSI-продавец: «${project.name}».\n\n«${text}»`,
     { buttonText: 'Открыть обращение', startParam: `I_${project.id}` }
   );
   return { inquiryId, notified };

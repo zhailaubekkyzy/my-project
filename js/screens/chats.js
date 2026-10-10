@@ -46,7 +46,7 @@
         ${chats && !chats.length ? `
           <div class="glass-card-3d p-4 space-y-2 text-center">
             <div class="text-sm font-bold text-ink">Пока нет переписок</div>
-            <div class="text-xs text-muted leading-relaxed">Откройте ссылку, которую дал эксперт, или найдите консультанта в Маркетплейсе.</div>
+            <div class="text-xs text-muted leading-relaxed">Откройте ссылку, которую дал эксперт, или найдите SI-продавца в Маркетплейсе.</div>
             <button onclick="SF.go('marketplace')" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs">Открыть Маркетплейс</button>
           </div>` : ''}
         ${row({
@@ -99,12 +99,12 @@
 
   function renderChat(state, slug) {
     if (!SF.data.signedIn()) {
-      return SF.emptyState('assistant', 'Откройте приложение в Telegram', 'Переписка с SI-консультантом доступна после входа через Telegram.');
+      return SF.emptyState('assistant', 'Откройте приложение в Telegram', 'Переписка с SI-продавцом доступна после входа через Telegram.');
     }
     const consultant = state.remote.cards[slug];
     const thread = state.remote.messages[slug];
     if (!consultant && SF.data.isMissing(state, slug)) {
-      return SF.emptyState('assistant', 'SI-консультант не найден', 'Возможно, ссылка устарела или эксперт выключил консультанта.');
+      return SF.emptyState('assistant', 'SI-продавец не найден', 'Возможно, ссылка устарела или эксперт выключил SI-продавца.');
     }
     if (!consultant && !thread) return '<div class="text-xs text-muted">Загружаю…</div>';
     const messages = thread ? thread.messages : [];

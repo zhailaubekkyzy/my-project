@@ -13,7 +13,7 @@ router.get('/funnels/:slug', async (req, res, next) => {
   try {
     const publicProfile = await projectService.getPublicProjectBySlug(req.params.slug);
     if (!publicProfile) {
-      return res.status(404).json({ error: 'not_found', message: 'Страница SI-консультанта не найдена или деактивирована' });
+      return res.status(404).json({ error: 'not_found', message: 'Страница SI-продавца не найдена или деактивирована' });
     }
 
     res.json(publicProfile);
