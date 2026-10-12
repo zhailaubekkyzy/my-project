@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const projectService = require('../services/project-service');
+const funnelService = require('../services/funnel-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
@@ -100,10 +101,16 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     const card = readCardFields(req.body, req.project);
     if (card.error) return res.status(400).json({ error: 'bad_request', message: card.error });
 
+    // "If…, then…" scenarios are part of the methodology: only known conditions and actions are kept
+    let aiSettings = custom_ai_settings;
+    if (aiSettings && typeof aiSettings === 'object' && aiSettings.scenarios !== undefined) {
+      aiSettings = { ...aiSettings, scenarios: funnelService.normalizeScenarios(aiSettings.scenarios) };
+    }
+
     const updated = await projectService.updateProject(req.params.projectId, {
       name: name !== undefined ? cleanText(name, 80) || req.project.name : undefined,
       niche,
-      custom_ai_settings,
+      custom_ai_settings: aiSettings,
       pricing_options,
       status,
       role_title,

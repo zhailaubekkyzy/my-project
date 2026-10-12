@@ -5,6 +5,7 @@
 // It never invents facts; when it does not know, it says so and offers the expert.
 // Without an OpenAI key (or if OpenAI fails) the reply is an honest fallback, not made-up text.
 const config = require('../config');
+const { scenarioPromptLines } = require('./funnel-service');
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const HISTORY_LIMIT = 20;
@@ -62,6 +63,10 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
   if (project.trial_days) lines.push(`Пробный период: ${project.trial_days} дн.`);
   if (project.payment_url) lines.push('Оплата: по кнопке «Купить» в приложении — деньги идут эксперту напрямую.');
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
+  const scenarios = scenarioPromptLines(s.scenarios);
+  if (scenarios.length) {
+    lines.push('Сценарии эксперта «если…, то…» (следуй им мягко, своими словами, без давления):', ...scenarios);
+  }
   if (knowledge.length) {
     lines.push(
       '',
@@ -88,7 +93,7 @@ function fallbackOpener(project) {
   return `Здравствуйте! Как хорошо, что вы заглянули 🙂${offer} Расскажите, что для вас сейчас важнее всего?`;
 }
 
-async function callOpenAI(messages) {
+async function callOpenAI(messages, extra = {}) {
   try {
     const res = await fetch(OPENAI_URL, {
       method: 'POST',
@@ -99,7 +104,8 @@ async function callOpenAI(messages) {
       body: JSON.stringify({
         model: config.openaiModel,
         messages,
-        max_completion_tokens: MAX_REPLY_TOKENS
+        max_completion_tokens: MAX_REPLY_TOKENS,
+        ...extra
       }),
       signal: AbortSignal.timeout(25000)
     });
@@ -159,7 +165,49 @@ async function generateReply({ project, expertName, history = [], userText, know
   return text ? { text, source: 'openai' } : { text: fallbackReply(project, userText), source: 'fallback' };
 }
 
+/**
+ * Funnel events of one turn, for the event journal (runs next to the SI reply, not after it).
+ * lastSiText: the SI's message the client answers; clientText: the client's message.
+ * Returns { offerMade, offerAnswered, objection, refused } or null (no OpenAI / unclear answer).
+ */
+async function analyzeTurn({ project, lastSiText, clientText }) {
+  if (!isConfigured()) return null;
+  const offer = project.offer || '';
+  const text = await callOpenAI([
+    {
+      role: 'system',
+      content: [
+        'Ты размечаешь переписку продавца с клиентом для воронки продаж. Ответь только JSON:',
+        '{"offer_made": bool, "offer_answered": bool, "objection": string, "refused": bool}',
+        '- offer_made: в сообщении продавца есть предложение купить / записаться (оффер ниже или его суть).',
+        '- offer_answered: клиент отвечает на такое предложение (согласие, вопрос по условиям, сомнение, отказ).',
+        '- objection: если клиент сомневается или возражает — суть в 2–5 словах («дорого», «нет времени», «подумаю»), иначе "".',
+        '- refused: клиент ясно отказывается от покупки или прощается без интереса.',
+        `Оффер продавца: ${offer || '(не задан)'}`
+      ].join('\n')
+    },
+    {
+      role: 'user',
+      content: `Продавец: ${String(lastSiText || '(нет)').slice(0, 1500)}\n\nКлиент: ${String(clientText || '').slice(0, 1500)}`
+    }
+  ], { response_format: { type: 'json_object' } });
+  if (!text) return null;
+  try {
+    const r = JSON.parse(text);
+    if (!r || typeof r !== 'object') return null;
+    return {
+      offerMade: r.offer_made === true,
+      offerAnswered: r.offer_answered === true,
+      objection: typeof r.objection === 'string' ? r.objection.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
+      refused: r.refused === true
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
+  analyzeTurn,
   isConfigured,
   buildSystemPrompt,
   fallbackReply,

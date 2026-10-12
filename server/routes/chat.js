@@ -145,4 +145,24 @@ router.post('/:slug/human', async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/chat/:slug/events  { type: 'buy_clicked' }
+ * The client's own actions in the chat that go to the expert's event journal
+ */
+const CLIENT_EVENTS = ['buy_clicked'];
+router.post('/:slug/events', async (req, res, next) => {
+  try {
+    const type = String(req.body?.type || '');
+    if (!CLIENT_EVENTS.includes(type)) return res.status(400).json({ error: 'bad_request', message: 'Неизвестное событие' });
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    if (!lead) return res.json({ recorded: false });
+    await chatService.clientEvent(project, lead, type, { type: 'client' });
+    res.json({ recorded: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

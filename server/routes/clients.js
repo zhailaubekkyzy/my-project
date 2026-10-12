@@ -92,6 +92,27 @@ router.post('/:clientId/si', requireProjectPermission('conversations:write'), as
 });
 
 /**
+ * POST /api/projects/:projectId/clients/:clientId/funnel  { outcome: 'paid' | 'refused' | 'reopened' }
+ * The owner or the assistant marks "Купил", "Отказ" or returns the client into the funnel
+ */
+router.post('/:clientId/funnel', requireProjectPermission('conversations:write'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
+    const status = await chatService.markOutcome(req.project, client, String(req.body?.outcome || ''), memberOf(req));
+    if (!status) return res.status(400).json({ error: 'bad_request', message: 'Неизвестный итог' });
+    res.json({
+      clientId: client.id,
+      funnelStatus: status,
+      funnelLabel: funnelService.STATUSES[status],
+      events: await funnelService.eventsOf(client.id, 50)
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/projects/:projectId/inquiries
  * List priority direct inquiries ("Кто написал лично 👤")
  */

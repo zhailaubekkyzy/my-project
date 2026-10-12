@@ -166,7 +166,10 @@ async function handleClientMessage(project, lead, text) {
   }
 
   // A person of the business answers: the SI stays silent ("Мне написали")
-  if (isSiPaused(lead)) return { message, reply: null, paused: true };
+  if (isSiPaused(lead)) {
+    await applyAnalysis(project, lead, await analyze(project, past, text), text);
+    return { message, reply: null, paused: true };
+  }
 
   const settings = parseJson(project.custom_ai_settings);
   const limit = Number(settings.clientLimit) || DEFAULT_CLIENT_LIMIT;
@@ -184,15 +187,93 @@ async function handleClientMessage(project, lead, text) {
     const previous = [...past].reverse().find(m => m.sender === 'client');
     knowledge = await brainService.contextFor(project.id, [previous && previous.text, text].filter(Boolean).join('\n'));
   }
-  const result = await siEngine.generateReply({
-    project,
-    expertName: await expertNameOf(project),
-    history: past,
-    userText: text,
-    knowledge
-  });
+  const [result, analysis] = await Promise.all([
+    siEngine.generateReply({
+      project,
+      expertName: await expertNameOf(project),
+      history: past,
+      userText: text,
+      knowledge
+    }),
+    analyze(project, past, text)
+  ]);
   const reply = await saveMessage(lead, SI, result.text);
+  await applyAnalysis(project, lead, analysis, text);
   return { message, reply, source: result.source };
+}
+
+// Funnel events of this turn (offer, answer to it, objection, refusal), asked from OpenAI next to
+// the SI reply. A failure never breaks the chat: the journal just gets fewer events.
+async function analyze(project, past, text) {
+  try {
+    const lastOther = [...past].reverse().find(m => m.sender !== 'client');
+    return await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: text });
+  } catch (err) {
+    console.warn('[SmartFlow funnel] analysis failed:', err.message);
+    return null;
+  }
+}
+
+async function applyAnalysis(project, lead, analysis, text) {
+  if (!analysis) return;
+  try {
+    if (analysis.offerMade && !(await funnelService.hasEvent(lead.id, 'offer_sent'))) {
+      await funnelService.recordEvent(lead, 'offer_sent', SI);
+    }
+    if (analysis.offerAnswered && !lead.offer_answered_at) {
+      await clientEvent(project, lead, 'offer_answered', CLIENT);
+    }
+    if (analysis.objection) {
+      await clientEvent(project, lead, 'objection', CLIENT, { objection: analysis.objection, text });
+    }
+    if (analysis.refused && lead.funnel_status !== 'refused' && lead.funnel_status !== 'bought') {
+      await clientEvent(project, lead, 'refused', CLIENT);
+    }
+  } catch (err) {
+    console.warn('[SmartFlow funnel] events not saved:', err.message);
+  }
+}
+
+/**
+ * An event of a client's path + the expert's "if…, then…" scenarios on it:
+ * "передать человеку" pauses the SI and opens a request in "Мне написали",
+ * "сообщить мне" sends the owner and the assistant a bot message. Each fires once per client.
+ */
+async function clientEvent(project, client, type, actor, data = null) {
+  const status = await funnelService.recordEvent(client, type, actor, data ? { objection: data.objection } : null);
+  const scenarios = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios)
+    .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {}));
+  for (const scenario of scenarios) {
+    if (await funnelService.scenarioFired(client.id, scenario.id)) continue;
+    await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
+    const what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
+    if (scenario.then === 'handover') {
+      if (!isSiPaused(client)) {
+        await createHumanRequest(project, client, { reason: `Сценарий: ${what}${scenario.text ? `. ${scenario.text}` : ''}` });
+      }
+    } else if (scenario.then === 'notify') {
+      const people = client.business_id ? await businessService.activeMemberIds(client.business_id) : [];
+      if (!people.includes(project.owner_id)) people.unshift(project.owner_id);
+      for (const userId of people) {
+        await telegramBot.notifyUser(
+          userId,
+          `📍 ${client.name || 'Клиент'}: ${what}.\nSI-продавец: «${project.name}».${scenario.text ? `\n\n${scenario.text}` : ''}`,
+          { buttonText: 'Открыть', startParam: `I_${project.id}` }
+        );
+      }
+    }
+  }
+  return status;
+}
+
+/**
+ * Outcome marked by a person of the business: bought, refused, or back into the funnel.
+ */
+const OUTCOMES = { paid: 'paid', refused: 'refused', reopened: 'reopened' };
+async function markOutcome(project, client, outcome, member) {
+  if (!OUTCOMES[outcome]) return null;
+  const actor = { type: member.role === 'assistant' ? 'assistant' : 'owner', userId: member.userId };
+  return clientEvent(project, client, OUTCOMES[outcome], actor);
 }
 
 /**
@@ -293,6 +374,8 @@ module.exports = {
   isSiPaused,
   setResponsible,
   handleClientMessage,
+  clientEvent,
+  markOutcome,
   startConversation,
   createHumanRequest,
   humanReply,

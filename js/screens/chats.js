@@ -256,6 +256,8 @@
   SF.actions.buy = (slug) => {
     const card = store().data.remote.cards[slug];
     if (card?.paymentUrl) SF.openLink(card.paymentUrl);
+    // The expert sees «Нажал „Купить“» in the client's journal; a failure never blocks the payment
+    if (SF.data.signedIn()) api().sendChatEvent(slug, 'buy_clicked').catch(() => {});
   };
 
   SF.actions.hideBuyBanner = (slug) => {

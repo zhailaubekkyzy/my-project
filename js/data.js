@@ -99,6 +99,27 @@
       store().setRemote(`clientMessages.${clientId}`, await api().getMessages(projectId, clientId));
     }, 5000),
 
+    // Office → Воронка: counts per status (counted by the server on request). days: '7' | '30' | 'all'
+    funnel: (businessId, days) => ensure(`funnel:${businessId}|${days}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnel({ businessId, days: days === 'all' ? '' : days });
+      store().setRemote(`funnel.${businessId}|${days}`, { counts: res.counts || {}, statuses: res.statuses || {} });
+    }, 15000),
+
+    // The first 30 clients of one status (more by "Показать ещё")
+    funnelList: (businessId, days, status) => ensure(`funnelList:${businessId}|${days}|${status}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnel({ businessId, days: days === 'all' ? '' : days, status });
+      const clients = res.clients || [];
+      store().setRemote(`funnelLists.${businessId}|${days}|${status}`, { clients, done: clients.length < (res.pageSize || 30) });
+    }, 15000),
+
+    // A client card in the Office: funnel status and the event journal
+    clientCard: (projectId, clientId) => ensure(`clientCard:${clientId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`clientCards.${clientId}`, await api().getClient(projectId, clientId));
+    }, 15000),
+
     // SI-brain: my materials and which consultants know them
     brain: () => ensure('brain', async () => {
       if (!signedIn()) return false;

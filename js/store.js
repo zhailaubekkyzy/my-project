@@ -67,7 +67,10 @@ const defaultData = {
     analytics: {},           // { [projectId]: live numbers }
     brain: null,             // my SI-brain materials (only their text is stored)
     myFeedback: null,        // my messages to support with the team's answers
-    business: null           // my business: members, and the businesses I assist
+    business: null,          // my business: members, and the businesses I assist
+    funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
+    funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
+    clientCards: {}          // { [clientId]: { funnel_status, last_objection, events } }
   },
 
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)
@@ -275,6 +278,7 @@ class Store {
         goal: settings.goal || '',
         instructions: settings.instructions || '',
         clientLimit: settings.clientLimit || 40,
+        scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         category: p.category || settings.category || 'sales',
         offer: p.offer || '',
         description: p.description || '',
