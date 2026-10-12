@@ -72,7 +72,12 @@
     chatMessages: (slug, maxAge = 5000) => ensure(`messages:${slug}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getChatMessages(slug);
-      store().setRemote(`messages.${slug}`, { messages: res.messages || [], siPaused: Boolean(res.siPaused), contactShared: Boolean(res.contactShared) });
+      store().setRemote(`messages.${slug}`, {
+        messages: res.messages || [],
+        siPaused: Boolean(res.siPaused),
+        contactShared: Boolean(res.contactShared),
+        tools: res.tools || { contact: false, receipt: false }
+      });
     }, maxAge),
 
     // Office: everything about one of my consultants

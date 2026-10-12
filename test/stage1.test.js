@@ -1269,6 +1269,39 @@ async function runAllTests() {
     }
   });
 
+  await test('45. Кнопки «Отправить чек» и «Поделиться контактом» — только когда разговор к этому подошёл', async () => {
+    await projectService.updateProject(projectA.id, { payment_url: 'https://pay.example.com/a' });
+    const fresh = { id: 600006, first_name: 'Новый', username: 'new_client' };
+    const token = await tokenFor(fresh);
+    await api('POST', `/api/chat/${projectA.slug}/start`, token);
+    let thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false }, 'No buttons by default');
+
+    // «Купить» pressed → "Отправить чек" appears
+    await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.strictEqual(thread.body.tools.receipt, true);
+    assert.strictEqual(thread.body.tools.contact, false);
+
+    // A person asks for the phone → "Поделиться контактом" appears
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(fresh, 'expert')).id]);
+    await api('POST', `/api/projects/${projectA.id}/conversations/${lead.id}/messages`, tokenA, { text: 'Оставьте, пожалуйста, ваш номер — я перезвоню.' });
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.strictEqual(thread.body.tools.contact, true);
+
+    // Bought → no receipt button; contact shared → no contact button
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
+    await db.run('UPDATE clients SET contact_consent_at = CURRENT_TIMESTAMP WHERE id = ?', [lead.id]);
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false });
+
+    // Without a payment link there is never a receipt button
+    const t = await chatService.chatTools({ payment_url: null }, { id: lead.id, funnel_status: 'not_finished' }, [{ sender: 'ai', text: 'Пришлите чек' }]);
+    assert.strictEqual(t.receipt, false);
+    const si = await chatService.chatTools({ payment_url: 'https://x' }, { id: 'cli_none', funnel_status: 'not_finished' }, [{ sender: 'ai', text: 'Спасибо! Отправьте, пожалуйста, чек кнопкой «Отправить чек»' }]);
+    assert.strictEqual(si.receipt, true, 'The SI asked for a receipt');
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

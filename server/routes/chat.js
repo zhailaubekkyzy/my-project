@@ -87,10 +87,13 @@ router.get('/:slug/messages', async (req, res, next) => {
     const project = await loadConsultant(req, res);
     if (!project) return;
     const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    const messages = lead ? await chatService.history(project.id, lead.id) : [];
     res.json({
-      messages: lead ? await chatService.history(project.id, lead.id) : [],
+      messages,
       siPaused: chatService.isSiPaused(lead),
-      contactShared: Boolean(lead && lead.contact_consent_at)
+      contactShared: Boolean(lead && lead.contact_consent_at),
+      // Which buttons to show above the input (only when the conversation needs them)
+      tools: await chatService.chatTools(project, lead, messages)
     });
   } catch (err) {
     next(err);

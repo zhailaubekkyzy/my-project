@@ -97,12 +97,14 @@
       </div>`;
   }
 
-  // Small buttons above the input: share the contact (Telegram's own dialog) and send a receipt
+  // Small buttons above the input: share the contact (Telegram's own dialog) and send a receipt.
+  // Hidden by default; the server says when the conversation needs them (thread.tools).
   const canShareContact = () => typeof window.Telegram?.WebApp?.requestContact === 'function' &&
     (!window.Telegram.WebApp.isVersionAtLeast || window.Telegram.WebApp.isVersionAtLeast('6.9'));
   function chatTools(slug, consultant, thread) {
-    const contact = thread && !thread.contactShared && canShareContact();
-    const receipt = Boolean(consultant?.paymentUrl);
+    const tools = (thread && thread.tools) || {};
+    const contact = Boolean(tools.contact) && !thread.contactShared && canShareContact();
+    const receipt = Boolean(tools.receipt) && Boolean(consultant?.paymentUrl);
     if (!contact && !receipt) return '';
     return `
       <div class="flex gap-2">
@@ -318,7 +320,12 @@
     const card = store().data.remote.cards[slug];
     if (card?.paymentUrl) SF.openLink(card.paymentUrl);
     // The expert sees «Нажал „Купить“» in the client's journal; a failure never blocks the payment
-    if (SF.data.signedIn()) api().sendChatEvent(slug, 'buy_clicked').catch(() => {});
+    // After «Купить» the "Отправить чек" button appears in this chat
+    if (SF.data.signedIn()) {
+      api().sendChatEvent(slug, 'buy_clicked')
+        .then(() => { SF.data.invalidate(`messages:${slug}`); return SF.data.chatMessages(slug); })
+        .catch(() => {});
+    }
   };
 
   SF.actions.hideBuyBanner = (slug) => {

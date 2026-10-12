@@ -277,6 +277,29 @@ async function clientEvent(project, client, type, actor, data = null) {
 }
 
 /**
+ * Buttons above the client's input appear only when the conversation needs them (they must not
+ * scare a client by default):
+ *  - "Отправить чек": the client pressed «Купить», or the SI / a person just spoke about payment
+ *    or a receipt; hidden again once the client has bought;
+ *  - "Поделиться контактом": the SI / a person just asked for a phone number or contact; hidden
+ *    once the client shared it.
+ * "Just" = the last 3 messages from the SI or a person.
+ */
+const RECENT_OTHER = 3;
+const ASKS_RECEIPT = /(чек|оплат|оплач)/i;
+const ASKS_CONTACT = /(номер|телефон|контакт)/i;
+async function chatTools(project, lead, messages) {
+  if (!lead) return { contact: false, receipt: false };
+  const recent = messages.filter(m => m.sender !== 'client').slice(-RECENT_OTHER).map(m => m.text || '');
+  const contact = !lead.contact_consent_at && recent.some(t => ASKS_CONTACT.test(t));
+  let receipt = false;
+  if (project.payment_url && lead.funnel_status !== 'bought') {
+    receipt = recent.some(t => ASKS_RECEIPT.test(t)) || await funnelService.hasEvent(lead.id, 'buy_clicked');
+  }
+  return { contact, receipt };
+}
+
+/**
  * Outcome marked by a person of the business: bought, refused, or back into the funnel.
  */
 const OUTCOMES = { paid: 'paid', refused: 'refused', reopened: 'reopened' };
@@ -386,6 +409,7 @@ module.exports = {
   handleClientMessage,
   clientEvent,
   markOutcome,
+  chatTools,
   startConversation,
   createHumanRequest,
   humanReply,
