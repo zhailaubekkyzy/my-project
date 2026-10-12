@@ -602,7 +602,17 @@
               <option value="silent">Клиент молчит</option>
             </select>
           </label>
-          <div data-custom>${field('condition', 'Если… (опишите словами)', '', { placeholder: 'Например: клиент сказал, что дорого / спросил про рассрочку / нажал «Купить»', rows: 2, max: 200, hint: 'SI сам заметит это в переписке и в нажатых кнопках. Слова в кавычках, например «рассрочка», сработают, даже если SI не уверен.' })}</div>
+          <div data-custom class="space-y-1">
+            ${field('condition', 'Если… (опишите словами)', '', { placeholder: 'Опишите, что клиент написал или сделал', rows: 2, max: 200 })}
+            <div class="p-2 rounded-lg bg-sunken border border-line text-[10px] text-muted leading-snug">
+              <div class="font-semibold text-ink-2">Примеры, как можно написать:</div>
+              <div>• клиент сказал, что дорого</div>
+              <div>• клиент спросил про рассрочку</div>
+              <div>• клиент ответил, что у него уже есть свой бизнес</div>
+              <div>• клиент нажал «Купить», но не оплатил</div>
+              <div class="pt-0.5 text-faint">SI сам заметит это в переписке и в нажатых кнопках. Слово в кавычках, например «рассрочка», сработает, даже если SI не уверен.</div>
+            </div>
+          </div>
           <div data-silent style="display:none" class="space-y-2">
             ${field('minutes', 'Сколько минут молчит', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
             <label class="block space-y-1">
@@ -615,7 +625,8 @@
             </label>
             <label class="block space-y-1" style="display:none">
               <span class="font-semibold text-ink-2">После того, как…</span>
-              <input name="afterText" maxlength="200" placeholder="Например: SI назвал цену" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
+              <input name="afterText" maxlength="200" placeholder="Опишите, после чего клиент замолчал" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
+              <span class="block text-[10px] text-faint">Например: SI назвал цену · клиенту отправили материал · клиент сказал «подумаю»</span>
             </label>
           </div>
           <label class="block space-y-1">
