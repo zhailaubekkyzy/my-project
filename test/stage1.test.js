@@ -1033,7 +1033,8 @@ async function runAllTests() {
           { when: 'refused', then: 'handover', text: '' },
           { when: 'hack', then: 'delete_everything' },
           { when: 'objection', then: 'si_says', text: '' }
-        ]
+        ],
+        methodology: 'Сначала узнай цель клиента, потом расскажи про разбор. ' + 'x'.repeat(4000)
       }
     });
     assert.strictEqual(put.status, 200);
@@ -1068,6 +1069,8 @@ async function runAllTests() {
       const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Звучит интересно, но для меня это дорого' });
       assert.strictEqual(sent.status, 201);
       assert(system.includes('Мягко расскажи про рассрочку на 3 месяца'), 'The SI follows the "SI отвечает так" scenario');
+      assert(system.includes('Методология эксперта') && system.includes('Сначала узнай цель клиента'), 'The general description goes to the SI');
+      assert.strictEqual(put.body.custom_ai_settings.methodology.length, 3000, 'The description is limited to 3000 characters');
       assert(system.includes('«дорого»'), 'With the objection words');
       let row = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
       assert.strictEqual(row.funnel_status, 'objections');

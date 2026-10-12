@@ -581,7 +581,11 @@
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
-        <div class="text-[11px] text-muted leading-snug">Каждый сценарий ведёт клиента к покупке своим путём. По умолчанию сценариев нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этого сценария → SI спрашивает, удалось ли посмотреть».</div>
+        <form onsubmit="SF.actions.saveMethodology(event, '${SF.js(c.id)}')" class="space-y-2">
+          ${field('methodology', 'Общее описание', c.methodology || '', { rows: 6, max: 3000, placeholder: 'Опишите своими словами, как SI ведёт клиента к покупке: с чего начинает, какие вопросы задаёт, когда предлагает оффер, каким тоном говорит.', hint: 'SI следует этому описанию в каждом разговоре. Ниже — отдельные сценарии для особых случаев.' })}
+          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-dark">Сохранить описание</button>
+        </form>
+        <div class="text-[11px] text-muted leading-snug pt-2 border-t border-line">Каждый сценарий ведёт клиента к покупке своим путём. По умолчанию сценариев нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этого сценария → SI спрашивает, удалось ли посмотреть».</div>
         ${list.map((sc, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
@@ -1067,6 +1071,20 @@
   };
 
   // Scenarios are saved inside custom_ai_settings, merged with what the server has
+  SF.actions.saveMethodology = async (e, id) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const methodology = e.target.methodology.value.trim();
+    try {
+      const project = await api().getProject(id);
+      await api().updateProject(id, { custom_ai_settings: { ...(project.custom_ai_settings || {}), methodology } });
+      store().updateOfficeConsultant(id, { methodology });
+      showToast('Описание сохранено. SI будет ему следовать');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
+    }
+  };
+
   async function saveScenarios(id, scenarios) {
     const project = await api().getProject(id);
     const res = await api().updateProject(id, {

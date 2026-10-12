@@ -277,6 +277,7 @@ class Store {
         link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
         goal: settings.goal || '',
         instructions: settings.instructions || '',
+        methodology: settings.methodology || '',
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         category: p.category || settings.category || 'sales',

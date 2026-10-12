@@ -71,6 +71,8 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     );
   }
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
+  // The expert's own description of how the SI leads the client to buying (before the scenarios)
+  if (s.methodology) lines.push('Методология эксперта (как вести клиента к покупке, следуй ей мягко):', String(s.methodology).slice(0, 3000));
   const scenarios = scenarioPromptLines(s.scenarios);
   if (scenarios.length) {
     lines.push('Сценарии эксперта «если…, то…» (следуй им мягко, своими словами, без давления):', ...scenarios);
