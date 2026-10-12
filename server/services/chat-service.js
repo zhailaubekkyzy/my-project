@@ -207,7 +207,8 @@ async function handleClientMessage(project, lead, text) {
 async function analyze(project, past, text) {
   try {
     const lastOther = [...past].reverse().find(m => m.sender !== 'client');
-    return await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: text });
+    const conditions = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
+    return await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: text, conditions });
   } catch (err) {
     console.warn('[SmartFlow funnel] analysis failed:', err.message);
     return null;
@@ -229,6 +230,11 @@ async function applyAnalysis(project, lead, analysis, text) {
     if (analysis.refused && lead.funnel_status !== 'refused' && lead.funnel_status !== 'bought') {
       await clientEvent(project, lead, 'refused', CLIENT);
     }
+    if (analysis.matched && analysis.matched.length) {
+      const own = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
+      const texts = own.filter(c => analysis.matched.includes(c.id)).map(c => c.text);
+      if (texts.length) await clientEvent(project, lead, 'condition', CLIENT, { matched: analysis.matched, condition: texts.join('; ') });
+    }
   } catch (err) {
     console.warn('[SmartFlow funnel] events not saved:', err.message);
   }
@@ -240,13 +246,17 @@ async function applyAnalysis(project, lead, analysis, text) {
  * "сообщить мне" sends the owner and the assistant a bot message. Each fires once per client.
  */
 async function clientEvent(project, client, type, actor, data = null) {
-  const status = await funnelService.recordEvent(client, type, actor, data ? { objection: data.objection } : null);
+  let saved = null;
+  if (data && data.objection) saved = { objection: data.objection };
+  if (data && data.condition) saved = { condition: data.condition };
+  const status = await funnelService.recordEvent(client, type, actor, saved);
   const scenarios = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios)
     .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {}));
   for (const scenario of scenarios) {
     if (await funnelService.scenarioFired(client.id, scenario.id)) continue;
     await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
-    const what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
+    let what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
+    if (scenario.when === 'custom') what = `Условие «${scenario.condition}»`;
     if (scenario.then === 'handover') {
       if (!isSiPaused(client)) {
         await createHumanRequest(project, client, { reason: `Сценарий: ${what}${scenario.text ? `. ${scenario.text}` : ''}` });

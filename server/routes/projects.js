@@ -62,6 +62,12 @@ function readCardFields(body, project) {
     if (raw && !cleanUrl(raw)) return { error: 'Ссылка на оплату должна начинаться с https://' };
     fields.payment_url = raw ? cleanUrl(raw) : null;
   }
+  // Access link after a confirmed payment (sent to the client only after a person confirms the receipt)
+  if (body.access_url !== undefined) {
+    const raw = String(body.access_url || '').trim();
+    if (raw && !cleanUrl(raw)) return { error: 'Ссылка на доступ должна начинаться с https://' };
+    fields.access_url = raw ? cleanUrl(raw) : null;
+  }
   if (body.trial_days !== undefined) {
     fields.trial_days = Math.max(0, Math.min(60, parseInt(body.trial_days, 10) || 0));
   }

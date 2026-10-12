@@ -61,7 +61,13 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
   // Only the price the expert typed on the card (old auto-filled tariffs are never used)
   if (project.price_label) lines.push(`Цена: ${project.price_label}`);
   if (project.trial_days) lines.push(`Пробный период: ${project.trial_days} дн.`);
-  if (project.payment_url) lines.push('Оплата: по кнопке «Купить» в приложении — деньги идут эксперту напрямую.');
+  if (project.payment_url) {
+    lines.push(
+      'Оплата: по кнопке «Купить» в приложении — деньги идут эксперту напрямую.',
+      'Если клиент говорит, что оплатил: поблагодари и попроси отправить чек кнопкой «Отправить чек» в этом чате.',
+      'Оплату проверяет и доступ выдаёт эксперт лично. Сам ты не подтверждаешь оплату и не обещаешь доступ.'
+    );
+  }
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
   const scenarios = scenarioPromptLines(s.scenarios);
   if (scenarios.length) {
@@ -81,6 +87,9 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
 // Reply without OpenAI: honest, warm, uses only real data.
 function fallbackReply(project, userText) {
   const lower = String(userText || '').toLowerCase();
+  if (/оплатил|перев[её]л|оплачено/.test(lower) && project.payment_url) {
+    return 'Спасибо! Отправьте, пожалуйста, чек кнопкой «Отправить чек» здесь в чате — эксперт проверит оплату и напишет вам.';
+  }
   if (/цен|стоим|сколько|тариф|price/.test(lower) && project.price_label) {
     return `Стоимость — ${project.price_label}. Если хотите обсудить детали, нажмите «Связаться с человеком», и эксперт ответит вам лично.`;
   }
@@ -168,22 +177,27 @@ async function generateReply({ project, expertName, history = [], userText, know
 /**
  * Funnel events of one turn, for the event journal (runs next to the SI reply, not after it).
  * lastSiText: the SI's message the client answers; clientText: the client's message.
- * Returns { offerMade, offerAnswered, objection, refused } or null (no OpenAI / unclear answer).
+ * conditions: the expert's own conditions [{ id, text }] — which of them this client's message meets.
+ * Returns { offerMade, offerAnswered, objection, refused, matched: [ids] } or null (no OpenAI / unclear answer).
  */
-async function analyzeTurn({ project, lastSiText, clientText }) {
+async function analyzeTurn({ project, lastSiText, clientText, conditions = [] }) {
   if (!isConfigured()) return null;
   const offer = project.offer || '';
+  const list = conditions.slice(0, 20);
   const text = await callOpenAI([
     {
       role: 'system',
       content: [
         'Ты размечаешь переписку продавца с клиентом для воронки продаж. Ответь только JSON:',
-        '{"offer_made": bool, "offer_answered": bool, "objection": string, "refused": bool}',
+        '{"offer_made": bool, "offer_answered": bool, "objection": string, "refused": bool, "conditions": [numbers]}',
         '- offer_made: в сообщении продавца есть предложение купить / записаться (оффер ниже или его суть).',
         '- offer_answered: клиент отвечает на такое предложение (согласие, вопрос по условиям, сомнение, отказ).',
         '- objection: если клиент сомневается или возражает — суть в 2–5 словах («дорого», «нет времени», «подумаю»), иначе "".',
         '- refused: клиент ясно отказывается от покупки или прощается без интереса.',
-        `Оффер продавца: ${offer || '(не задан)'}`
+        '- conditions: номера условий эксперта ниже, которые явно выполнились в сообщении клиента; если ни одно — [].',
+        `Оффер продавца: ${offer || '(не задан)'}`,
+        'Условия эксперта:',
+        ...(list.length ? list.map((c, i) => `${i + 1}. ${c.text}`) : ['(нет)'])
       ].join('\n')
     },
     {
@@ -199,7 +213,11 @@ async function analyzeTurn({ project, lastSiText, clientText }) {
       offerMade: r.offer_made === true,
       offerAnswered: r.offer_answered === true,
       objection: typeof r.objection === 'string' ? r.objection.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
-      refused: r.refused === true
+      refused: r.refused === true,
+      matched: (Array.isArray(r.conditions) ? r.conditions : [])
+        .map(n => list[Number(n) - 1])
+        .filter(Boolean)
+        .map(c => c.id)
     };
   } catch (e) {
     return null;

@@ -7,6 +7,7 @@ const { requireProjectPermission } = require('../middleware/permissions');
 const projectService = require('../services/project-service');
 const chatService = require('../services/chat-service');
 const funnelService = require('../services/funnel-service');
+const receiptService = require('../services/receipt-service');
 
 router.use(requireAuth);
 
@@ -68,7 +69,8 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
     res.json({
       ...toClientCard(client, req.projectRole),
       funnel_label: funnelService.STATUSES[client.funnel_status] || null,
-      events: await funnelService.eventsOf(client.id, 50)
+      events: await funnelService.eventsOf(client.id, 50),
+      receipts: await receiptService.receiptsOf(client.id)
     });
   } catch (err) {
     next(err);
@@ -108,6 +110,43 @@ router.post('/:clientId/funnel', requireProjectPermission('conversations:write')
       events: await funnelService.eventsOf(client.id, 50)
     });
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/clients/:clientId/receipts/:receiptId/file
+ * The receipt itself (photo or PDF) — only for the people of the business
+ */
+router.get('/:clientId/receipts/:receiptId/file', requireProjectPermission('conversations:read'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT id FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    const file = client ? await receiptService.receiptFile(client.id, req.params.receiptId) : null;
+    if (!file) return res.status(404).json({ error: 'not_found', message: 'Чек не найден' });
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.send(file.buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/clients/:clientId/receipts/:receiptId  { action: 'confirm' | 'reject' }
+ * The owner or the assistant checks a receipt: confirmed → "Купили" and the access link to the client
+ */
+router.post('/:clientId/receipts/:receiptId', requireProjectPermission('conversations:write'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
+    const result = await receiptService.reviewReceipt(req.project, client, req.params.receiptId, String(req.body?.action || ''), memberOf(req));
+    res.json({ ...result, funnelLabel: funnelService.STATUSES[result.funnelStatus], events: await funnelService.eventsOf(client.id, 50), receipts: await receiptService.receiptsOf(client.id) });
+  } catch (err) {
+    if (err instanceof receiptService.ReceiptError) {
+      return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    }
     next(err);
   }
 });

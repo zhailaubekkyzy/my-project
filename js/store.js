@@ -284,6 +284,7 @@ class Store {
         description: p.description || '',
         priceLabel: p.price_label || '',
         paymentUrl: p.payment_url || '',
+        accessUrl: p.access_url || '',
         trialDays: Number(p.trial_days) || 0,
         isListed: Boolean(p.is_listed)
       };

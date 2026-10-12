@@ -32,9 +32,13 @@ const EVENTS = {
   objection: 'Возражение',
   buy_clicked: 'Нажал «Купить»',
   booked: 'Записался',                    // later: calendar
+  receipt_sent: 'Прислал чек',
+  receipt_rejected: 'Чек не подтверждён',
   paid: 'Оплатил',
   refused: 'Отказ / ушёл',
   reopened: 'Вернули в воронку',
+  contact_shared: 'Поделился контактом',
+  condition: 'Условие эксперта',
   scenario: 'Сработал сценарий'
 };
 
@@ -42,11 +46,15 @@ const ACTORS = ['client', 'si', 'owner', 'assistant', 'system'];
 const PAGE_SIZE = 30;
 
 // ---------- Scenarios "если…, то…" (part of the SI-seller's methodology) ----------
+// "custom" = the expert's own condition in words ("клиент спрашивает про рассрочку"): the SI
+// notices it in the conversation (si-engine.analyzeTurn). No scenario exists by default.
 const SCENARIO_WHEN = {
   objection: 'Клиент возразил',
   offer_answered: 'Клиент ответил на оффер',
   buy_clicked: 'Клиент нажал «Купить»',
-  refused: 'Клиент отказался'
+  receipt_sent: 'Клиент прислал чек',
+  refused: 'Клиент отказался',
+  custom: 'Своё условие'
 };
 const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
@@ -71,10 +79,12 @@ function normalizeScenarios(list) {
       id: /^scn_[a-z0-9]{4,20}$/.test(raw.id) ? raw.id : `scn_${crypto.randomBytes(5).toString('hex')}`,
       when: raw.when,
       words: raw.when === 'objection' ? clean(raw.words, 120) : '',
+      condition: raw.when === 'custom' ? clean(raw.condition, 200) : '',
       then: raw.then,
       text: clean(raw.text, 500)
     };
     if (scenario.then === 'si_says' && !scenario.text) continue;
+    if (scenario.when === 'custom' && !scenario.condition) continue;
     result.push(scenario);
   }
   return result;
@@ -87,12 +97,20 @@ const wordsOf = (scenario) => scenario.words.split(/[,;]/).map(w => w.trim().toL
  * objection or in the client's message ("дорого, нет денег").
  */
 function scenarioMatches(scenario, type, data = {}) {
+  if (type === 'condition') return scenario.when === 'custom' && (data.matched || []).includes(scenario.id);
   if (scenario.when !== type) return false;
   if (type !== 'objection') return true;
   const words = wordsOf(scenario);
   if (!words.length) return true;
   const haystack = `${data.objection || ''} ${data.text || ''}`.toLowerCase();
   return words.some(w => haystack.includes(w));
+}
+
+/**
+ * The expert's own conditions for the turn analysis: [{ id, text }].
+ */
+function customConditions(scenarios) {
+  return normalizeScenarios(scenarios).filter(s => s.when === 'custom').map(s => ({ id: s.id, text: s.condition }));
 }
 
 /**
@@ -103,9 +121,9 @@ function scenarioPromptLines(scenarios) {
     .filter(s => s.then === 'si_says')
     .map(s => {
       const words = wordsOf(s);
-      const when = s.when === 'objection' && words.length
-        ? `Если клиент возражает (${words.map(w => `«${w}»`).join(', ')})`
-        : `Если ${SCENARIO_WHEN[s.when].charAt(0).toLowerCase()}${SCENARIO_WHEN[s.when].slice(1)}`;
+      let when = `Если ${SCENARIO_WHEN[s.when].charAt(0).toLowerCase()}${SCENARIO_WHEN[s.when].slice(1)}`;
+      if (s.when === 'objection' && words.length) when = `Если клиент возражает (${words.map(w => `«${w}»`).join(', ')})`;
+      if (s.when === 'custom') when = `Если ${s.condition}`;
       return `- ${when}: ${s.text}`;
     });
 }
@@ -121,9 +139,11 @@ function nextStatus(client, type) {
   const talked = Boolean(client.offer_answered_at || client.objection_at) || type === 'offer_answered' || type === 'objection';
   const base = talked ? 'objections' : 'not_finished';
   if (type === 'reopened') return base;
+  // A receipt needs a person to check it, even from a client who refused earlier
+  if (type === 'receipt_sent' && current !== 'bought') return 'waiting_human';
   if (current === 'bought' || current === 'refused') return current;
   if (type === 'handed_to_human') return 'waiting_human';
-  if (current === 'waiting_human' && type !== 'human_replied' && type !== 'si_resumed') return current;
+  if (current === 'waiting_human' && !['human_replied', 'si_resumed', 'receipt_rejected'].includes(type)) return current;
   return base;
 }
 
@@ -189,6 +209,7 @@ async function eventsOf(clientId, limit = 100) {
     let detail = '';
     if (r.type === 'objection') detail = data.objection || '';
     if (r.type === 'scenario') detail = SCENARIO_THEN[data.then] || '';
+    if (r.type === 'condition') detail = data.condition || '';
     return {
       id: r.id,
       type: r.type,
@@ -262,6 +283,7 @@ module.exports = {
   MAX_SCENARIOS,
   PAGE_SIZE,
   normalizeScenarios,
+  customConditions,
   scenarioMatches,
   scenarioPromptLines,
   nextStatus,

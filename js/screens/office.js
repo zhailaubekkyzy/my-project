@@ -33,8 +33,11 @@
     objection: 'Клиент возразил',
     offer_answered: 'Клиент ответил на оффер',
     buy_clicked: 'Клиент нажал «Купить»',
-    refused: 'Клиент отказался'
+    receipt_sent: 'Клиент прислал чек',
+    refused: 'Клиент отказался',
+    custom: 'Своё условие (напишу словами)'
   };
+  const MAX_SCENARIOS = 20;
   const SCENARIO_THEN = {
     si_says: 'SI отвечает так',
     handover: 'Передать человеку (SI на паузу)',
@@ -501,6 +504,7 @@
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
           ${field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
           ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого SI-продавца. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
+          ${field('accessUrl', 'Ссылка на доступ после оплаты (необязательно)', c.accessUrl, { type: 'url', placeholder: 'https://... (курс, закрытый канал)', max: 300, hint: 'Клиент получит её, только когда вы или помощник подтвердите его чек. SI эту ссылку не знает и сам не выдаёт.' })}
           <div class="grid grid-cols-2 gap-2">
             <label class="block space-y-1">
               <span class="font-semibold text-ink-2">Тип</span>
@@ -533,11 +537,13 @@
   // Methodology: "если…, то…" — SI answers by them, hands the client over or tells the owner
   function renderScenarios(c) {
     const list = c.scenarios || [];
-    const whenText = (sc) => `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
+    const whenText = (sc) => sc.when === 'custom'
+      ? SF.esc(sc.condition)
+      : `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
-        <div class="text-[11px] text-muted leading-snug">SI сам замечает в переписке оффер, возражения и отказ. Скажите, что делать в таких случаях.</div>
+        <div class="text-[11px] text-muted leading-snug">Своя воронка у каждого SI-продавца: по умолчанию сценариев нет, вы пишете их сами — до ${MAX_SCENARIOS}. SI замечает в переписке оффер, возражения, отказ и ваши условия.</div>
         ${list.map((sc, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
@@ -547,14 +553,16 @@
             <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить сценарий"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
           </div>`).join('')}
         ${!list.length ? '<div class="text-faint">Сценариев пока нет. Например: если клиент возразил «дорого» → SI рассказывает про рассрочку.</div>' : ''}
+        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} сценариев — это максимум. Удалите ненужный, чтобы добавить новый.</div>` : `
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Если</span>
-            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
             </select>
           </label>
           ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
+          <div style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент спрашивает, можно ли платить частями', max: 200 })}</div>
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">То</span>
             <select name="then" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
@@ -563,7 +571,7 @@
           </label>
           ${field('text', 'Что сказать или сделать', '', { placeholder: 'Например: мягко рассказать про рассрочку на 3 месяца', rows: 2, max: 500 })}
           <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить сценарий</button>
-        </form>
+        </form>`}
       </div>
     `;
   }
@@ -684,7 +692,10 @@
     const f = funnelOf(status);
     const objection = (card && card.last_objection) || client.last_objection;
     const events = (card && card.events) || [];
+    const receipts = (card && card.receipts) || [];
+    const phone = (card && card.contact_phone) || client.contact_phone;
     const done = status === 'bought' || status === 'refused';
+    const RECEIPT_STATUS = { new: ['Ждёт проверки', 'text-amber-500'], confirmed: ['Оплата подтверждена', 'text-emerald-500'], rejected: ['Не подтверждён', 'text-faint'] };
     const button = (outcome, label) => `<button onclick="SF.actions.markOutcome('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${outcome}')" class="flex-1 py-2 rounded-xl btn-3d-dark text-[11px] font-bold">${label}</button>`;
     return `
       <div class="glass-card-3d p-3 space-y-2">
@@ -692,6 +703,20 @@
           <span class="px-2 py-1 rounded-lg border text-[11px] font-bold ${f.cls}">${f.label}</span>
           ${objection ? `<span class="text-[10px] text-muted truncate">Возражение: «${SF.esc(objection)}»</span>` : ''}
         </div>
+        ${phone ? `<a href="tel:${SF.esc(phone)}" class="block text-[11px] text-brand font-semibold">📱 ${SF.esc(phone)} <span class="text-faint font-normal">· клиент поделился контактом</span></a>` : ''}
+        ${receipts.map(r => `
+          <div class="p-2 rounded-xl bg-sunken border border-line space-y-1.5">
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+              <button onclick="SF.actions.viewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', '${SF.js(r.mimeType)}')" class="font-semibold text-ink flex items-center gap-1"><i data-lucide="receipt" class="w-3.5 h-3.5"></i>Чек · ${timeLabel(r.createdAt)}</button>
+              <span class="font-bold ${RECEIPT_STATUS[r.status][1]}">${RECEIPT_STATUS[r.status][0]}</span>
+            </div>
+            ${r.status === 'new' ? `
+              <div class="flex gap-2">
+                <button onclick="SF.actions.reviewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', 'confirm')" class="flex-1 py-1.5 rounded-lg btn-3d-tiffany text-[11px] font-bold">Подтвердить оплату</button>
+                <button onclick="SF.actions.reviewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', 'reject')" class="flex-1 py-1.5 rounded-lg btn-3d-dark text-[11px]">Не подтверждаю</button>
+              </div>
+              <div class="text-[10px] text-faint">Сначала проверьте, что деньги пришли. После подтверждения клиент получит сообщение${store().findOfficeConsultant(route.projectId)?.accessUrl ? ' и ссылку на доступ' : ''}.</div>` : ''}
+          </div>`).join('')}
         <div class="flex gap-2">
           ${done ? button('reopened', 'Вернуть в воронку') : `${button('paid', '✓ Купил')}${button('refused', 'Отказ')}`}
         </div>
@@ -770,6 +795,11 @@
       showToast('Ссылка на оплату должна начинаться с https://');
       return;
     }
+    const accessUrl = f.accessUrl.value.trim();
+    if (accessUrl && !isWebUrl(accessUrl)) {
+      showToast('Ссылка на доступ должна начинаться с https://');
+      return;
+    }
     const goal = f.goal.value.trim();
     const instructions = f.instructions.value.trim();
     const clientLimit = Math.max(5, Math.min(500, parseInt(f.clientLimit.value, 10) || 40));
@@ -781,6 +811,7 @@
         description: f.description.value.trim(),
         price_label: f.priceLabel.value.trim(),
         payment_url: paymentUrl,
+        access_url: accessUrl,
         category: f.category.value,
         trial_days: parseInt(f.trialDays.value, 10) || 0,
         is_listed: f.isListed.checked,
@@ -910,6 +941,46 @@
     }
   };
 
+  SF.actions.viewReceipt = async (projectId, clientId, receiptId, mimeType) => {
+    if (needServer()) return;
+    try {
+      const blob = await api().getReceiptFile(projectId, clientId, receiptId);
+      const url = URL.createObjectURL(blob);
+      SF.openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-sm font-bold text-ink">Чек клиента</h3>
+          ${mimeType === 'application/pdf'
+            ? `<iframe src="${url}" class="w-full h-[60vh] rounded-xl border border-line bg-card"></iframe>
+               <a href="${url}" download="check.pdf" class="block text-center text-brand font-semibold">Скачать PDF</a>`
+            : `<img src="${url}" alt="Чек" class="w-full rounded-xl border border-line" />`}
+          <button onclick="SF.closeModal()" class="w-full py-2.5 rounded-xl btn-3d-dark">Закрыть</button>
+        </div>`);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не открылся', err));
+    }
+  };
+
+  SF.actions.reviewReceipt = async (projectId, clientId, receiptId, action) => {
+    if (needServer()) return;
+    const question = action === 'confirm'
+      ? 'Деньги пришли? Клиент станет «Купили» и получит сообщение об этом.'
+      : 'Не подтверждать этот чек? Клиенту придёт мягкое сообщение, что нужно уточнить.';
+    if (!confirm(question)) return;
+    try {
+      const res = await api().reviewReceipt(projectId, clientId, receiptId, action);
+      const card = store().data.remote.clientCards[clientId] || {};
+      store().setRemote(`clientCards.${clientId}`, { ...card, funnel_status: res.funnelStatus, events: res.events, receipts: res.receipts });
+      SF.data.invalidate(`clientMessages:${clientId}`);
+      SF.data.invalidate(`clients:${projectId}`);
+      SF.data.invalidate(`inquiries:${projectId}`);
+      SF.data.invalidate('funnel');
+      SF.data.clientMessages(projectId, clientId);
+      showToast(action === 'confirm' ? 'Оплата подтверждена, клиент получил сообщение' : 'Клиенту написали, что нужно уточнить');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
   SF.actions.moreFunnel = async (businessId, days, status) => {
     if (needServer()) return;
     const key = `${businessId}|${days}|${status}`;
@@ -946,9 +1017,14 @@
     const scenario = {
       when: f.when.value,
       words: f.when.value === 'objection' ? f.words.value.trim() : '',
+      condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
       then: f.then.value,
       text: f.text.value.trim()
     };
+    if (scenario.when === 'custom' && !scenario.condition) {
+      showToast('Напишите условие словами');
+      return;
+    }
     if (scenario.then === 'si_says' && !scenario.text) {
       showToast('Напишите, что SI должен ответить');
       return;
