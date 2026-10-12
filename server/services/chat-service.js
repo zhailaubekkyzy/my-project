@@ -257,7 +257,7 @@ async function clientEvent(project, client, type, actor, data = null) {
     await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
     let what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
     if (scenario.when === 'custom') what = `Условие «${scenario.condition}»`;
-    if (scenario.title) what = `Ветка «${scenario.title}»: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
+    if (scenario.title) what = `Сценарий «${scenario.title}»: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
     if (scenario.then === 'handover') {
       if (!isSiPaused(client)) {
         await createHumanRequest(project, client, { reason: `Сценарий: ${what}${scenario.text ? `. ${scenario.text}` : ''}` });

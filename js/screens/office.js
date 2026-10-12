@@ -572,15 +572,15 @@
     const whenText = (sc) => {
       if (sc.when === 'custom') return SF.esc(sc.condition);
       if (sc.when === 'silent') {
-        const after = SILENT_AFTER[sc.after] || `после ветки «${SF.esc(scenarioName(list.find(o => o.id === sc.after)))}»`;
+        const after = SILENT_AFTER[sc.after] || `после сценария «${SF.esc(scenarioName(list.find(o => o.id === sc.after)))}»`;
         return `Клиент молчит ${minutesLabel(sc.minutes)} ${after}`;
       }
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     };
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
-        ${SF.sectionTitle('git-branch', 'Методология: ветки «если…, то…»')}
-        <div class="text-[11px] text-muted leading-snug">Ваша воронка — как дерево: каждая ветка ведёт клиента к покупке своим путём. По умолчанию веток нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этой ветки → SI спрашивает, удалось ли посмотреть».</div>
+        ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
+        <div class="text-[11px] text-muted leading-snug">Каждый сценарий ведёт клиента к покупке своим путём. По умолчанию сценариев нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этого сценария → SI спрашивает, удалось ли посмотреть».</div>
         ${list.map((sc, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
@@ -588,12 +588,12 @@
               <div><span class="text-faint">Если</span> <span class="font-semibold text-ink">${whenText(sc)}</span></div>
               <div><span class="text-faint">то</span> <span class="font-semibold text-ink">${SCENARIO_THEN[sc.then] || ''}</span>${sc.text ? `<span class="text-ink-2">: ${SF.esc(sc.text)}</span>` : ''}</div>
             </div>
-            <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить ветку"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить сценарий"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
           </div>`).join('')}
-        ${!list.length ? '<div class="text-faint">Веток пока нет.</div>' : ''}
-        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} веток — это максимум. Удалите ненужную, чтобы добавить новую.</div>` : `
+        ${!list.length ? '<div class="text-faint">Сценариев пока нет.</div>' : ''}
+        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} сценариев — это максимум. Удалите ненужный, чтобы добавить новый.</div>` : `
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
-          ${field('title', 'Название ветки (необязательно)', '', { placeholder: 'Например: Хочет рассрочку', max: 60 })}
+          ${field('title', 'Название сценария (необязательно)', '', { placeholder: 'Например: Хочет рассрочку', max: 60 })}
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Если</span>
             <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
@@ -608,7 +608,7 @@
               <span class="font-semibold text-ink-2">После чего замолчал</span>
               <select name="after" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
                 ${Object.entries(SILENT_AFTER).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
-                ${list.filter(o => o.when !== 'silent').map(o => `<option value="${SF.esc(o.id)}">после ветки «${SF.esc(scenarioName(o))}»</option>`).join('')}
+                ${list.filter(o => o.when !== 'silent').map(o => `<option value="${SF.esc(o.id)}">после сценария «${SF.esc(scenarioName(o))}»</option>`).join('')}
               </select>
             </label>
           </div>
@@ -619,7 +619,7 @@
             </select>
           </label>
           ${field('text', THEN_HINTS.si_says[0], '', { placeholder: THEN_HINTS.si_says[1], rows: 2, max: 500 })}
-          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить ветку</button>
+          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить сценарий</button>
         </form>`}
       </div>
     `;
@@ -1092,7 +1092,7 @@
     }
     try {
       await saveScenarios(id, [...(c.scenarios || []), scenario]);
-      showToast('Ветка добавлена');
+      showToast('Сценарий добавлен');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
     }
@@ -1107,12 +1107,12 @@
     // Branches that continue this one ("после ветки «…»") go with it, so they never fire on their own
     const next = list.filter(o => o.when === 'silent' && o.after === removed.id);
     const question = next.length
-      ? `Удалить эту ветку? Вместе с ней удалятся ветки, которые идут после неё: ${next.length}.`
-      : 'Удалить эту ветку?';
+      ? `Удалить этот сценарий? Вместе с ним удалятся сценарии, которые идут после него: ${next.length}.`
+      : 'Удалить этот сценарий?';
     if (!confirm(question)) return;
     try {
       await saveScenarios(id, list.filter(o => o !== removed && !next.includes(o)));
-      showToast('Ветка удалена');
+      showToast('Сценарий удалён');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось удалить', err));
     }

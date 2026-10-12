@@ -2,7 +2,7 @@
 //
 // The funnel is a tree: a follow-up belongs to the branch where the client went silent. The expert
 // writes it in the methodology as an "if…, then…" scenario: "Если клиент замолчал на N минут
-// (в любой момент / после оффера / после возражения / после «Купить», но без чека / после ветки «…»)
+// (в любой момент / после оффера / после возражения / после «Купить», но без чека / после другого сценария)
 // → SI пишет своими словами / отправить мой текст или ссылку / передать человеку / сообщить мне".
 // No scenario exists by default.
 //
@@ -120,7 +120,7 @@ async function act(project, client, scenario, scenarios) {
   // Written first: if the action fails, it is not repeated every minute
   await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then, minutes: scenario.minutes });
   const branch = funnelService.SILENT_AFTER[scenario.after]
-    || `после ветки «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
+    || `после сценария «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
   const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}`;
   if (writesToClient(scenario.then)) {
     const text = scenario.then === 'send_text'
