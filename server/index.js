@@ -9,8 +9,8 @@ const migrator = require('./db/migrator');
 const scheduler = require('./services/scheduler-service');
 const followupService = require('./services/followup-service');
 
-// The server alarm clock (once a minute): "клиент замолчал" scenarios; later meetings and webinars
-scheduler.register('silent-clients', followupService.runSilentScenarios);
+// The server alarm clock (once a minute): "Догоняющие сообщения"; later meetings and webinars
+scheduler.register('followups', followupService.runFollowups);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 

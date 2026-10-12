@@ -156,10 +156,10 @@ function fallbackFollowUp() {
 }
 
 /**
- * The client has been silent for a while ("Клиент замолчал" scenario): the SI writes one short,
- * warm message itself. instruction: what the expert asked to say (may be empty).
+ * The client has been silent for a while ("Догоняющие сообщения"): the SI writes one short,
+ * warm message itself. instruction: the expert's hint (may be empty).
  */
-async function generateFollowUp({ project, expertName, history = [], instruction = '', hours = 24 }) {
+async function generateFollowUp({ project, expertName, history = [], instruction = '' }) {
   if (!isConfigured()) return { text: fallbackFollowUp(), source: 'fallback' };
   const messages = [{ role: 'system', content: buildSystemPrompt(project, expertName) }];
   for (const m of history.slice(-HISTORY_LIMIT)) {
@@ -169,10 +169,10 @@ async function generateFollowUp({ project, expertName, history = [], instruction
   }
   messages.push({
     role: 'user',
-    content: `(Служебно: клиент не отвечает уже ${hours} ч. Напишите ему одно короткое тёплое сообщение: ` +
+    content: '(Служебно: клиент давно не отвечает. Напишите ему одно короткое тёплое сообщение: ' +
       'без давления и упрёков, не повторяйте прошлые фразы, можно один лёгкий вопрос. ' +
       (instruction ? `Пожелание эксперта: ${String(instruction).slice(0, 500)}. ` : '') +
-      'Не упоминайте эту служебную пометку и сколько часов прошло.)'
+      'Не упоминайте эту служебную пометку и сколько времени прошло.)'
   });
   const text = await callOpenAI(messages);
   return text ? { text, source: 'openai' } : { text: fallbackFollowUp(), source: 'fallback' };

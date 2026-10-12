@@ -112,6 +112,10 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.scenarios !== undefined) {
       aiSettings = { ...aiSettings, scenarios: funnelService.normalizeScenarios(aiSettings.scenarios) };
     }
+    // "Догоняющие сообщения": only known actions, minutes and limits are kept
+    if (aiSettings && typeof aiSettings === 'object' && aiSettings.followups !== undefined) {
+      aiSettings = { ...aiSettings, followups: funnelService.normalizeFollowups(aiSettings.followups) };
+    }
 
     const updated = await projectService.updateProject(req.params.projectId, {
       name: name !== undefined ? cleanText(name, 80) || req.project.name : undefined,
