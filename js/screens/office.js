@@ -35,6 +35,7 @@
     buy_clicked: 'Клиент нажал «Купить»',
     receipt_sent: 'Клиент прислал чек',
     refused: 'Клиент отказался',
+    silent: 'Клиент замолчал (через N часов)',
     custom: 'Своё условие (напишу словами)'
   };
   const MAX_SCENARIOS = 20;
@@ -537,9 +538,11 @@
   // Methodology: "если…, то…" — SI answers by them, hands the client over or tells the owner
   function renderScenarios(c) {
     const list = c.scenarios || [];
-    const whenText = (sc) => sc.when === 'custom'
-      ? SF.esc(sc.condition)
-      : `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
+    const whenText = (sc) => {
+      if (sc.when === 'custom') return SF.esc(sc.condition);
+      if (sc.when === 'silent') return `Клиент молчит ${Number(sc.hours) || 24} ч`;
+      return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
+    };
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
@@ -557,12 +560,13 @@
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Если</span>
-            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'; this.form.hours.parentElement.parentElement.style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
             </select>
           </label>
           ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
           <div style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент спрашивает, можно ли платить частями', max: 200 })}</div>
+          <div style="display:none">${field('hours', 'Через сколько часов молчания', 24, { type: 'number', max: 3, hint: 'Сработает один раз, пока клиент снова не напишет. Тем, кто купил или отказался, SI не пишет.' })}</div>
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">То</span>
             <select name="then" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
@@ -1018,6 +1022,7 @@
       when: f.when.value,
       words: f.when.value === 'objection' ? f.words.value.trim() : '',
       condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
+      hours: f.when.value === 'silent' ? Math.max(1, Math.min(720, parseInt(f.hours.value, 10) || 24)) : undefined,
       then: f.then.value,
       text: f.text.value.trim()
     };
@@ -1025,7 +1030,7 @@
       showToast('Напишите условие словами');
       return;
     }
-    if (scenario.then === 'si_says' && !scenario.text) {
+    if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') {
       showToast('Напишите, что SI должен ответить');
       return;
     }

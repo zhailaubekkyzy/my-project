@@ -150,6 +150,34 @@ async function generateOpener({ project, expertName }) {
   return text ? { text, source: 'openai' } : { text: fallbackOpener(project), source: 'fallback' };
 }
 
+// The client has been silent: one warm reminder without OpenAI
+function fallbackFollowUp() {
+  return 'Здравствуйте! Как у вас дела? Если остались вопросы — я здесь и с радостью помогу 🙂';
+}
+
+/**
+ * The client has been silent for a while ("Клиент замолчал" scenario): the SI writes one short,
+ * warm message itself. instruction: what the expert asked to say (may be empty).
+ */
+async function generateFollowUp({ project, expertName, history = [], instruction = '', hours = 24 }) {
+  if (!isConfigured()) return { text: fallbackFollowUp(), source: 'fallback' };
+  const messages = [{ role: 'system', content: buildSystemPrompt(project, expertName) }];
+  for (const m of history.slice(-HISTORY_LIMIT)) {
+    if (!m.text) continue;
+    if (m.sender === 'client') messages.push({ role: 'user', content: m.text });
+    else messages.push({ role: 'assistant', content: m.text });
+  }
+  messages.push({
+    role: 'user',
+    content: `(Служебно: клиент не отвечает уже ${hours} ч. Напишите ему одно короткое тёплое сообщение: ` +
+      'без давления и упрёков, не повторяйте прошлые фразы, можно один лёгкий вопрос. ' +
+      (instruction ? `Пожелание эксперта: ${String(instruction).slice(0, 500)}. ` : '') +
+      'Не упоминайте эту служебную пометку и сколько часов прошло.)'
+  });
+  const text = await callOpenAI(messages);
+  return text ? { text, source: 'openai' } : { text: fallbackFollowUp(), source: 'fallback' };
+}
+
 /**
  * history: [{ sender: 'client' | 'ai' | 'expert_human', authorType?, text }] oldest first, without userText.
  * knowledge: [{ title, text }] pieces of the consultant's SI-brain materials.
@@ -228,6 +256,8 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
 
 module.exports = {
   analyzeTurn,
+  generateFollowUp,
+  fallbackFollowUp,
   isConfigured,
   buildSystemPrompt,
   fallbackReply,

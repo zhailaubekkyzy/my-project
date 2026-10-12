@@ -1302,6 +1302,79 @@ async function runAllTests() {
     assert.strictEqual(si.receipt, true, 'The SI asked for a receipt');
   });
 
+  await test('46. «Будильник»: сценарий «клиент замолчал» срабатывает один раз за молчание', async () => {
+    const scheduler = require('../server/services/scheduler-service');
+    const followup = require('../server/services/followup-service');
+    const settings = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: { ...settings, scenarios: [
+        { when: 'silent', hours: 24, then: 'si_says', text: '' },
+        { when: 'silent', hours: 48, then: 'notify', text: 'Позвонить' },
+        { when: 'silent', hours: 99999, then: 'notify' }
+      ] }
+    });
+    assert.deepStrictEqual(put.body.custom_ai_settings.scenarios.map(s => s.hours), [24, 48, 720], 'Hours are kept within 1..720');
+
+    // A client who wrote, got an SI answer and has been silent for 30 hours
+    const silentTg = { id: 700007, first_name: 'Молчун' };
+    const token = await tokenFor(silentTg);
+    await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Сколько стоит?' });
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(silentTg, 'expert')).id]);
+    await db.run(`UPDATE clients SET funnel_status = 'not_finished', responsible_type = 'si' WHERE id = ?`, [lead.id]);
+    const ago = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(30), lead.id]);
+    await db.run('UPDATE conversations SET created_at = ? WHERE client_id = ?', [ago(30), lead.id]);
+    await db.run('UPDATE client_events SET created_at = ? WHERE client_id = ?', [ago(30), lead.id]);
+    // Someone who only opened the chat and never wrote is left alone
+    const quietTg = { id: 700008, first_name: 'Просто открыл' };
+    const quietToken = await tokenFor(quietTg);
+    await api('POST', `/api/chat/${projectA.slug}/start`, quietToken);
+    const quiet = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(quietTg, 'expert')).id]);
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(30), quiet.id]);
+
+    scheduler.register('silent-clients', followup.runSilentScenarios);
+    telegramBot.testOutbox.length = 0;
+    const before = (await chatService.history(projectA.id, lead.id)).length;
+    const results = await scheduler.tick();
+    const run = results.find(r => r.name === 'silent-clients');
+    assert(!run.error, run.error);
+    const after = await chatService.history(projectA.id, lead.id);
+    assert.strictEqual(after.length, before + 1, 'The SI wrote one reminder');
+    assert.strictEqual(after.at(-1).authorType, 'si');
+    assert(telegramBot.testOutbox.some(m => m.userId === lead.external_client_id && m.text.includes('написал')), 'The client gets a bot message');
+    assert.strictEqual((await chatService.history(projectA.id, quiet.id)).filter(m => m.authorType === 'si').length, 1, 'Only the opener for someone who never wrote');
+    assert(!telegramBot.testOutbox.some(m => m.text.includes('молчит')), 'The 48-hour scenario waits');
+
+    // Next minute: nothing again (once per silence), even after 3 days without an answer
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(50), lead.id]);
+    telegramBot.testOutbox.length = 0;
+    await scheduler.tick();
+    assert.strictEqual((await chatService.history(projectA.id, lead.id)).length, before + 1, 'No second reminder from the same scenario');
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('молчит 48 ч') && m.text.includes('Позвонить')), 'The 48-hour scenario tells the owner');
+    telegramBot.testOutbox.length = 0;
+    await scheduler.tick();
+    assert.strictEqual(telegramBot.testOutbox.length, 0, 'Each scenario fires once');
+
+    // Bought clients are left alone
+    await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Я подумаю' });
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(30), lead.id]);
+    await db.run('UPDATE conversations SET created_at = ? WHERE client_id = ?', [ago(30), lead.id]);
+    await db.run(`UPDATE client_events SET created_at = ? WHERE client_id = ? AND type = 'client_message'`, [ago(30), lead.id]);
+    const count = (await chatService.history(projectA.id, lead.id)).length;
+    await scheduler.tick();
+    assert.strictEqual((await chatService.history(projectA.id, lead.id)).length, count, 'No reminders after buying');
+
+    // Lease: a second copy of the server does not run the job at the same time
+    await db.run(`UPDATE scheduler_jobs SET locked_until = ?, locked_by = 'srv_other' WHERE name = 'silent-clients'`, [new Date(Date.now() + 60000).toISOString().slice(0, 19).replace('T', ' ')]);
+    assert.strictEqual((await scheduler.tick()).find(r => r.name === 'silent-clients').skipped, true);
+    await db.run(`UPDATE scheduler_jobs SET locked_until = NULL WHERE name = 'silent-clients'`);
+    const status = await scheduler.status();
+    assert(status.jobs.find(j => j.name === 'silent-clients').runs >= 3);
+
+    await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

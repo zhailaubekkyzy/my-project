@@ -6,6 +6,11 @@ const path = require('path');
 const config = require('./config');
 const db = require('./db');
 const migrator = require('./db/migrator');
+const scheduler = require('./services/scheduler-service');
+const followupService = require('./services/followup-service');
+
+// The server alarm clock (once a minute): "клиент замолчал" scenarios; later meetings and webinars
+scheduler.register('silent-clients', followupService.runSilentScenarios);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 
@@ -69,6 +74,8 @@ app.get('/api/health', async (req, res) => {
         configured: siEngine.isConfigured(),
         model: config.openaiModel
       },
+      // The alarm clock: running = it checks once a minute; lastTickAt = its last check
+      scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
     });
   } catch (err) {
@@ -156,6 +163,8 @@ async function startServer(port = config.port) {
   const numbered = await supportService.backfillSupportCodes();
   if (numbered) console.log(`[SmartFlow] Support numbers given to ${numbered} users`);
   await supportService.refreshBlocked();
+
+  scheduler.start();
 
   return new Promise((resolve) => {
     const server = app.listen(port, () => {

@@ -54,8 +54,11 @@ const SCENARIO_WHEN = {
   buy_clicked: 'Клиент нажал «Купить»',
   receipt_sent: 'Клиент прислал чек',
   refused: 'Клиент отказался',
+  silent: 'Клиент замолчал',
   custom: 'Своё условие'
 };
+// "Клиент замолчал на N часов": checked by the server alarm clock (followup-service.js)
+const SILENT_HOURS = { min: 1, max: 720, default: 24 };
 const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
   handover: 'Передать человеку (SI на паузу)',
@@ -80,11 +83,16 @@ function normalizeScenarios(list) {
       when: raw.when,
       words: raw.when === 'objection' ? clean(raw.words, 120) : '',
       condition: raw.when === 'custom' ? clean(raw.condition, 200) : '',
+      hours: raw.when === 'silent'
+        ? Math.max(SILENT_HOURS.min, Math.min(SILENT_HOURS.max, parseInt(raw.hours, 10) || SILENT_HOURS.default))
+        : undefined,
       then: raw.then,
       text: clean(raw.text, 500)
     };
-    if (scenario.then === 'si_says' && !scenario.text) continue;
+    // "SI отвечает так" needs the words, except after silence: then the SI writes a reminder itself
+    if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') continue;
     if (scenario.when === 'custom' && !scenario.condition) continue;
+    if (scenario.hours === undefined) delete scenario.hours;
     result.push(scenario);
   }
   return result;
@@ -117,8 +125,9 @@ function customConditions(scenarios) {
  * "SI отвечает так" scenarios as lines for the SI prompt.
  */
 function scenarioPromptLines(scenarios) {
+  // "Клиент замолчал → SI отвечает так" is not a rule for the conversation: the SI writes it itself later
   return normalizeScenarios(scenarios)
-    .filter(s => s.then === 'si_says')
+    .filter(s => s.then === 'si_says' && s.when !== 'silent')
     .map(s => {
       const words = wordsOf(s);
       let when = `Если ${SCENARIO_WHEN[s.when].charAt(0).toLowerCase()}${SCENARIO_WHEN[s.when].slice(1)}`;
@@ -208,7 +217,7 @@ async function eventsOf(clientId, limit = 100) {
     try { data = JSON.parse(r.data || '{}') || {}; } catch (e) {}
     let detail = '';
     if (r.type === 'objection') detail = data.objection || '';
-    if (r.type === 'scenario') detail = SCENARIO_THEN[data.then] || '';
+    if (r.type === 'scenario') detail = `${SCENARIO_THEN[data.then] || ''}${data.silentHours ? ` (молчит ${data.silentHours} ч)` : ''}`;
     if (r.type === 'condition') detail = data.condition || '';
     return {
       id: r.id,
@@ -281,6 +290,7 @@ module.exports = {
   SCENARIO_WHEN,
   SCENARIO_THEN,
   MAX_SCENARIOS,
+  SILENT_HOURS,
   PAGE_SIZE,
   normalizeScenarios,
   customConditions,

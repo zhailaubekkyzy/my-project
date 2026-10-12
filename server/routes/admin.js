@@ -9,6 +9,7 @@ const migrator = require('../db/migrator');
 const { requireStaff } = require('../middleware/staff');
 const supportService = require('../services/support-service');
 const supportFixes = require('../services/support-fixes');
+const scheduler = require('../services/scheduler-service');
 const telegramBot = require('../services/telegram-bot');
 const siEngine = require('../services/si-engine');
 const { mediaUrl } = require('../services/media-service');
@@ -44,6 +45,10 @@ router.get('/overview', async (req, res, next) => {
     if (!config.telegramBotToken) warnings.push('Нет TELEGRAM_BOT_TOKEN: вход и уведомления бота не работают.');
     if (config.isProd && activeDriver !== 'postgres') warnings.push('Сервер работает НЕ на Supabase (DB_DRIVER). Данные могут пропасть при перезапуске!');
     if (!(await supportService.ownerUserIds()).length) warnings.push('ADMIN_USERS не задан или номер не найден.');
+    const alarm = await scheduler.status();
+    for (const job of alarm.jobs) {
+      if (job.lastError) warnings.push(`«Будильник» (${job.name}): последняя проверка с ошибкой — ${job.lastError}. Передайте разработчику.`);
+    }
 
     res.json({
       me: { userId: req.staff.userId, role: req.staff.role, roleLabel: supportService.ROLE_LABELS[req.staff.role] },
@@ -64,6 +69,7 @@ router.get('/overview', async (req, res, next) => {
         openai: siEngine.isConfigured(),
         openaiModel: config.openaiModel,
         bot: Boolean(config.telegramBotToken),
+        scheduler: { running: alarm.running, lastTickAt: alarm.lastTickAt, jobs: alarm.jobs },
         warnings
       }
     });
