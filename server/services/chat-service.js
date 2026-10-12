@@ -257,10 +257,14 @@ async function clientEvent(project, client, type, actor, data = null) {
     await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
     let what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
     if (scenario.when === 'custom') what = `Условие «${scenario.condition}»`;
+    if (scenario.title) what = `Ветка «${scenario.title}»: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
     if (scenario.then === 'handover') {
       if (!isSiPaused(client)) {
         await createHumanRequest(project, client, { reason: `Сценарий: ${what}${scenario.text ? `. ${scenario.text}` : ''}` });
       }
+    } else if (scenario.then === 'send_text') {
+      // The expert's material as is (a text or a link), right after the SI's answer
+      await saveMessage(client, SI, scenario.text);
     } else if (scenario.then === 'notify') {
       const people = client.business_id ? await businessService.activeMemberIds(client.business_id) : [];
       if (!people.includes(project.owner_id)) people.unshift(project.owner_id);

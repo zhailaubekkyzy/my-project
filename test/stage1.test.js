@@ -1398,6 +1398,80 @@ async function runAllTests() {
     await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
   });
 
+  await test('47. Ветки воронки: «ответил так — отправь материал A, ответил вот так — B», ветка после ветки', async () => {
+    const scheduler = require('../server/services/scheduler-service');
+    const followup = require('../server/services/followup-service');
+    scheduler.register('silent-clients', followup.runSilentScenarios);
+    const settings = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: { ...settings, scenarios: [
+        { id: 'scn_newbiz', title: 'Новичок', when: 'custom', condition: 'клиент только начинает бизнес', then: 'send_text', text: 'Материал A: https://example.com/start' },
+        { id: 'scn_pro', title: 'Опытный', when: 'custom', condition: 'у клиента уже есть бизнес', then: 'send_text', text: 'Материал B: https://example.com/pro' },
+        { id: 'scn_after', title: 'Посмотрел?', when: 'silent', minutes: 30, after: 'scn_newbiz', then: 'send_text', text: 'Удалось посмотреть материал?' },
+        { when: 'silent', minutes: 30, after: 'scn_missing', then: 'notify' },
+        { when: 'custom', condition: 'что-то', then: 'send_text', text: '' }
+      ] }
+    });
+    const saved = put.body.custom_ai_settings.scenarios;
+    assert.deepStrictEqual(saved.map(x => x.title), ['Новичок', 'Опытный', 'Посмотрел?'], 'A branch after a missing branch and an empty material are dropped');
+
+    const tg = { id: 700009, first_name: 'Ветка' };
+    const token = await tokenFor(tg);
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let matched = [1];
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        const content = body.response_format
+          ? JSON.stringify({ offer_made: false, offer_answered: false, objection: '', refused: false, conditions: matched })
+          : 'Понимаю вас!';
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Я только думаю открыть своё дело' });
+      assert.strictEqual(sent.status, 201);
+      let history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+      assert.strictEqual(history.at(-1).text, 'Материал A: https://example.com/start', 'Branch A sends material A after the SI reply');
+      assert(!history.some(m => m.text.includes('Материал B')));
+
+      matched = [2];
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Хотя у меня уже есть салон' });
+      history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+      assert.strictEqual(history.at(-1).text, 'Материал B: https://example.com/pro', 'Branch B sends material B');
+
+      matched = [1];
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Я новичок' });
+      history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+      assert.strictEqual(history.filter(m => m.text.includes('Материал A')).length, 1, 'A material is sent once per client');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // "Посмотрел?" goes after branch A — only for a silence that started after branch A fired
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg, 'expert')).id]);
+    const ago = (m) => new Date(Date.now() - m * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(40), lead.id]);
+    await db.run('UPDATE conversations SET created_at = ? WHERE client_id = ?', [ago(40), lead.id]);
+    await db.run('UPDATE client_events SET created_at = ? WHERE client_id = ?', [ago(40), lead.id]);
+    await db.run(`UPDATE client_events SET created_at = ? WHERE client_id = ? AND type = 'scenario'`, [ago(60), lead.id]);
+    // Branch A fired before the client's last message ("Я новичок" did not fire it again): not after branch A
+    await scheduler.tick();
+    let history = await chatService.history(projectA.id, lead.id);
+    assert(!history.some(m => m.text === 'Удалось посмотреть материал?'), 'Not after branch A this time');
+    // Branch A fired after the client's last message → the follow-up branch fires
+    await db.run(`UPDATE client_events SET created_at = ? WHERE client_id = ? AND type = 'scenario'`, [ago(35), lead.id]);
+    await scheduler.tick();
+    history = await chatService.history(projectA.id, lead.id);
+    assert.strictEqual(history.at(-1).text, 'Удалось посмотреть материал?', 'The branch after branch A sends its text');
+
+    await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

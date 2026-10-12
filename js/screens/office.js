@@ -54,6 +54,7 @@
   const MAX_SCENARIOS = 20;
   const SCENARIO_THEN = {
     si_says: 'SI отвечает так',
+    send_text: 'Отправить клиенту мой текст или ссылку',
     handover: 'Передать человеку (SI на паузу)',
     notify: 'Сообщить мне в Telegram'
   };
@@ -549,53 +550,76 @@
   }
 
   // Methodology: "если…, то…" — SI answers by them, hands the client over or tells the owner
+  // What a branch is called: its title, or its condition
+  function scenarioName(sc) {
+    if (!sc) return '';
+    if (sc.title) return sc.title;
+    if (sc.when === 'custom') return sc.condition;
+    return SCENARIO_WHEN[sc.when] || '';
+  }
+
+  // Hints under "Что сказать или сделать" for each action
+  const THEN_HINTS = {
+    si_says: ['Что SI должен сказать', 'Например: мягко рассказать про рассрочку на 3 месяца'],
+    send_text: ['Текст или ссылка, которые получит клиент', 'Например: Вот запись урока, о которой я говорила: https://...'],
+    handover: ['Что передать человеку (необязательно)', 'Например: обсудить индивидуальные условия'],
+    notify: ['Что напомнить вам (необязательно)', 'Например: позвонить и предложить скидку']
+  };
+
+  // Methodology: the funnel is a tree of branches "если…, то…" the expert (or marketer) builds
   function renderScenarios(c) {
     const list = c.scenarios || [];
     const whenText = (sc) => {
       if (sc.when === 'custom') return SF.esc(sc.condition);
-      if (sc.when === 'silent') return `Клиент молчит ${minutesLabel(sc.minutes)} ${SILENT_AFTER[sc.after] || SILENT_AFTER.any}`;
+      if (sc.when === 'silent') {
+        const after = SILENT_AFTER[sc.after] || `после ветки «${SF.esc(scenarioName(list.find(o => o.id === sc.after)))}»`;
+        return `Клиент молчит ${minutesLabel(sc.minutes)} ${after}`;
+      }
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     };
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
-        ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
-        <div class="text-[11px] text-muted leading-snug">Своя воронка у каждого SI-продавца: по умолчанию сценариев нет, вы пишете их сами — до ${MAX_SCENARIOS}. SI замечает в переписке оффер, возражения, отказ и ваши условия.</div>
+        ${SF.sectionTitle('git-branch', 'Методология: ветки «если…, то…»')}
+        <div class="text-[11px] text-muted leading-snug">Ваша воронка — как дерево: каждая ветка ведёт клиента к покупке своим путём. По умолчанию веток нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этой ветки → SI спрашивает, удалось ли посмотреть».</div>
         ${list.map((sc, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
+              ${sc.title ? `<div class="font-bold text-brand">${SF.esc(sc.title)}</div>` : ''}
               <div><span class="text-faint">Если</span> <span class="font-semibold text-ink">${whenText(sc)}</span></div>
               <div><span class="text-faint">то</span> <span class="font-semibold text-ink">${SCENARIO_THEN[sc.then] || ''}</span>${sc.text ? `<span class="text-ink-2">: ${SF.esc(sc.text)}</span>` : ''}</div>
             </div>
-            <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить сценарий"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить ветку"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
           </div>`).join('')}
-        ${!list.length ? '<div class="text-faint">Сценариев пока нет. Например: если клиент возразил «дорого» → SI рассказывает про рассрочку.</div>' : ''}
-        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} сценариев — это максимум. Удалите ненужный, чтобы добавить новый.</div>` : `
+        ${!list.length ? '<div class="text-faint">Веток пока нет.</div>' : ''}
+        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} веток — это максимум. Удалите ненужную, чтобы добавить новую.</div>` : `
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
+          ${field('title', 'Название ветки (необязательно)', '', { placeholder: 'Например: Хочет рассрочку', max: 60 })}
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Если</span>
-            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
             </select>
           </label>
           ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
-          <div style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент спрашивает, можно ли платить частями', max: 200 })}</div>
+          <div data-custom style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент ответил, что у него уже есть свой бизнес', max: 200, hint: 'SI сам заметит это в переписке.' })}</div>
           <div data-silent style="display:none" class="space-y-2">
             ${field('minutes', 'Через сколько минут молчания', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
             <label class="block space-y-1">
               <span class="font-semibold text-ink-2">После чего замолчал</span>
               <select name="after" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
                 ${Object.entries(SILENT_AFTER).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                ${list.filter(o => o.when !== 'silent').map(o => `<option value="${SF.esc(o.id)}">после ветки «${SF.esc(scenarioName(o))}»</option>`).join('')}
               </select>
             </label>
           </div>
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">То</span>
-            <select name="then" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="then" onchange="const h = SF.office.thenHints[this.value]; this.form.text.parentElement.querySelector('span').textContent = h[0]; this.form.text.placeholder = h[1]" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               ${Object.entries(SCENARIO_THEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
             </select>
           </label>
-          ${field('text', 'Что сказать или сделать', '', { placeholder: 'Например: мягко рассказать про рассрочку на 3 месяца', rows: 2, max: 500 })}
-          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить сценарий</button>
+          ${field('text', THEN_HINTS.si_says[0], '', { placeholder: THEN_HINTS.si_says[1], rows: 2, max: 500 })}
+          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить ветку</button>
         </form>`}
       </div>
     `;
@@ -1041,6 +1065,7 @@
     const c = store().findOfficeConsultant(id);
     if (!c) return;
     const scenario = {
+      title: f.title.value.trim(),
       when: f.when.value,
       words: f.when.value === 'objection' ? f.words.value.trim() : '',
       condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
@@ -1057,13 +1082,17 @@
       showToast('Минут — от 5 до 43 200 (30 дней)');
       return;
     }
+    if (scenario.then === 'send_text' && !scenario.text) {
+      showToast('Вставьте текст или ссылку для клиента');
+      return;
+    }
     if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') {
       showToast('Напишите, что SI должен ответить');
       return;
     }
     try {
       await saveScenarios(id, [...(c.scenarios || []), scenario]);
-      showToast('Сценарий добавлен');
+      showToast('Ветка добавлена');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
     }
@@ -1072,10 +1101,18 @@
   SF.actions.removeScenario = async (id, index) => {
     if (needServer()) return;
     const c = store().findOfficeConsultant(id);
-    if (!c || !confirm('Удалить этот сценарий?')) return;
+    const list = (c && c.scenarios) || [];
+    const removed = list[index];
+    if (!removed) return;
+    // Branches that continue this one ("после ветки «…»") go with it, so they never fire on their own
+    const next = list.filter(o => o.when === 'silent' && o.after === removed.id);
+    const question = next.length
+      ? `Удалить эту ветку? Вместе с ней удалятся ветки, которые идут после неё: ${next.length}.`
+      : 'Удалить эту ветку?';
+    if (!confirm(question)) return;
     try {
-      await saveScenarios(id, (c.scenarios || []).filter((_, i) => i !== index));
-      showToast('Сценарий удалён');
+      await saveScenarios(id, list.filter(o => o !== removed && !next.includes(o)));
+      showToast('Ветка удалена');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось удалить', err));
     }
@@ -1216,6 +1253,7 @@
   };
 
   SF.office = {
+    thenHints: THEN_HINTS,
     title(route) {
       return TITLES[route.screen] || 'Офис';
     },

@@ -2,8 +2,9 @@
 //
 // The funnel is a tree: a follow-up belongs to the branch where the client went silent. The expert
 // writes it in the methodology as an "if…, then…" scenario: "Если клиент замолчал на N минут
-// (в любой момент / после оффера / после возражения / после «Купить», но без чека) → SI пишет
-// своими словами по подсказке / передать человеку / сообщить мне". No scenario exists by default.
+// (в любой момент / после оффера / после возражения / после «Купить», но без чека / после ветки «…»)
+// → SI пишет своими словами / отправить мой текст или ссылку / передать человеку / сообщить мне".
+// No scenario exists by default.
 //
 // Platform rules for every expert, so that chats never turn into spam:
 //  - the client is silent only if the last message is from the SI or a person (not the client),
@@ -67,8 +68,16 @@ async function onBranch(project, client, scenario, lastMessage, since) {
     return !(await db.get(`SELECT id FROM client_events WHERE client_id = ? AND type = 'receipt_sent' AND created_at >= ? LIMIT 1`, [client.id, click.created_at]));
   }
   if (scenario.after === 'offer') return lastMessageIsOffer(project, client, lastMessage);
+  if (/^scn_/.test(scenario.after)) {
+    // After another branch: it fired since the client's last message
+    const rows = await db.all(`SELECT data FROM client_events WHERE client_id = ? AND type = 'scenario' AND created_at >= ?`, [client.id, since]);
+    return rows.some(r => parseJson(r.data).scenarioId === scenario.after);
+  }
   return true;
 }
+
+// SI messages to the client: "SI пишет сам" and "мой текст или ссылка"
+const writesToClient = (then) => then === 'si_says' || then === 'send_text';
 
 /**
  * The scenario to run for this client now (one per minute), or null.
@@ -91,12 +100,12 @@ async function dueScenario(project, client, scenarios, now) {
     `SELECT data, created_at FROM client_events WHERE client_id = ? AND type = 'scenario' AND created_at >= ? ORDER BY created_at ASC`,
     [client.id, since]
   )).map(r => ({ ...parseJson(r.data), at: toDate(r.created_at) }));
-  const siFired = fired.filter(f => f.then === 'si_says' && f.minutes);
+  const siFired = fired.filter(f => writesToClient(f.then) && f.minutes);
 
   for (const scenario of scenarios) {
     if (silentMinutes < scenario.minutes) break; // sorted by minutes
     if (fired.some(f => f.scenarioId === scenario.id)) continue;
-    if (scenario.then === 'si_says') {
+    if (writesToClient(scenario.then)) {
       if (chatService.isSiPaused(client) || siFired.length >= MAX_SI_PER_SILENCE) continue;
       const previous = siFired[siFired.length - 1];
       if (previous && (now - previous.at) / 60000 < scenario.minutes - previous.minutes) continue;
@@ -107,18 +116,22 @@ async function dueScenario(project, client, scenarios, now) {
   return null;
 }
 
-async function act(project, client, scenario) {
+async function act(project, client, scenario, scenarios) {
   // Written first: if the action fails, it is not repeated every minute
   await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then, minutes: scenario.minutes });
-  const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${funnelService.SILENT_AFTER[scenario.after]}`;
-  if (scenario.then === 'si_says') {
-    const result = await siEngine.generateFollowUp({
-      project,
-      expertName: await chatService.expertNameOf(project),
-      history: await chatService.history(project.id, client.id),
-      instruction: scenario.text
-    });
-    await chatService.saveMessage(client, { type: 'si' }, result.text);
+  const branch = funnelService.SILENT_AFTER[scenario.after]
+    || `после ветки «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
+  const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}`;
+  if (writesToClient(scenario.then)) {
+    const text = scenario.then === 'send_text'
+      ? scenario.text
+      : (await siEngine.generateFollowUp({
+        project,
+        expertName: await chatService.expertNameOf(project),
+        history: await chatService.history(project.id, client.id),
+        instruction: scenario.text
+      })).text;
+    await chatService.saveMessage(client, { type: 'si' }, text);
     if (String(client.external_client_id || '').startsWith('usr_')) {
       await telegramBot.notifyUser(client.external_client_id, `💬 «${project.name}» написал(а) вам в SmartFlow.`, {
         buttonText: 'Открыть чат', startParam: project.slug
@@ -152,9 +165,8 @@ async function runSilentScenarios(now = new Date()) {
   let checked = 0;
   let fired = 0;
   for (const project of projects) {
-    const scenarios = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios)
-      .filter(s => s.when === 'silent')
-      .sort((a, b) => a.minutes - b.minutes);
+    const all = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios);
+    const scenarios = all.filter(s => s.when === 'silent').sort((a, b) => a.minutes - b.minutes);
     if (!scenarios.length) continue;
     // After a follow-up last_activity moves on; the next one may come after the pause between two scenarios
     let pause = scenarios[0].minutes;
@@ -172,7 +184,7 @@ async function runSilentScenarios(now = new Date()) {
       try {
         const scenario = await dueScenario(project, client, scenarios, now);
         if (!scenario) continue;
-        await act(project, client, scenario);
+        await act(project, client, scenario, all);
         fired++;
       } catch (err) {
         console.warn(`[SmartFlow Followup] ${client.id}: ${err.message}`);

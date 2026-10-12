@@ -58,7 +58,8 @@ const SCENARIO_WHEN = {
   custom: 'Своё условие'
 };
 // "Клиент замолчал на N минут" — a follow-up on one branch of the funnel (the funnel is a tree):
-// after what the client went silent. Checked by the server alarm clock (followup-service.js).
+// after what the client went silent — also "after the branch «…»" (after: the id of another
+// scenario), so branches link into a tree. Checked by the server alarm clock (followup-service.js).
 const SILENT_AFTER = {
   any: 'в любой момент разговора',
   offer: 'после оффера',
@@ -68,6 +69,7 @@ const SILENT_AFTER = {
 const SILENT_MINUTES = { min: 5, max: 30 * 24 * 60, default: 60 };
 const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
+  send_text: 'Отправить клиенту мой текст или ссылку',
   handover: 'Передать человеку (SI на паузу)',
   notify: 'Сообщить мне в Telegram'
 };
@@ -87,6 +89,8 @@ function normalizeScenarios(list) {
     if (!raw || !SCENARIO_WHEN[raw.when] || !SCENARIO_THEN[raw.then]) continue;
     const scenario = {
       id: /^scn_[a-z0-9]{4,20}$/.test(raw.id) ? raw.id : `scn_${crypto.randomBytes(5).toString('hex')}`,
+      // A short name of the branch («Хочет рассрочку»), so other branches can refer to it
+      title: clean(raw.title, 60),
       when: raw.when,
       words: raw.when === 'objection' ? clean(raw.words, 120) : '',
       condition: raw.when === 'custom' ? clean(raw.condition, 200) : '',
@@ -96,14 +100,29 @@ function normalizeScenarios(list) {
     if (raw.when === 'silent') {
       const minutes = parseInt(raw.minutes, 10) || SILENT_MINUTES.default;
       scenario.minutes = Math.max(SILENT_MINUTES.min, Math.min(SILENT_MINUTES.max, minutes));
-      scenario.after = SILENT_AFTER[raw.after] ? raw.after : 'any';
+      scenario.after = SILENT_AFTER[raw.after] || /^scn_[a-z0-9]{4,20}$/.test(raw.after) ? raw.after : 'any';
     }
     // "SI отвечает так" needs the words — except after silence: then the hint is optional
     if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') continue;
+    // The material itself is the text or link the expert typed
+    if (scenario.then === 'send_text' && !scenario.text) continue;
     if (scenario.when === 'custom' && !scenario.condition) continue;
     result.push(scenario);
   }
-  return result;
+  // "После ветки «…»" must point to a branch that exists (and not to itself); otherwise the
+  // branch is dropped rather than turned into "any silence" — it must never fire unexpectedly
+  return result.filter(s => s.when !== 'silent' || SILENT_AFTER[s.after]
+    || (s.after !== s.id && result.some(o => o.id === s.after && o.when !== 'silent')));
+}
+
+/**
+ * What a branch is called in messages to the expert: its title, or its condition.
+ */
+function scenarioName(scenario) {
+  if (!scenario) return '';
+  if (scenario.title) return scenario.title;
+  if (scenario.when === 'custom') return scenario.condition;
+  return SCENARIO_WHEN[scenario.when] || '';
 }
 
 const wordsOf = (scenario) => scenario.words.split(/[,;]/).map(w => w.trim().toLowerCase()).filter(Boolean);
@@ -307,6 +326,7 @@ module.exports = {
   SCENARIO_THEN,
   MAX_SCENARIOS,
   SILENT_AFTER,
+  scenarioName,
   SILENT_MINUTES,
   minutesLabel,
   PAGE_SIZE,
