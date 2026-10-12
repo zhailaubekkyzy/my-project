@@ -1520,6 +1520,29 @@ async function runAllTests() {
     await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
   });
 
+  await test('49. Уведомления сначала у Бадди в приложении, потом в Telegram; каждый видит только свои', async () => {
+    telegramBot.testOutbox.length = 0;
+    const sent = await telegramBot.notifyUser(expertA_InternalId, '⏰ Тест: клиент молчит 1 ч', { buttonText: 'Открыть', startParam: `I_${projectA.id}` });
+    assert.strictEqual(sent, true, 'Telegram too');
+    const mine = await api('GET', '/api/me/notifications', tokenA);
+    assert.strictEqual(mine.status, 200);
+    const note = mine.body.notifications.find(n => n.text === '⏰ Тест: клиент молчит 1 ч');
+    assert(note, 'The notification is in Buddy');
+    assert.strictEqual(note.startParam, `I_${projectA.id}`, 'It leads to the same place as the bot button');
+    assert.strictEqual(note.read, false);
+    assert(mine.body.unread >= 1);
+    const other = await api('GET', '/api/me/notifications', tokenB);
+    assert(!other.body.notifications.some(n => n.id === note.id), 'Nobody else sees it');
+    assert.strictEqual((await api('POST', '/api/me/notifications/read', tokenB, { id: note.id })).status, 200);
+    assert.strictEqual((await api('GET', '/api/me/notifications', tokenA)).body.notifications.find(n => n.id === note.id).read, false, 'Another person cannot mark it read');
+    await api('POST', '/api/me/notifications/read', tokenA, { id: note.id });
+    assert.strictEqual((await api('GET', '/api/me/notifications', tokenA)).body.notifications.find(n => n.id === note.id).read, true);
+    await api('POST', '/api/me/notifications/read', tokenA, {});
+    assert.strictEqual((await api('GET', '/api/me/notifications', tokenA)).body.unread, 0, '"Прочитать все"');
+    // An unknown person: nothing breaks
+    assert.strictEqual(await telegramBot.notifyUser('usr_does_not_exist', 'x'), false);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

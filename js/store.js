@@ -70,7 +70,8 @@ const defaultData = {
     business: null,          // my business: members, and the businesses I assist
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
-    clientCards: {}          // { [clientId]: { funnel_status, last_objection, events } }
+    clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
+    notifications: null      // { list, unread } Buddy: every notification first comes here
   },
 
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)

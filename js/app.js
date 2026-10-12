@@ -202,7 +202,11 @@ SF.openIn = (tab, screen, params = {}) => {
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
-  const param = tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
+  SF.openStartParam(tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp'));
+}
+
+// The same places open from a notification in Buddy (it keeps the bot button's start param)
+SF.openStartParam = (param) => {
   if (!param || !/^[A-Za-z0-9_-]{1,64}$/.test(param)) return;
   if (param.startsWith('C_')) {
     SF.openIn('marketplace', 'consultant', { id: param.slice(2) });
@@ -219,7 +223,7 @@ function handleStartParam() {
   } else {
     SF.openIn('chats', 'chat', { slug: param });
   }
-}
+};
 
 // -------------------------------------------------------------
 // Rendering

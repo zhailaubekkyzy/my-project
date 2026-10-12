@@ -49,6 +49,18 @@
     };
   }
 
+  function timeLabel(value) {
+    if (!value) return '';
+    const d = new Date(String(value).replace(' ', 'T') + (/[Z+]/.test(String(value)) ? '' : 'Z'));
+    return isNaN(d) ? '' : d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Notifications from the server: every one comes here first, then the bot repeats it in Telegram
+  function serverNotes(state) {
+    const n = state.remote.notifications;
+    return n ? n.list.slice(0, 10) : [];
+  }
+
   function notifications(state) {
     const list = [];
     (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).forEach(c => {
@@ -121,14 +133,24 @@
       ` : ''}
 
       <div class="space-y-2">
-        ${SF.sectionTitle('bell', 'Уведомления')}
+        ${SF.sectionTitle('bell', 'Уведомления', state.remote.notifications && state.remote.notifications.unread ? `<button onclick="SF.actions.readAllNotifications()" class="text-[10px] text-brand font-semibold">Прочитать все</button>` : '')}
+        ${serverNotes(state).map(n => `
+          <button onclick="SF.actions.openNotification('${SF.js(n.id)}', '${SF.js(n.startParam || '')}')" class="w-full p-3 rounded-2xl text-left text-xs flex items-start gap-2.5 border ${n.read ? 'bg-card border-line text-muted' : 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)] text-ink font-medium'}">
+            ${n.read ? '<i data-lucide="bell" class="w-4 h-4 text-faint flex-shrink-0 mt-0.5"></i>' : '<span class="w-2 h-2 rounded-full bg-[#81D8D0] flex-shrink-0 mt-1"></span>'}
+            <span class="flex-1 min-w-0">
+              <span class="block whitespace-pre-line leading-snug">${SF.esc(n.text)}</span>
+              <span class="block text-[10px] text-faint mt-0.5">${timeLabel(n.createdAt)}</span>
+            </span>
+            ${n.startParam ? '<i data-lucide="chevron-right" class="w-4 h-4 text-faint flex-shrink-0"></i>' : ''}
+          </button>
+        `).join('')}
         ${notes.length ? notes.map(n => `
           <button onclick="${n.action}" class="w-full p-3 rounded-2xl text-left text-xs font-medium flex items-center gap-2.5 border ${n.kind === 'si' ? 'bg-[var(--si-bubble)] border-[var(--si-bubble-line)]' : 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)]'} text-ink">
             ${n.kind === 'si' ? '<span class="si-dot"></span>' : '<i data-lucide="user" class="w-4 h-4 text-brand"></i>'}
             <span class="flex-1">${SF.esc(n.text)}</span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
           </button>
-        `).join('') : `<div class="text-xs text-muted px-1">Новых уведомлений нет.</div>`}
+        `).join('') : (serverNotes(state).length ? '' : `<div class="text-xs text-muted px-1">Новых уведомлений нет.</div>`)}
       </div>
 
       <div class="grid grid-cols-2 gap-2.5">
@@ -177,6 +199,23 @@
     `;
   }
 
+  SF.actions.openNotification = async (id, startParam) => {
+    const n = store().data.remote.notifications;
+    const item = n && n.list.find(x => x.id === id);
+    if (item && !item.read) {
+      store().setRemote('notifications', { list: n.list.map(x => (x.id === id ? { ...x, read: true } : x)), unread: Math.max(0, n.unread - 1) });
+      window.smartFlowApi.markNotificationRead(id).catch(() => {});
+    }
+    if (startParam) SF.openStartParam(startParam);
+  };
+
+  SF.actions.readAllNotifications = async () => {
+    const n = store().data.remote.notifications;
+    if (!n) return;
+    store().setRemote('notifications', { list: n.list.map(x => ({ ...x, read: true })), unread: 0 });
+    window.smartFlowApi.markNotificationRead().catch(() => {});
+  };
+
   SF.actions.dismissBuddyHint = () => {
     hintDismissed = true;
     store().notify();
@@ -187,6 +226,7 @@
     render,
     afterRender() {
       SF.data.myChats();
+      SF.data.notifications();
       SF.data.marketplace();
       if (store().isBusinessActive()) SF.data.allInquiries();
     }
