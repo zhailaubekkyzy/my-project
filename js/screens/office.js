@@ -1,7 +1,7 @@
 // screens/office.js - Office (business profile) inside the Marketplace tab. Real data only.
-// Sections: Мои SI-продавцы · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали · Помощник.
+// Sections: Мои SI-продавцы · Воронка · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали · Помощник.
 // Each SI-consultant has four tabs: Карточка и методология · Аналитика · Клиенты · Рассылки.
-// The assistant of a business sees its SI-sellers with clients and "Мне написали" only: no money,
+// The assistant of a business sees its SI-sellers with clients, the funnel and "Мне написали" only: no money,
 // payment links, SI-brain or settings (the server checks this too).
 
 (function (window) {
@@ -10,11 +10,39 @@
 
   const SECTIONS = [
     { id: 'consultants', label: 'Мои SI', icon: 'bot' },
+    { id: 'funnel', label: 'Воронка', icon: 'filter' },
     { id: 'brain', label: 'SI-мозг', icon: 'brain' },
     { id: 'inbox', label: 'Мне написали', icon: 'user-check' },
     { id: 'team', label: 'Помощник', icon: 'user-plus' }
   ];
-  const ASSISTANT_SECTIONS = ['consultants', 'inbox'];
+  const ASSISTANT_SECTIONS = ['consultants', 'funnel', 'inbox'];
+
+  // Funnel: 5 statuses (names chosen by the owner), colors: waiting — bright, bought — green, refused — gray
+  const FUNNEL = [
+    { id: 'waiting_human', label: 'Ждут человека', cls: 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' },
+    { id: 'objections', label: 'Есть возражения', cls: 'bg-amber-500/10 text-amber-500 border-amber-500/30' },
+    { id: 'not_finished', label: 'Не дошли до конца воронки', cls: 'bg-sunken text-ink-2 border-line' },
+    { id: 'bought', label: 'Купили', cls: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' },
+    { id: 'refused', label: 'Отказ', cls: 'bg-sunken text-faint border-line' }
+  ];
+  const FUNNEL_DAYS = [{ id: '7', label: '7 дней' }, { id: '30', label: '30 дней' }, { id: 'all', label: 'Всё время' }];
+  const funnelOf = (status) => FUNNEL.find(f => f.id === status) || FUNNEL[2];
+
+  // "Если…, то…" scenarios in the methodology (the server keeps only these values)
+  const SCENARIO_WHEN = {
+    objection: 'Клиент возразил',
+    offer_answered: 'Клиент ответил на оффер',
+    buy_clicked: 'Клиент нажал «Купить»',
+    receipt_sent: 'Клиент прислал чек',
+    refused: 'Клиент отказался',
+    custom: 'Своё условие (напишу словами)'
+  };
+  const MAX_SCENARIOS = 20;
+  const SCENARIO_THEN = {
+    si_says: 'SI отвечает так',
+    handover: 'Передать человеку (SI на паузу)',
+    notify: 'Сообщить мне в Telegram'
+  };
 
   const CONSULTANT_TABS = [
     { id: 'methodology', label: 'Карточка и методология', icon: 'git-branch' },
@@ -104,13 +132,14 @@
     const waiting = SF.data.waitingInquiries(state).length;
     let body = '';
     if (section === 'consultants') body = renderConsultantList(state);
+    if (section === 'funnel') body = renderFunnel(route, state);
     if (section === 'brain') body = renderBrain(state);
     if (section === 'inbox') body = renderInbox(state);
     if (section === 'team') body = renderTeam(state);
     return `
-      <div class="grid ${sections.length === 4 ? 'grid-cols-4' : 'grid-cols-2'} gap-1.5 bg-raised p-1.5 rounded-2xl border border-line">
+      <div class="grid ${sections.length === 5 ? 'grid-cols-5' : 'grid-cols-3'} gap-1 bg-raised p-1.5 rounded-2xl border border-line">
         ${sections.map(s => `
-          <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[11px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+          <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[10px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
             ${s.id === 'inbox' && waiting ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waiting}</span>` : ''}
           </button>`).join('')}
@@ -161,6 +190,57 @@
           </button>`).join('')}
         ${!list.length ? `<div class="text-xs text-muted px-1">${SF.data.signedIn() ? 'Пока нет SI-продавцов — создайте первого.' : 'Откройте приложение в Telegram, чтобы увидеть своих SI-продавцов.'}</div>` : ''}
       </div>
+    `;
+  }
+
+  // ---------------- Funnel: where every client of the business is now ----------------
+  // The business shown: my own, or (for the assistant) the one I help
+  function funnelBusinessId(state) {
+    const info = state.remote.business;
+    if (!info) return null;
+    if (info.business) return info.business.id;
+    return info.assisting && info.assisting[0] ? info.assisting[0].businessId : '';
+  }
+
+  function renderFunnel(route, state) {
+    const businessId = funnelBusinessId(state);
+    if (businessId === null) return '<div class="text-xs text-muted">Загружаю…</div>';
+    if (!businessId) {
+      return SF.emptyState('consultant', 'Воронка появится с первым SI-продавцом', 'Создайте и включите SI-продавца — здесь будет видно, на каком шаге каждый клиент.');
+    }
+    const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
+    const funnel = state.remote.funnel[`${businessId}|${days}`];
+    const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
+    const list = state.remote.funnelLists[`${businessId}|${days}|${status}`];
+    const counts = (funnel && funnel.counts) || {};
+    return `
+      <div class="flex gap-1.5">
+        ${FUNNEL_DAYS.map(d => `
+          <button onclick="SF.patch({ days: '${d.id}' })" class="flex-1 py-1.5 rounded-xl text-[11px] font-semibold border ${days === d.id ? 'bg-card border-[#81D8D0] text-ink' : 'bg-sunken border-line text-muted'}">${d.label}</button>`).join('')}
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        ${FUNNEL.map((f, i) => `
+          <button onclick="SF.patch({ fstatus: '${f.id}' })" class="${i === 0 ? 'col-span-2 ' : ''}p-3 rounded-2xl border text-left ${f.cls} ${status === f.id ? 'ring-2 ring-[#81D8D0] ring-offset-1 ring-offset-page' : ''}">
+            <div class="text-[11px] font-semibold leading-tight">${f.label}</div>
+            <div class="text-xl font-extrabold">${funnel ? (counts[f.id] || 0) : '…'}</div>
+          </button>`).join('')}
+      </div>
+      <div class="text-[10px] text-faint px-1 leading-snug">«Есть возражения» — клиент ответил на оффер или засомневался, но ещё не купил. «Купили» и «Отказ» отмечаете вы или помощник в карточке клиента; SI сам замечает оффер, возражения и отказ в переписке.</div>
+      ${SF.sectionTitle('', funnelOf(status).label)}
+      ${!list ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
+      ${list && !list.clients.length ? '<div class="text-xs text-muted px-1">Здесь пока никого нет.</div>' : ''}
+      <div class="space-y-1.5">
+        ${(list ? list.clients : []).map(cl => `
+          <button onclick="SF.push('office-client', { id: '${SF.js(cl.id)}', projectId: '${SF.js(cl.project_id)}' })" class="w-full p-2.5 rounded-xl bg-card border border-line flex items-center gap-2.5 text-left">
+            ${SF.avatar(cl.avatar_url, { size: 32 })}
+            <span class="flex-1 min-w-0">
+              <span class="block text-xs font-bold text-ink truncate">${SF.esc(cl.name)}</span>
+              <span class="block text-[10px] text-muted truncate">${cl.last_objection ? `«${SF.esc(cl.last_objection)}» · ` : ''}${SF.esc(cl.project_name)}</span>
+            </span>
+            <span class="text-[10px] text-faint whitespace-nowrap">${timeLabel(cl.last_activity)}</span>
+          </button>`).join('')}
+      </div>
+      ${list && !list.done ? `<button onclick="SF.actions.moreFunnel('${SF.js(businessId)}', '${days}', '${status}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}
     `;
   }
 
@@ -293,7 +373,7 @@
           <div class="font-bold text-brand">Может</div>
           <div class="text-ink-2">Отвечать в «Мне написали»</div>
           <div class="text-ink-2">Ставить SI на паузу и включать</div>
-          <div class="text-ink-2">Смотреть карточки клиентов</div>
+          <div class="text-ink-2">Смотреть карточки клиентов и воронку</div>
         </div>
         <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
           <div class="font-bold text-muted">Не может</div>
@@ -424,6 +504,7 @@
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
           ${field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
           ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого SI-продавца. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
+          ${field('accessUrl', 'Ссылка на доступ после оплаты (необязательно)', c.accessUrl, { type: 'url', placeholder: 'https://... (курс, закрытый канал)', max: 300, hint: 'Клиент получит её, только когда вы или помощник подтвердите его чек. SI эту ссылку не знает и сам не выдаёт.' })}
           <div class="grid grid-cols-2 gap-2">
             <label class="block space-y-1">
               <span class="font-semibold text-ink-2">Тип</span>
@@ -449,6 +530,49 @@
 
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Сохранить</button>
       </form>
+      ${renderScenarios(c)}
+    `;
+  }
+
+  // Methodology: "если…, то…" — SI answers by them, hands the client over or tells the owner
+  function renderScenarios(c) {
+    const list = c.scenarios || [];
+    const whenText = (sc) => sc.when === 'custom'
+      ? SF.esc(sc.condition)
+      : `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
+        <div class="text-[11px] text-muted leading-snug">Своя воронка у каждого SI-продавца: по умолчанию сценариев нет, вы пишете их сами — до ${MAX_SCENARIOS}. SI замечает в переписке оффер, возражения, отказ и ваши условия.</div>
+        ${list.map((sc, i) => `
+          <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
+            <div class="flex-1 min-w-0 space-y-0.5">
+              <div><span class="text-faint">Если</span> <span class="font-semibold text-ink">${whenText(sc)}</span></div>
+              <div><span class="text-faint">то</span> <span class="font-semibold text-ink">${SCENARIO_THEN[sc.then] || ''}</span>${sc.text ? `<span class="text-ink-2">: ${SF.esc(sc.text)}</span>` : ''}</div>
+            </div>
+            <button onclick="SF.actions.removeScenario('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить сценарий"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+          </div>`).join('')}
+        ${!list.length ? '<div class="text-faint">Сценариев пока нет. Например: если клиент возразил «дорого» → SI рассказывает про рассрочку.</div>' : ''}
+        ${list.length >= MAX_SCENARIOS ? `<div class="text-faint">Добавлено ${MAX_SCENARIOS} сценариев — это максимум. Удалите ненужный, чтобы добавить новый.</div>` : `
+        <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
+          <label class="block space-y-1">
+            <span class="font-semibold text-ink-2">Если</span>
+            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+              ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+            </select>
+          </label>
+          ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
+          <div style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент спрашивает, можно ли платить частями', max: 200 })}</div>
+          <label class="block space-y-1">
+            <span class="font-semibold text-ink-2">То</span>
+            <select name="then" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+              ${Object.entries(SCENARIO_THEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+            </select>
+          </label>
+          ${field('text', 'Что сказать или сделать', '', { placeholder: 'Например: мягко рассказать про рассрочку на 3 месяца', rows: 2, max: 500 })}
+          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить сценарий</button>
+        </form>`}
+      </div>
     `;
   }
 
@@ -539,6 +663,8 @@
         <button onclick="SF.actions.setClientSi('${SF.js(route.projectId)}', '${SF.js(client.id)}', ${paused})" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] font-bold">${paused ? 'Включить SI' : 'Поставить на паузу'}</button>
       </div>
 
+      ${renderClientFunnel(route, client, state)}
+
       <div class="glass-card-3d p-3 space-y-2">
         <div class="space-y-2 max-h-96 overflow-y-auto py-1 pr-1" id="client-chat-scroll">
           ${!messages ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
@@ -557,6 +683,55 @@
         <div class="text-[10px] text-faint">Клиент получит уведомление в Telegram, если разрешил боту писать ему.</div>
       </div>
     `;
+  }
+
+  // Where the client is in the funnel, the outcome buttons and the event journal
+  function renderClientFunnel(route, client, state) {
+    const card = state.remote.clientCards[route.id];
+    const status = (card && card.funnel_status) || client.funnel_status || 'not_finished';
+    const f = funnelOf(status);
+    const objection = (card && card.last_objection) || client.last_objection;
+    const events = (card && card.events) || [];
+    const receipts = (card && card.receipts) || [];
+    const phone = (card && card.contact_phone) || client.contact_phone;
+    const done = status === 'bought' || status === 'refused';
+    const RECEIPT_STATUS = { new: ['Ждёт проверки', 'text-amber-500'], confirmed: ['Оплата подтверждена', 'text-emerald-500'], rejected: ['Не подтверждён', 'text-faint'] };
+    const button = (outcome, label) => `<button onclick="SF.actions.markOutcome('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${outcome}')" class="flex-1 py-2 rounded-xl btn-3d-dark text-[11px] font-bold">${label}</button>`;
+    return `
+      <div class="glass-card-3d p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="px-2 py-1 rounded-lg border text-[11px] font-bold ${f.cls}">${f.label}</span>
+          ${objection ? `<span class="text-[10px] text-muted truncate">Возражение: «${SF.esc(objection)}»</span>` : ''}
+        </div>
+        ${phone ? `<a href="tel:${SF.esc(phone)}" class="block text-[11px] text-brand font-semibold">📱 ${SF.esc(phone)} <span class="text-faint font-normal">· клиент поделился контактом</span></a>` : ''}
+        ${receipts.map(r => `
+          <div class="p-2 rounded-xl bg-sunken border border-line space-y-1.5">
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+              <button onclick="SF.actions.viewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', '${SF.js(r.mimeType)}')" class="font-semibold text-ink flex items-center gap-1"><i data-lucide="receipt" class="w-3.5 h-3.5"></i>Чек · ${timeLabel(r.createdAt)}</button>
+              <span class="font-bold ${RECEIPT_STATUS[r.status][1]}">${RECEIPT_STATUS[r.status][0]}</span>
+            </div>
+            ${r.status === 'new' ? `
+              <div class="flex gap-2">
+                <button onclick="SF.actions.reviewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', 'confirm')" class="flex-1 py-1.5 rounded-lg btn-3d-tiffany text-[11px] font-bold">Подтвердить оплату</button>
+                <button onclick="SF.actions.reviewReceipt('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${SF.js(r.id)}', 'reject')" class="flex-1 py-1.5 rounded-lg btn-3d-dark text-[11px]">Не подтверждаю</button>
+              </div>
+              <div class="text-[10px] text-faint">Сначала проверьте, что деньги пришли. После подтверждения клиент получит сообщение${store().findOfficeConsultant(route.projectId)?.accessUrl ? ' и ссылку на доступ' : ''}.</div>` : ''}
+          </div>`).join('')}
+        <div class="flex gap-2">
+          ${done ? button('reopened', 'Вернуть в воронку') : `${button('paid', '✓ Купил')}${button('refused', 'Отказ')}`}
+        </div>
+        ${events.length ? `
+          <details class="text-[11px]">
+            <summary class="cursor-pointer text-muted">Журнал событий (${events.length})</summary>
+            <div class="mt-1.5 space-y-1">
+              ${events.map(e => `
+                <div class="flex items-baseline gap-2">
+                  <span class="text-faint whitespace-nowrap">${timeLabel(e.createdAt)}</span>
+                  <span class="text-ink-2">${SF.esc(e.label)}${e.detail ? `: ${SF.esc(e.detail)}` : ''}</span>
+                </div>`).join('')}
+            </div>
+          </details>` : ''}
+      </div>`;
   }
 
   // ---------------- Actions ----------------
@@ -620,6 +795,11 @@
       showToast('Ссылка на оплату должна начинаться с https://');
       return;
     }
+    const accessUrl = f.accessUrl.value.trim();
+    if (accessUrl && !isWebUrl(accessUrl)) {
+      showToast('Ссылка на доступ должна начинаться с https://');
+      return;
+    }
     const goal = f.goal.value.trim();
     const instructions = f.instructions.value.trim();
     const clientLimit = Math.max(5, Math.min(500, parseInt(f.clientLimit.value, 10) || 40));
@@ -631,6 +811,7 @@
         description: f.description.value.trim(),
         price_label: f.priceLabel.value.trim(),
         payment_url: paymentUrl,
+        access_url: accessUrl,
         category: f.category.value,
         trial_days: parseInt(f.trialDays.value, 10) || 0,
         is_listed: f.isListed.checked,
@@ -743,6 +924,128 @@
       showToast('Помощник убран');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.markOutcome = async (projectId, clientId, outcome) => {
+    if (needServer()) return;
+    try {
+      const res = await api().markClientOutcome(projectId, clientId, outcome);
+      const card = store().data.remote.clientCards[clientId] || {};
+      store().setRemote(`clientCards.${clientId}`, { ...card, funnel_status: res.funnelStatus, events: res.events });
+      SF.data.invalidate(`clients:${projectId}`);
+      SF.data.invalidate('funnel');
+      showToast(`Отмечено: ${res.funnelLabel}`);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.viewReceipt = async (projectId, clientId, receiptId, mimeType) => {
+    if (needServer()) return;
+    try {
+      const blob = await api().getReceiptFile(projectId, clientId, receiptId);
+      const url = URL.createObjectURL(blob);
+      SF.openModal(`
+        <div class="space-y-3 text-xs">
+          <h3 class="text-sm font-bold text-ink">Чек клиента</h3>
+          ${mimeType === 'application/pdf'
+            ? `<iframe src="${url}" class="w-full h-[60vh] rounded-xl border border-line bg-card"></iframe>
+               <a href="${url}" download="check.pdf" class="block text-center text-brand font-semibold">Скачать PDF</a>`
+            : `<img src="${url}" alt="Чек" class="w-full rounded-xl border border-line" />`}
+          <button onclick="SF.closeModal()" class="w-full py-2.5 rounded-xl btn-3d-dark">Закрыть</button>
+        </div>`);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не открылся', err));
+    }
+  };
+
+  SF.actions.reviewReceipt = async (projectId, clientId, receiptId, action) => {
+    if (needServer()) return;
+    const question = action === 'confirm'
+      ? 'Деньги пришли? Клиент станет «Купили» и получит сообщение об этом.'
+      : 'Не подтверждать этот чек? Клиенту придёт мягкое сообщение, что нужно уточнить.';
+    if (!confirm(question)) return;
+    try {
+      const res = await api().reviewReceipt(projectId, clientId, receiptId, action);
+      const card = store().data.remote.clientCards[clientId] || {};
+      store().setRemote(`clientCards.${clientId}`, { ...card, funnel_status: res.funnelStatus, events: res.events, receipts: res.receipts });
+      SF.data.invalidate(`clientMessages:${clientId}`);
+      SF.data.invalidate(`clients:${projectId}`);
+      SF.data.invalidate(`inquiries:${projectId}`);
+      SF.data.invalidate('funnel');
+      SF.data.clientMessages(projectId, clientId);
+      showToast(action === 'confirm' ? 'Оплата подтверждена, клиент получил сообщение' : 'Клиенту написали, что нужно уточнить');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.moreFunnel = async (businessId, days, status) => {
+    if (needServer()) return;
+    const key = `${businessId}|${days}|${status}`;
+    const list = store().data.remote.funnelLists[key];
+    if (!list) return;
+    try {
+      const res = await api().getFunnel({ businessId, days: days === 'all' ? '' : days, status, offset: list.clients.length });
+      const more = res.clients || [];
+      const seen = new Set(list.clients.map(c => c.id));
+      store().setRemote(`funnelLists.${key}`, {
+        clients: list.clients.concat(more.filter(c => !seen.has(c.id))),
+        done: more.length < (res.pageSize || 30)
+      });
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не загрузилось', err));
+    }
+  };
+
+  // Scenarios are saved inside custom_ai_settings, merged with what the server has
+  async function saveScenarios(id, scenarios) {
+    const project = await api().getProject(id);
+    const res = await api().updateProject(id, {
+      custom_ai_settings: { ...(project.custom_ai_settings || {}), scenarios }
+    });
+    store().updateOfficeConsultant(id, { scenarios: (res.custom_ai_settings || {}).scenarios || scenarios });
+  }
+
+  SF.actions.addScenario = async (e, id) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const f = e.target;
+    const c = store().findOfficeConsultant(id);
+    if (!c) return;
+    const scenario = {
+      when: f.when.value,
+      words: f.when.value === 'objection' ? f.words.value.trim() : '',
+      condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
+      then: f.then.value,
+      text: f.text.value.trim()
+    };
+    if (scenario.when === 'custom' && !scenario.condition) {
+      showToast('Напишите условие словами');
+      return;
+    }
+    if (scenario.then === 'si_says' && !scenario.text) {
+      showToast('Напишите, что SI должен ответить');
+      return;
+    }
+    try {
+      await saveScenarios(id, [...(c.scenarios || []), scenario]);
+      showToast('Сценарий добавлен');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
+    }
+  };
+
+  SF.actions.removeScenario = async (id, index) => {
+    if (needServer()) return;
+    const c = store().findOfficeConsultant(id);
+    if (!c || !confirm('Удалить этот сценарий?')) return;
+    try {
+      await saveScenarios(id, (c.scenarios || []).filter((_, i) => i !== index));
+      showToast('Сценарий удалён');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось удалить', err));
     }
   };
 
@@ -901,6 +1204,16 @@
         SF.data.allInquiries();
         if (route.section === 'brain') SF.data.brain();
         if (route.section === 'team') SF.data.business();
+        if (route.section === 'funnel') {
+          SF.data.business();
+          const businessId = funnelBusinessId(state);
+          if (businessId) {
+            const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
+            const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
+            SF.data.funnel(businessId, days);
+            SF.data.funnelList(businessId, days, status);
+          }
+        }
       } else if (route.screen === 'office-consultant') {
         const c = store().findOfficeConsultant(route.id);
         if (c && c.assisting) {
@@ -913,6 +1226,7 @@
       } else if (route.screen === 'office-client') {
         SF.data.clients(route.projectId);
         SF.data.clientMessages(route.projectId, route.id);
+        SF.data.clientCard(route.projectId, route.id);
         SF.scrollToBottom('client-chat-scroll');
         SF.data.poll(`client:${route.id}`, () => SF.data.clientMessages(route.projectId, route.id));
       }

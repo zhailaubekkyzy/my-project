@@ -233,6 +233,29 @@
       return await apiFetch(`/api/business/assistants/${encodeURIComponent(userId)}`, { method: 'DELETE' });
     },
 
+    // Funnel of a business: counts per status; with status — a portion of 30 clients
+    async getFunnel({ businessId = '', status = '', days = '', offset = 0 } = {}) {
+      const q = new URLSearchParams();
+      if (businessId) q.set('businessId', businessId);
+      if (status) q.set('status', status);
+      if (days) q.set('days', String(days));
+      if (offset) q.set('offset', String(offset));
+      return await apiFetch(`/api/business/funnel?${q.toString()}`);
+    },
+
+    // A client card with the funnel status and the event journal
+    async getClient(projectId, clientId) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}`);
+    },
+
+    // "Купил" / "Отказ" / "Вернуть в воронку"
+    async markClientOutcome(projectId, clientId, outcome) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/funnel`, {
+        method: 'POST',
+        body: JSON.stringify({ outcome })
+      });
+    },
+
     async getHumanInquiries(projectId) {
       return await apiFetch(`/api/projects/${projectId}/clients/inquiries/list`);
     },
@@ -294,6 +317,51 @@
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/messages`, {
         method: 'POST',
         body: JSON.stringify({ text })
+      });
+    },
+
+    // Payment receipt (photo or PDF) from the client: the expert or the assistant checks it
+    async uploadReceipt(slug, file) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/receipts`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file
+      });
+    },
+
+    // Telegram's "Поделиться контактом": the signed answer goes to the server for checking
+    async shareContact(slug, response) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/contact`, {
+        method: 'POST',
+        body: JSON.stringify({ response })
+      });
+    },
+
+    async reviewReceipt(projectId, clientId, receiptId, action) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/receipts/${receiptId}`, {
+        method: 'POST',
+        body: JSON.stringify({ action })
+      });
+    },
+
+    // The receipt file (private: needs the session, so it is loaded as a Blob, not by a plain link)
+    async getReceiptFile(projectId, clientId, receiptId) {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/clients/${clientId}/receipts/${receiptId}/file`, {
+        headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}
+      });
+      if (!res.ok) {
+        const error = new Error(res.status === 404 ? 'Чек не найден' : `Ошибка сервера ${res.status}`);
+        error.status = res.status;
+        throw error;
+      }
+      return await res.blob();
+    },
+
+    // The client's own actions for the expert's journal (e.g. pressed «Купить»)
+    async sendChatEvent(slug, type) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/events`, {
+        method: 'POST',
+        body: JSON.stringify({ type })
       });
     },
 

@@ -215,7 +215,7 @@ async function updateProject(projectId, updateData) {
     values.push(updateData.niche);
   }
   // Marketplace card (validated in routes/projects.js)
-  for (const key of ['offer', 'description', 'price_label', 'payment_url', 'trial_days', 'category', 'is_listed']) {
+  for (const key of ['offer', 'description', 'price_label', 'payment_url', 'access_url', 'trial_days', 'category', 'is_listed']) {
     if (updateData[key] !== undefined) {
       fields.push(`${key} = ?`);
       values.push(updateData[key]);

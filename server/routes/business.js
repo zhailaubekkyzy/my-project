@@ -53,7 +53,7 @@ router.delete('/assistants/:userId', async (req, res, next) => {
 });
 
 /**
- * GET /api/business/funnel?businessId=&status=&offset=
+ * GET /api/business/funnel?businessId=&status=&offset=&days=&projectId=
  * Clients per funnel status (counted on request); with status — that list, 30 at a time.
  * Owner and assistant of the business. Without businessId — my own business.
  */
@@ -64,13 +64,15 @@ router.get('/funnel', async (req, res, next) => {
     if (!businessId || !(await businessService.roleIn(businessId, req.user.userId))) {
       return res.status(404).json({ error: 'not_found', message: 'Бизнес не найден' });
     }
+    // days: 7 / 30 (clients active in that period), empty = all time; projectId: one SI-seller
+    const filter = { days: req.query.days, projectId: req.query.projectId || null };
     const result = {
       businessId,
       statuses: funnelService.STATUSES,
-      counts: await funnelService.counts(businessId)
+      counts: await funnelService.counts(businessId, filter)
     };
     if (req.query.status) {
-      result.clients = await funnelService.clientsInStatus(businessId, String(req.query.status), req.query.offset);
+      result.clients = await funnelService.clientsInStatus(businessId, String(req.query.status), { ...filter, offset: req.query.offset });
       result.pageSize = funnelService.PAGE_SIZE;
     }
     res.json(result);

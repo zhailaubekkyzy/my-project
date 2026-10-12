@@ -97,6 +97,22 @@
       </div>`;
   }
 
+  // Small buttons above the input: share the contact (Telegram's own dialog) and send a receipt.
+  // Hidden by default; the server says when the conversation needs them (thread.tools).
+  const canShareContact = () => typeof window.Telegram?.WebApp?.requestContact === 'function' &&
+    (!window.Telegram.WebApp.isVersionAtLeast || window.Telegram.WebApp.isVersionAtLeast('6.9'));
+  function chatTools(slug, consultant, thread) {
+    const tools = (thread && thread.tools) || {};
+    const contact = Boolean(tools.contact) && !thread.contactShared && canShareContact();
+    const receipt = Boolean(tools.receipt) && Boolean(consultant?.paymentUrl);
+    if (!contact && !receipt) return '';
+    return `
+      <div class="flex gap-2">
+        ${contact ? `<button onclick="SF.actions.shareContact('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-card border border-line text-[11px] text-ink-2 flex items-center justify-center gap-1"><i data-lucide="phone" class="w-3.5 h-3.5"></i>Поделиться контактом</button>` : ''}
+        ${receipt ? `<button onclick="SF.actions.sendReceipt('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-card border border-line text-[11px] text-ink-2 flex items-center justify-center gap-1"><i data-lucide="receipt" class="w-3.5 h-3.5"></i>Отправить чек</button>` : ''}
+      </div>`;
+  }
+
   function renderChat(state, slug) {
     if (!SF.data.signedIn()) {
       return SF.emptyState('assistant', 'Откройте приложение в Telegram', 'Переписка с SI-продавцом доступна после входа через Telegram.');
@@ -137,6 +153,8 @@
           <div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">печатает</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
         </div>
       </div>
+
+      ${chatTools(slug, consultant, thread)}
 
       <form onsubmit="SF.actions.sendChat(event, '${SF.js(slug)}')" class="flex items-center gap-2">
         <input type="text" name="text" data-keep="chat-input" maxlength="2000" autocomplete="off" placeholder="Напишите сообщение..." class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
@@ -253,9 +271,61 @@
     }
   };
 
+  SF.actions.shareContact = (slug) => {
+    const tg = window.Telegram?.WebApp;
+    if (!tg || typeof tg.requestContact !== 'function') return;
+    tg.requestContact(async (shared, answer) => {
+      if (!shared) return;
+      const response = answer && typeof answer === 'object' ? answer.response : null;
+      if (!response) {
+        showToast('Обновите Telegram, чтобы поделиться контактом');
+        return;
+      }
+      try {
+        await api().shareContact(slug, response);
+        const thread = store().data.remote.messages[slug] || { messages: [] };
+        store().setRemote(`messages.${slug}`, { ...thread, contactShared: true });
+        showToast('Готово: эксперт увидит ваш номер');
+      } catch (err) {
+        showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+      }
+    });
+  };
+
+  SF.actions.sendReceipt = async (slug) => {
+    if (!window.sfMedia || sending) return;
+    try {
+      const file = await window.sfMedia.pickReceipt();
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('Файл больше 5 МБ. Сделайте снимок экрана с чеком');
+        return;
+      }
+      sending = true;
+      showToast('Отправляю чек…');
+      await api().uploadReceipt(slug, file);
+      SF.data.invalidate(`messages:${slug}`);
+      await SF.data.chatMessages(slug);
+      SF.askWriteAccess(); // so the bot can tell the person when the payment is confirmed
+      showToast('Чек отправлен. Эксперт проверит оплату и напишет здесь');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
+    } finally {
+      sending = false;
+      SF.scrollToBottom('chat-scroll');
+    }
+  };
+
   SF.actions.buy = (slug) => {
     const card = store().data.remote.cards[slug];
     if (card?.paymentUrl) SF.openLink(card.paymentUrl);
+    // The expert sees «Нажал „Купить“» in the client's journal; a failure never blocks the payment
+    // After «Купить» the "Отправить чек" button appears in this chat
+    if (SF.data.signedIn()) {
+      api().sendChatEvent(slug, 'buy_clicked')
+        .then(() => { SF.data.invalidate(`messages:${slug}`); return SF.data.chatMessages(slug); })
+        .catch(() => {});
+    }
   };
 
   SF.actions.hideBuyBanner = (slug) => {

@@ -92,5 +92,37 @@
     return { url: await blobToDataUrl(blob), savedOnServer: false };
   }
 
-  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile };
+  // Payment receipt: a photo is shrunk to 1600 px on the long side (text stays readable),
+  // a PDF goes as it is. Resolves with a Blob, or null if nothing was chosen.
+  const RECEIPT_SIDE = 1600;
+  async function pickReceipt() {
+    const file = await new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*,application/pdf,.pdf';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        resolve(input.files && input.files[0] ? input.files[0] : null);
+        input.remove();
+      });
+      document.body.appendChild(input);
+      input.click();
+    });
+    if (!file) return null;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) return file;
+    const img = await loadImage(file);
+    const scale = Math.min(1, RECEIPT_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Не удалось обработать фото.'))), 'image/jpeg', 0.85);
+    });
+  }
+
+  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile, pickReceipt };
 })(window);

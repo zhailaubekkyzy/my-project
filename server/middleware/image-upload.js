@@ -17,4 +17,18 @@ function readImageBody(req, res, next) {
   });
 }
 
-module.exports = { readImageBody };
+// Payment receipts: photo or PDF up to 5 MB (receipt-service decides by the bytes what it is)
+const rawReceipt = express.raw({ type: () => true, limit: 5 * 1024 * 1024 });
+function readReceiptBody(req, res, next) {
+  rawReceipt(req, res, (err) => {
+    if (!err) return next();
+    const tooLarge = err.status === 413;
+    res.status(tooLarge ? 413 : 400).json({
+      error: 'bad_request',
+      code: tooLarge ? 'RECEIPT_TOO_LARGE' : 'INVALID_RECEIPT',
+      message: tooLarge ? 'Файл больше 5 МБ. Сделайте снимок экрана с чеком.' : 'Не удалось прочитать файл. Выберите чек ещё раз.'
+    });
+  });
+}
+
+module.exports = { readImageBody, readReceiptBody };

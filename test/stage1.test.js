@@ -489,7 +489,9 @@ async function runAllTests() {
     config.openaiApiKey = 'sk-test-not-real';
     global.fetch = async (url, options) => {
       if (String(url).startsWith('https://api.openai.com/')) {
-        sentToOpenAI = { url, headers: options.headers, body: JSON.parse(options.body) };
+        const body = JSON.parse(options.body);
+        // The funnel analysis of the same turn goes in a separate request (JSON answer)
+        if (!body.response_format) sentToOpenAI = { url, headers: options.headers, body };
         return new Response(JSON.stringify({ choices: [{ message: { content: 'Разбор стоит 15 000 ₽.' } }] }), { status: 200 });
       }
       return realFetch(url, options);
@@ -675,7 +677,8 @@ async function runAllTests() {
     global.fetch = async (url, options) => {
       if (String(url) === 'https://api.openai.com/v1/embeddings') return new Response('{"error":{"message":"no balance"}}', { status: 429 });
       if (String(url).startsWith('https://api.openai.com/')) {
-        systemPrompt = JSON.parse(options.body).messages[0].content;
+        const body = JSON.parse(options.body);
+        if (!body.response_format) systemPrompt = body.messages[0].content; // not the funnel analysis
         return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, вернём в течение 14 дней.' } }] }), { status: 200 });
       }
       return realFetch(url, options);
@@ -987,31 +990,316 @@ async function runAllTests() {
     }
     const funnel = await api('GET', `/api/business/funnel?businessId=${lead.business_id}`, tokenAssistant);
     assert.strictEqual(funnel.status, 200);
-    assert.deepStrictEqual(Object.keys(funnel.body.counts), ['not_finished', 'talked', 'waiting_human', 'bought', 'refused']);
+    assert.deepStrictEqual(Object.keys(funnel.body.counts), ['not_finished', 'objections', 'waiting_human', 'bought', 'refused']);
     assert.strictEqual((await api('GET', `/api/business/funnel?businessId=${lead.business_id}`, tokenOther)).status, 404, 'Strangers see no funnel');
     const page = await api('GET', '/api/business/funnel?status=not_finished', tokenA);
     assert(page.body.clients.length <= funnelService.PAGE_SIZE);
   });
 
-  await test('39. Воронка: цель-оффер — пообщались / не дообщались, исходы купили и отказ', async () => {
+  await test('39. Воронка: цель-оффер — не дошли до конца / есть возражения, исходы купили и отказ', async () => {
     const next = funnelService.nextStatus;
     assert.strictEqual(next({ funnel_status: 'not_finished' }, 'client_message'), 'not_finished', 'No answer to the offer — the path goes on');
-    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'offer_answered'), 'talked', 'Answered the offer — talked');
-    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'client_message'), 'talked');
-    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'paid'), 'bought');
-    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'refused'), 'refused');
+    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'offer_answered'), 'objections', 'Answered the offer but has not bought');
+    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'objection'), 'objections', 'An objection');
+    assert.strictEqual(next({ funnel_status: 'objections', offer_answered_at: 'x' }, 'client_message'), 'objections');
+    assert.strictEqual(next({ funnel_status: 'objections', offer_answered_at: 'x' }, 'paid'), 'bought');
+    assert.strictEqual(next({ funnel_status: 'objections', offer_answered_at: 'x' }, 'refused'), 'refused');
     assert.strictEqual(next({ funnel_status: 'bought' }, 'client_message'), 'bought', 'Outcome stays');
+    assert.strictEqual(next({ funnel_status: 'refused', objection_at: 'x' }, 'reopened'), 'objections', 'Back into the funnel');
+    assert.strictEqual(next({ funnel_status: 'bought' }, 'reopened'), 'not_finished');
     assert.strictEqual(next({ funnel_status: 'not_finished' }, 'handed_to_human'), 'waiting_human');
     assert.strictEqual(next({ funnel_status: 'waiting_human' }, 'client_message'), 'waiting_human');
-    assert.strictEqual(next({ funnel_status: 'waiting_human', offer_answered_at: 'x' }, 'human_replied'), 'talked');
+    assert.strictEqual(next({ funnel_status: 'waiting_human', offer_answered_at: 'x' }, 'human_replied'), 'objections');
+    assert.strictEqual(funnelService.STATUSES.not_finished, 'Не дошли до конца воронки');
+    assert.strictEqual(funnelService.STATUSES.objections, 'Есть возражения');
 
     const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
     await db.run(`UPDATE clients SET funnel_status = 'not_finished', offer_answered_at = NULL WHERE id = ?`, [lead.id]);
     const fresh = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
-    assert.strictEqual(await funnelService.recordEvent(fresh, 'offer_answered', { type: 'client' }), 'talked');
+    assert.strictEqual(await funnelService.recordEvent(fresh, 'offer_answered', { type: 'client' }), 'objections');
     const saved = await db.get('SELECT funnel_status, offer_answered_at FROM clients WHERE id = ?', [lead.id]);
-    assert.strictEqual(saved.funnel_status, 'talked');
+    assert.strictEqual(saved.funnel_status, 'objections');
     assert(saved.offer_answered_at, 'The moment of the answer is kept');
+  });
+
+  await test('42. Сценарии «если…, то…» в методологии; SI отмечает оффер, возражения и отказ; итог отмечают люди', async () => {
+    // Scenarios are saved inside the methodology; unknown conditions and actions are dropped
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: {
+        ...projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings),
+        scenarios: [
+          { when: 'objection', words: 'дорого, нет денег', then: 'si_says', text: 'Мягко расскажи про рассрочку на 3 месяца' },
+          { when: 'objection', words: 'дорого', then: 'notify', text: 'Можно дать скидку' },
+          { when: 'refused', then: 'handover', text: '' },
+          { when: 'hack', then: 'delete_everything' },
+          { when: 'objection', then: 'si_says', text: '' }
+        ]
+      }
+    });
+    assert.strictEqual(put.status, 200);
+    const scenarios = put.body.custom_ai_settings.scenarios;
+    assert.strictEqual(scenarios.length, 3, 'Only valid scenarios are kept');
+    assert(scenarios.every(sc => /^scn_/.test(sc.id)));
+    assert.strictEqual((await api('PUT', `/api/projects/${projectA.id}`, tokenAssistant, { custom_ai_settings: { scenarios: [] } })).status, 403, 'The assistant cannot change the methodology');
+
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/si`, tokenA, { enabled: true });
+    await db.run(`UPDATE clients SET funnel_status = 'not_finished', offer_answered_at = NULL, objection_at = NULL, last_objection = NULL WHERE id = ?`, [lead.id]);
+    await db.run(`DELETE FROM client_events WHERE client_id = ? AND type IN ('offer_sent', 'objection', 'scenario')`, [lead.id]);
+
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let analysis = { offer_made: true, offer_answered: true, objection: 'дорого', refused: false };
+    let system = '';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        if (body.response_format) {
+          return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(analysis) } }] }), { status: 200 });
+        }
+        system = body.messages[0].content;
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'Понимаю вас. Есть рассрочка.' } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      telegramBot.testOutbox.length = 0;
+      const sent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Звучит интересно, но для меня это дорого' });
+      assert.strictEqual(sent.status, 201);
+      assert(system.includes('Мягко расскажи про рассрочку на 3 месяца'), 'The SI follows the "SI отвечает так" scenario');
+      assert(system.includes('«дорого»'), 'With the objection words');
+      let row = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+      assert.strictEqual(row.funnel_status, 'objections');
+      assert.strictEqual(row.last_objection, 'дорого');
+      let types = (await db.all('SELECT type FROM client_events WHERE client_id = ?', [lead.id])).map(e => e.type);
+      for (const type of ['offer_sent', 'offer_answered', 'objection', 'scenario']) assert(types.includes(type), `Journal has ${type}`);
+      assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('Клиент возразил') && m.text.includes('Можно дать скидку')), 'The owner is told by the bot');
+
+      telegramBot.testOutbox.length = 0;
+      await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Всё же дорого' });
+      assert(!telegramBot.testOutbox.some(m => m.text.includes('Клиент возразил')), 'A scenario fires once per client');
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS count FROM client_events WHERE client_id = ? AND type = 'offer_sent'`, [lead.id])).count), 1, 'The offer is noted once');
+
+      analysis = { offer_made: false, offer_answered: false, objection: '', refused: true };
+      await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Нет, спасибо, не буду' });
+      row = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+      assert.strictEqual(row.funnel_status, 'refused');
+      assert.strictEqual(row.responsible_type, 'human', '"Передать человеку" pauses the SI');
+      assert(await db.get(`SELECT id FROM direct_inquiries WHERE client_id = ? AND status = 'waiting' AND reason LIKE 'Сценарий:%'`, [lead.id]), 'A request appears in "Мне написали"');
+
+      // A broken analysis answer never breaks the chat
+      analysis = 'not json';
+      await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/si`, tokenA, { enabled: true });
+      const ok = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Ещё вопрос' });
+      assert.strictEqual(ok.status, 201);
+      assert(ok.body.reply);
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // "Купить" in the chat goes to the journal
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/events`, tokenClient, { type: 'buy_clicked' })).body.recorded, true);
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/events`, tokenClient, { type: 'paid' })).status, 400, 'The client cannot mark a payment');
+
+    // People of the business mark the outcome
+    const back = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenAssistant, { outcome: 'reopened' });
+    assert.strictEqual(back.status, 200);
+    assert.strictEqual(back.body.funnelStatus, 'objections');
+    const paid = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
+    assert.strictEqual(paid.body.funnelStatus, 'bought');
+    assert.strictEqual(paid.body.funnelLabel, 'Купили');
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'magic' })).status, 400);
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenOther, { outcome: 'refused' })).status, 403);
+
+    const card = await api('GET', `/api/projects/${projectA.id}/clients/${lead.id}`, tokenA);
+    const objection = card.body.events.find(e => e.type === 'objection');
+    assert(objection && objection.detail === 'дорого', 'The journal shows the objection');
+    assert(card.body.events.some(e => e.type === 'buy_clicked'));
+
+    // Funnel screen: counts for 7 / 30 days and the list of one status with the SI-seller name
+    const week = await api('GET', `/api/business/funnel?businessId=${lead.business_id}&days=7`, tokenAssistant);
+    assert(week.body.counts.bought >= 1);
+    const list = await api('GET', `/api/business/funnel?businessId=${lead.business_id}&days=30&status=bought`, tokenA);
+    const item = list.body.clients.find(c => c.id === lead.id);
+    assert(item && item.project_name === projectA.name);
+    await db.run(`UPDATE clients SET last_activity = '2020-01-01 00:00:00' WHERE id = ?`, [lead.id]);
+    const old = await api('GET', `/api/business/funnel?businessId=${lead.business_id}&days=7&status=bought`, tokenA);
+    assert(!old.body.clients.some(c => c.id === lead.id), 'Old clients are outside the 7-day filter');
+    await db.run(`UPDATE clients SET last_activity = CURRENT_TIMESTAMP WHERE id = ?`, [lead.id]);
+  });
+
+  await test('43. Чек об оплате: видят только люди бизнеса; подтверждение → «Купили» и ссылка на доступ; контакт из Telegram', async () => {
+    await projectService.updateProject(projectA.id, { payment_url: 'https://pay.example.com/a', access_url: 'https://course.example.com/secret' });
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'reopened' });
+
+    // The access link is never shown publicly, to the assistant or to the SI
+    const card = await api('GET', `/api/chat/${projectA.slug}`, tokenClient);
+    assert(!JSON.stringify(card.body).includes('course.example.com'), 'The public card has no access link');
+    const assisted = await projectService.getUserProjects(assistantUser.id);
+    assert(!JSON.stringify(assisted).includes('course.example.com'), 'The assistant does not see the access link');
+    const prompt = chatService && require('../server/services/si-engine').buildSystemPrompt(await db.get('SELECT * FROM projects WHERE id = ?', [projectA.id]), 'Эксперт');
+    assert(!prompt.includes('course.example.com'), 'The SI does not know the access link');
+    assert(prompt.includes('Отправить чек'), 'The SI asks for a receipt instead of confirming payments itself');
+
+    const upload = (token, buf, type) => fetch(`${baseUrl}/api/chat/${projectA.slug}/receipts`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': type },
+      body: buf
+    }).then(async r => ({ status: r.status, body: await r.json() }));
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+    const pdf = Buffer.from('%PDF-1.4\n% receipt test file\n%%EOF\n');
+    assert.strictEqual((await upload(tokenClient, Buffer.from('<svg onload=alert(1)></svg>  '), 'image/svg+xml')).status, 400, 'Only photos and PDF');
+
+    telegramBot.testOutbox.length = 0;
+    const sent = await upload(tokenClient, png, 'image/png');
+    assert.strictEqual(sent.status, 201);
+    const receiptId = sent.body.receipt.id;
+    let row = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+    assert.strictEqual(row.funnel_status, 'waiting_human', 'A receipt waits for a person');
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('чек')), 'The owner is told');
+    assert(telegramBot.testOutbox.some(m => m.userId === assistantUser.id && m.text.includes('чек')), 'The assistant is told');
+    assert(await db.get(`SELECT id FROM direct_inquiries WHERE client_id = ? AND status = 'waiting' AND reason LIKE 'Прислал(а) чек%'`, [lead.id]), 'It is in "Мне написали"');
+
+    const fileUrl = `${baseUrl}/api/projects/${projectA.id}/clients/${lead.id}/receipts/${receiptId}/file`;
+    const asAssistant = await fetch(fileUrl, { headers: { Authorization: `Bearer ${tokenAssistant}` } });
+    assert.strictEqual(asAssistant.status, 200);
+    assert.strictEqual(asAssistant.headers.get('content-type'), 'image/png');
+    assert(Buffer.from(await asAssistant.arrayBuffer()).equals(png), 'The same file comes back');
+    assert.strictEqual((await fetch(fileUrl, { headers: { Authorization: `Bearer ${tokenOther}` } })).status, 403, 'Strangers cannot see receipts');
+    assert.strictEqual((await fetch(fileUrl)).status, 401);
+    assert.strictEqual((await api('GET', `/api/media/${receiptId}`)).status, 404, 'Never through the public photos');
+    const client = await api('GET', `/api/projects/${projectA.id}/clients/${lead.id}`, tokenA);
+    assert.strictEqual(client.body.receipts[0].status, 'new');
+    assert(!JSON.stringify(client.body.receipts).includes('data_base64'));
+
+    // The assistant confirms: "Купили", the client gets the access link in the chat and a bot message
+    telegramBot.testOutbox.length = 0;
+    const ok = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/receipts/${receiptId}`, tokenAssistant, { action: 'confirm' });
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body.funnelStatus, 'bought');
+    assert(ok.body.message.text.includes('https://course.example.com/secret'));
+    assert.strictEqual(ok.body.message.authorType, 'assistant');
+    assert(telegramBot.testOutbox.some(m => m.userId === clientUser.id && m.text.includes('Оплата подтверждена')));
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/receipts/${receiptId}`, tokenA, { action: 'confirm' })).status, 409, 'Checked once');
+    assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS count FROM direct_inquiries WHERE client_id = ? AND status = 'waiting' AND reason LIKE 'Прислал(а) чек%'`, [lead.id])).count), 0);
+
+    // A second receipt (PDF) is not confirmed: the client is told kindly, the status leaves "waiting"
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'reopened' });
+    const second = await upload(tokenClient, pdf, 'application/pdf');
+    assert.strictEqual(second.status, 201);
+    assert.strictEqual(second.body.receipt.mimeType, 'application/pdf');
+    const no = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/receipts/${second.body.receipt.id}`, tokenA, { action: 'reject' });
+    assert.strictEqual(no.status, 200);
+    assert.notStrictEqual(no.body.funnelStatus, 'waiting_human');
+    assert(!no.body.message.text.includes('course.example.com'), 'No access link without a confirmed payment');
+    const mine = await api('GET', `/api/chat/${projectA.slug}/receipts`, tokenClient);
+    assert.deepStrictEqual(mine.body.receipts.map(r => r.status).sort(), ['confirmed', 'rejected']);
+
+    // Contact: only Telegram's signed answer with the person's own contact
+    const sign = (params) => {
+      const check = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('\n');
+      const secret = crypto.createHmac('sha256', 'WebAppData').update(process.env.TELEGRAM_BOT_TOKEN).digest();
+      const q = new URLSearchParams(params);
+      q.set('hash', crypto.createHmac('sha256', secret).update(check).digest('hex'));
+      return q.toString();
+    };
+    const now = String(Math.floor(Date.now() / 1000));
+    const own = sign({ contact: JSON.stringify({ user_id: clientTg.id, phone_number: '77011234567', first_name: 'Клиент' }), auth_date: now });
+    const foreign = sign({ contact: JSON.stringify({ user_id: 999999, phone_number: '77000000000' }), auth_date: now });
+    const forged = own.replace('77011234567', '77019999999');
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/contact`, tokenClient, { response: forged })).status, 400, 'Changed data is rejected');
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/contact`, tokenClient, { response: foreign })).status, 400, 'Someone else\'s contact is rejected');
+    const shared = await api('POST', `/api/chat/${projectA.slug}/contact`, tokenClient, { response: own });
+    assert.strictEqual(shared.status, 200);
+    assert.strictEqual(shared.body.phone, '+77011234567');
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient)).body.contactShared, true);
+    const withPhone = await api('GET', `/api/projects/${projectA.id}/clients/${lead.id}`, tokenAssistant);
+    assert.strictEqual(withPhone.body.contact_phone, '+77011234567');
+    assert(withPhone.body.contact_consent_at, 'The moment of consent is kept');
+    assert(withPhone.body.events.some(e => e.type === 'contact_shared'));
+  });
+
+  await test('44. Своё условие в сценарии: SI замечает его в переписке и выполняет действие', async () => {
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: {
+        ...projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings),
+        scenarios: [
+          { when: 'custom', condition: 'клиент спрашивает про рассрочку', then: 'notify', text: 'Предложить рассрочку' },
+          { when: 'custom', condition: 'клиент из другой страны', then: 'si_says', text: 'Уточнить часовой пояс' },
+          { when: 'custom', condition: '', then: 'notify' }
+        ]
+      }
+    });
+    assert.strictEqual(put.body.custom_ai_settings.scenarios.length, 2, 'An empty condition is dropped');
+    assert.strictEqual(funnelService.normalizeScenarios(Array.from({ length: 30 }, () => ({ when: 'refused', then: 'notify' }))).length, 20, 'Up to 20 scenarios');
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/si`, tokenA, { enabled: true });
+
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let analysisPrompt = '';
+    let system = '';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        if (body.response_format) {
+          analysisPrompt = body.messages[0].content;
+          return new Response(JSON.stringify({ choices: [{ message: { content: '{"offer_made":false,"offer_answered":false,"objection":"","refused":false,"conditions":[1, 7]}' } }] }), { status: 200 });
+        }
+        system = body.messages[0].content;
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, можно частями.' } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      telegramBot.testOutbox.length = 0;
+      await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'А можно платить частями?' });
+      assert(analysisPrompt.includes('1. клиент спрашивает про рассрочку'), 'The SI looks for the expert\'s conditions');
+      assert(system.includes('Если клиент из другой страны: Уточнить часовой пояс'), 'Custom "SI отвечает так" goes to the SI');
+      assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('клиент спрашивает про рассрочку') && m.text.includes('Предложить рассрочку')));
+      const condition = await db.get(`SELECT data FROM client_events WHERE client_id = ? AND type = 'condition' ORDER BY created_at DESC LIMIT 1`, [lead.id]);
+      assert(condition && condition.data.includes('рассрочку'), 'A number that is not in the list is ignored');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
+  await test('45. Кнопки «Отправить чек» и «Поделиться контактом» — только когда разговор к этому подошёл', async () => {
+    await projectService.updateProject(projectA.id, { payment_url: 'https://pay.example.com/a' });
+    const fresh = { id: 600006, first_name: 'Новый', username: 'new_client' };
+    const token = await tokenFor(fresh);
+    await api('POST', `/api/chat/${projectA.slug}/start`, token);
+    let thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false }, 'No buttons by default');
+
+    // «Купить» pressed → "Отправить чек" appears
+    await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.strictEqual(thread.body.tools.receipt, true);
+    assert.strictEqual(thread.body.tools.contact, false);
+
+    // A person asks for the phone → "Поделиться контактом" appears
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(fresh, 'expert')).id]);
+    await api('POST', `/api/projects/${projectA.id}/conversations/${lead.id}/messages`, tokenA, { text: 'Оставьте, пожалуйста, ваш номер — я перезвоню.' });
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.strictEqual(thread.body.tools.contact, true);
+
+    // Bought → no receipt button; contact shared → no contact button
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
+    await db.run('UPDATE clients SET contact_consent_at = CURRENT_TIMESTAMP WHERE id = ?', [lead.id]);
+    thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false });
+
+    // Without a payment link there is never a receipt button
+    const t = await chatService.chatTools({ payment_url: null }, { id: lead.id, funnel_status: 'not_finished' }, [{ sender: 'ai', text: 'Пришлите чек' }]);
+    assert.strictEqual(t.receipt, false);
+    const si = await chatService.chatTools({ payment_url: 'https://x' }, { id: 'cli_none', funnel_status: 'not_finished' }, [{ sender: 'ai', text: 'Спасибо! Отправьте, пожалуйста, чек кнопкой «Отправить чек»' }]);
+    assert.strictEqual(si.receipt, true, 'The SI asked for a receipt');
   });
 
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {

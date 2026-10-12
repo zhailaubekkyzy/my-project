@@ -69,6 +69,7 @@ async function notifyUser(userId, text, { buttonText = 'Открыть в SmartF
 
 module.exports = {
   miniAppLink,
+  telegramIdOfUser,
   notifyUser,
   testOutbox
 };

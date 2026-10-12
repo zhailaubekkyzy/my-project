@@ -7,6 +7,8 @@ const { requireAuth } = require('../middleware/auth');
 const chatService = require('../services/chat-service');
 const marketplaceService = require('../services/marketplace-service');
 const { mediaUrl } = require('../services/media-service');
+const receiptService = require('../services/receipt-service');
+const { readReceiptBody } = require('../middleware/image-upload');
 
 router.use(requireAuth);
 
@@ -85,9 +87,13 @@ router.get('/:slug/messages', async (req, res, next) => {
     const project = await loadConsultant(req, res);
     if (!project) return;
     const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    const messages = lead ? await chatService.history(project.id, lead.id) : [];
     res.json({
-      messages: lead ? await chatService.history(project.id, lead.id) : [],
-      siPaused: chatService.isSiPaused(lead)
+      messages,
+      siPaused: chatService.isSiPaused(lead),
+      contactShared: Boolean(lead && lead.contact_consent_at),
+      // Which buttons to show above the input (only when the conversation needs them)
+      tools: await chatService.chatTools(project, lead, messages)
     });
   } catch (err) {
     next(err);
@@ -142,6 +148,79 @@ router.post('/:slug/human', async (req, res, next) => {
     res.status(201).json({ success: true, ...result });
   } catch (err) {
     next(err);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/events  { type: 'buy_clicked' }
+ * The client's own actions in the chat that go to the expert's event journal
+ */
+const CLIENT_EVENTS = ['buy_clicked'];
+router.post('/:slug/events', async (req, res, next) => {
+  try {
+    const type = String(req.body?.type || '');
+    if (!CLIENT_EVENTS.includes(type)) return res.status(400).json({ error: 'bad_request', message: 'Неизвестное событие' });
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    if (!lead) return res.json({ recorded: false });
+    await chatService.clientEvent(project, lead, type, { type: 'client' });
+    res.json({ recorded: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function sendReceiptError(res, err, next) {
+  if (err instanceof receiptService.ReceiptError) {
+    return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+  }
+  next(err);
+}
+
+/**
+ * POST /api/chat/:slug/receipts  (body: the photo or PDF itself, up to 5 MB)
+ * The client sends a payment receipt: the owner and the assistant check it
+ */
+router.post('/:slug/receipts', readReceiptBody, async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId);
+    const receipt = await receiptService.saveReceipt(project, lead, req.body, req.user.userId);
+    res.status(201).json({ receipt });
+  } catch (err) {
+    sendReceiptError(res, err, next);
+  }
+});
+
+/**
+ * GET /api/chat/:slug/receipts — my receipts for this SI-seller and their status
+ */
+router.get('/:slug/receipts', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    res.json({ receipts: lead ? await receiptService.receiptsOf(lead.id) : [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/contact  { response }
+ * Telegram's "Поделиться контактом": the signed answer of WebApp.requestContact
+ */
+router.post('/:slug/contact', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId);
+    const result = await receiptService.shareContact(project, lead, req.user.userId, req.body?.response);
+    res.json({ shared: true, phone: result.phone });
+  } catch (err) {
+    sendReceiptError(res, err, next);
   }
 });
 
