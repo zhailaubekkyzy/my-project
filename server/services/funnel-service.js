@@ -7,7 +7,7 @@
 //  - the client asked for a person and nobody answered yet → "Ждут человека" (waiting_human);
 //  - outcomes: "Купили" (bought, marked by the expert or the assistant) and "Отказ" (refused).
 // Scenarios live in the SI-seller's methodology (custom_ai_settings.scenarios): "если клиент
-// возразил «дорого» → SI отвечает так: …", "→ передать человеку", "→ сообщить мне в Telegram".
+// возразил «дорого» → SI отвечает так: …", "→ передать человеку", "→ сообщить мне в SmartFlow".
 // "SI отвечает так" goes into the SI prompt; the other actions run on events (chat-service.js).
 const crypto = require('crypto');
 const db = require('../db');
@@ -72,7 +72,7 @@ const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
   send_text: 'Отправить клиенту мой текст или ссылку',
   handover: 'Передать человеку (SI на паузу)',
-  notify: 'Сообщить мне в Telegram'
+  notify: 'Сообщить мне в SmartFlow'
 };
 const MAX_SCENARIOS = 20;
 

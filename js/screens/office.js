@@ -56,7 +56,7 @@
     si_says: 'SI отвечает так',
     send_text: 'Отправить клиенту мой текст или ссылку',
     handover: 'Передать человеку (SI на паузу)',
-    notify: 'Сообщить мне в Telegram'
+    notify: 'Сообщить мне в SmartFlow'
   };
 
   const CONSULTANT_TABS = [
