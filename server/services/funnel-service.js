@@ -62,6 +62,7 @@ const SCENARIO_WHEN = {
 // scenario), so branches link into a tree. Checked by the server alarm clock (followup-service.js).
 const SILENT_AFTER = {
   any: 'в любой момент разговора',
+  text: 'после того, что я опишу словами',
   offer: 'после оффера',
   objection: 'после возражения',
   buy_clicked: 'после «Купить», но без чека'
@@ -101,6 +102,10 @@ function normalizeScenarios(list) {
       const minutes = parseInt(raw.minutes, 10) || SILENT_MINUTES.default;
       scenario.minutes = Math.max(SILENT_MINUTES.min, Math.min(SILENT_MINUTES.max, minutes));
       scenario.after = SILENT_AFTER[raw.after] || /^scn_[a-z0-9]{4,20}$/.test(raw.after) ? raw.after : 'any';
+      // "После того, как …" in the expert's own words
+      scenario.afterText = scenario.after === 'text' ? clean(raw.afterText, 200) : '';
+      if (scenario.after === 'text' && !scenario.afterText) scenario.after = 'any';
+      if (!scenario.afterText) delete scenario.afterText;
     }
     // "SI отвечает так" needs the words — except after silence: then the hint is optional
     if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') continue;

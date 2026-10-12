@@ -1472,6 +1472,51 @@ async function runAllTests() {
     await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
   });
 
+  await test('48. Условия только словами: кнопки («нажал «Купить»»), «после того, как…», слова в кавычках без OpenAI', async () => {
+    const scheduler = require('../server/services/scheduler-service');
+    const followup = require('../server/services/followup-service');
+    scheduler.register('silent-clients', followup.runSilentScenarios);
+    const settings = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    await projectService.updateProject(projectA.id, { payment_url: 'https://pay.example.com/a' });
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: { ...settings, scenarios: [
+        { title: 'Рассрочка', when: 'custom', condition: 'клиент спросил про «рассрочку»', then: 'send_text', text: 'Рассрочка: https://example.com/split' },
+        { title: 'Нажал купить', when: 'custom', condition: 'клиент нажал «Купить»', then: 'notify', text: 'Проверить оплату' },
+        { title: 'После цены', when: 'silent', minutes: 30, after: 'text', afterText: 'SI назвал «цену»', then: 'send_text', text: 'Остались вопросы по цене?' },
+        { when: 'silent', minutes: 30, after: 'text', afterText: '', then: 'notify' }
+      ] }
+    });
+    const saved = put.body.custom_ai_settings.scenarios;
+    assert.strictEqual(saved[2].afterText, 'SI назвал «цену»');
+    assert.strictEqual(saved[3].after, 'any', 'Empty "после того, как" → any moment');
+
+    // Without OpenAI: words in quotes match the client's message
+    const tg = { id: 700010, first_name: 'Слова' };
+    const token = await tokenFor(tg);
+    await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'А есть рассрочку на 3 месяца?' });
+    let history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+    assert.strictEqual(history.at(-1).text, 'Рассрочка: https://example.com/split', 'The quoted word works without OpenAI');
+
+    // A button press is checked like a message
+    telegramBot.testOutbox.length = 0;
+    await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('Нажал купить') && m.text.includes('Проверить оплату')), '"Клиент нажал «Купить»" written in words fires on the button');
+
+    // "Молчит после того, как SI назвал «цену»": checked on the last messages
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg, 'expert')).id]);
+    await chatService.saveMessage(lead, { type: 'si' }, 'Хорошо! А по стоимости: цену эксперт назовёт на созвоне.');
+    const ago = (m) => new Date(Date.now() - m * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    await db.run('UPDATE clients SET last_activity = ? WHERE id = ?', [ago(40), lead.id]);
+    await db.run('UPDATE conversations SET created_at = ? WHERE client_id = ?', [ago(40), lead.id]);
+    await db.run('UPDATE client_events SET created_at = ? WHERE client_id = ?', [ago(40), lead.id]);
+    await scheduler.tick();
+    await scheduler.tick();
+    history = await chatService.history(projectA.id, lead.id);
+    assert(history.some(m => m.text === 'Остались вопросы по цене?'), 'The silence after the described moment fires');
+
+    await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

@@ -572,7 +572,8 @@
     const whenText = (sc) => {
       if (sc.when === 'custom') return SF.esc(sc.condition);
       if (sc.when === 'silent') {
-        const after = SILENT_AFTER[sc.after] || `после сценария «${SF.esc(scenarioName(list.find(o => o.id === sc.after)))}»`;
+        const after = (sc.after === 'text' && `после «${SF.esc(sc.afterText)}»`) || SILENT_AFTER[sc.after]
+          || `после сценария «${SF.esc(scenarioName(list.find(o => o.id === sc.after)))}»`;
         return `Клиент молчит ${minutesLabel(sc.minutes)} ${after}`;
       }
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
@@ -595,21 +596,26 @@
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
           ${field('title', 'Название сценария (необязательно)', '', { placeholder: 'Например: Хочет рассрочку', max: 60 })}
           <label class="block space-y-1">
-            <span class="font-semibold text-ink-2">Если</span>
-            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
-              ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+            <span class="font-semibold text-ink-2">Когда срабатывает</span>
+            <select name="when" onchange="this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+              <option value="custom">Клиент написал или сделал то, что я опишу</option>
+              <option value="silent">Клиент молчит</option>
             </select>
           </label>
-          ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
-          <div data-custom style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент ответил, что у него уже есть свой бизнес', max: 200, hint: 'SI сам заметит это в переписке.' })}</div>
+          <div data-custom>${field('condition', 'Если… (опишите словами)', '', { placeholder: 'Например: клиент сказал, что дорого / спросил про рассрочку / нажал «Купить»', rows: 2, max: 200, hint: 'SI сам заметит это в переписке и в нажатых кнопках. Слова в кавычках, например «рассрочка», сработают, даже если SI не уверен.' })}</div>
           <div data-silent style="display:none" class="space-y-2">
-            ${field('minutes', 'Через сколько минут молчания', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
+            ${field('minutes', 'Сколько минут молчит', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
             <label class="block space-y-1">
               <span class="font-semibold text-ink-2">После чего замолчал</span>
-              <select name="after" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
-                ${Object.entries(SILENT_AFTER).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+              <select name="after" onchange="this.form.afterText.parentElement.style.display = this.value === 'text' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+                <option value="any">в любой момент разговора</option>
+                <option value="text">опишу словами</option>
                 ${list.filter(o => o.when !== 'silent').map(o => `<option value="${SF.esc(o.id)}">после сценария «${SF.esc(scenarioName(o))}»</option>`).join('')}
               </select>
+            </label>
+            <label class="block space-y-1" style="display:none">
+              <span class="font-semibold text-ink-2">После того, как…</span>
+              <input name="afterText" maxlength="200" placeholder="Например: SI назвал цену" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
             </label>
           </div>
           <label class="block space-y-1">
@@ -1067,13 +1073,17 @@
     const scenario = {
       title: f.title.value.trim(),
       when: f.when.value,
-      words: f.when.value === 'objection' ? f.words.value.trim() : '',
       condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
       minutes: f.when.value === 'silent' ? parseInt(f.minutes.value, 10) || 60 : undefined,
       after: f.when.value === 'silent' ? f.after.value : undefined,
+      afterText: f.when.value === 'silent' && f.after.value === 'text' ? f.afterText.value.trim() : undefined,
       then: f.then.value,
       text: f.text.value.trim()
     };
+    if (scenario.after === 'text' && !scenario.afterText) {
+      showToast('Опишите, после чего клиент замолчал');
+      return;
+    }
     if (scenario.when === 'custom' && !scenario.condition) {
       showToast('Напишите условие словами');
       return;

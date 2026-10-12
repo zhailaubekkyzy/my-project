@@ -211,9 +211,11 @@ async function generateReply({ project, expertName, history = [], userText, know
  * Returns { offerMade, offerAnswered, objection, refused, matched: [ids] } or null (no OpenAI / unclear answer).
  */
 async function analyzeTurn({ project, lastSiText, clientText, conditions = [] }) {
-  if (!isConfigured()) return null;
-  const offer = project.offer || '';
   const list = conditions.slice(0, 20);
+  // Without OpenAI only the words in quotes of the expert's conditions are matched
+  const byWords = () => (list.length ? { offerMade: false, offerAnswered: false, objection: '', refused: false, matched: matchQuoted(list, clientText) } : null);
+  if (!isConfigured()) return byWords();
+  const offer = project.offer || '';
   const text = await callOpenAI([
     {
       role: 'system',
@@ -235,10 +237,10 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
       content: `Продавец: ${String(lastSiText || '(нет)').slice(0, 1500)}\n\nКлиент: ${String(clientText || '').slice(0, 1500)}`
     }
   ], { response_format: { type: 'json_object' } });
-  if (!text) return null;
+  if (!text) return byWords();
   try {
     const r = JSON.parse(text);
-    if (!r || typeof r !== 'object') return null;
+    if (!r || typeof r !== 'object') return byWords();
     return {
       offerMade: r.offer_made === true,
       offerAnswered: r.offer_answered === true,
@@ -250,7 +252,49 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
         .map(c => c.id)
     };
   } catch (e) {
-    return null;
+    return byWords();
+  }
+}
+
+// Words in quotes in the expert's condition: «рассрочка», "скидка"
+function quotedWords(text) {
+  return [...String(text || '').matchAll(/[«"“]([^»"”]{2,60})[»"”]/g)].map(m => m[1].trim().toLowerCase()).filter(Boolean);
+}
+
+function matchQuoted(conditions, text) {
+  const lower = String(text || '').toLowerCase();
+  return conditions.filter(c => quotedWords(c.text).some(w => lower.includes(w))).map(c => c.id);
+}
+
+/**
+ * "Клиент молчит после того, как …" in the expert's own words: does the end of the conversation
+ * match it? messages: [{ sender, text }] oldest first (the last few). Without OpenAI — the words in
+ * quotes must be in the last messages.
+ */
+async function contextMatches({ project, messages = [], description }) {
+  const recent = messages.slice(-6);
+  const byWords = () => {
+    const words = quotedWords(description);
+    const lower = recent.map(m => m.text || '').join('\n').toLowerCase();
+    return words.length > 0 && words.some(w => lower.includes(w));
+  };
+  if (!isConfigured()) return byWords();
+  const answer = await callOpenAI([
+    {
+      role: 'system',
+      content: 'Ответь только JSON {"match": bool}: подходит ли конец переписки продавца с клиентом под описание эксперта. ' +
+        `Описание: «${String(description).slice(0, 300)}». Оффер продавца: ${project.offer || '(не задан)'}.`
+    },
+    {
+      role: 'user',
+      content: recent.map(m => `${m.sender === 'client' ? 'Клиент' : 'Продавец'}: ${String(m.text || '').slice(0, 600)}`).join('\n\n')
+    }
+  ], { response_format: { type: 'json_object' } });
+  if (!answer) return byWords();
+  try {
+    return JSON.parse(answer).match === true;
+  } catch (e) {
+    return byWords();
   }
 }
 
@@ -285,6 +329,8 @@ async function isOffer({ project, text }) {
 
 module.exports = {
   analyzeTurn,
+  contextMatches,
+  quotedWords,
   isOffer,
   generateFollowUp,
   fallbackFollowUp,

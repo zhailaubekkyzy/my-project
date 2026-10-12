@@ -165,7 +165,7 @@ async function shareContact(project, client, userId, response) {
   const phoneShown = phone.startsWith('+') ? phone : `+${phone}`;
   await db.run('UPDATE clients SET contact_phone = ?, contact_consent_at = CURRENT_TIMESTAMP WHERE id = ?', [phoneShown, client.id]);
   if (!(await funnelService.hasEvent(client.id, 'contact_shared'))) {
-    await funnelService.recordEvent(client, 'contact_shared', { type: 'client', userId });
+    await chatService.clientEvent(project, client, 'contact_shared', { type: 'client', userId });
   }
   return { phone: phoneShown };
 }

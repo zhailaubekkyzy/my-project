@@ -54,6 +54,18 @@ async function lastMessageIsOffer(project, client, lastMessage) {
   return offer;
 }
 
+// "После того, как …" in the expert's words: checked once per (scenario, last message)
+const contextChecked = new Map();
+async function describedContext(project, client, scenario, lastMessage) {
+  const key = `${scenario.id}:${lastMessage.id}`;
+  if (contextChecked.has(key)) return contextChecked.get(key);
+  const messages = (await chatService.history(project.id, client.id)).slice(-6);
+  const match = await siEngine.contextMatches({ project, messages, description: scenario.afterText });
+  if (contextChecked.size > 5000) contextChecked.clear();
+  contextChecked.set(key, match);
+  return match;
+}
+
 // After what the client went silent: the branch of the scenario
 async function onBranch(project, client, scenario, lastMessage, since) {
   if (scenario.after === 'objection') {
@@ -68,6 +80,7 @@ async function onBranch(project, client, scenario, lastMessage, since) {
     return !(await db.get(`SELECT id FROM client_events WHERE client_id = ? AND type = 'receipt_sent' AND created_at >= ? LIMIT 1`, [client.id, click.created_at]));
   }
   if (scenario.after === 'offer') return lastMessageIsOffer(project, client, lastMessage);
+  if (scenario.after === 'text') return describedContext(project, client, scenario, lastMessage);
   if (/^scn_/.test(scenario.after)) {
     // After another branch: it fired since the client's last message
     const rows = await db.all(`SELECT data FROM client_events WHERE client_id = ? AND type = 'scenario' AND created_at >= ?`, [client.id, since]);
@@ -119,7 +132,7 @@ async function dueScenario(project, client, scenarios, now) {
 async function act(project, client, scenario, scenarios) {
   // Written first: if the action fails, it is not repeated every minute
   await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then, minutes: scenario.minutes });
-  const branch = funnelService.SILENT_AFTER[scenario.after]
+  const branch = (scenario.after === 'text' && `после «${scenario.afterText}»`) || funnelService.SILENT_AFTER[scenario.after]
     || `после сценария «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
   const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}`;
   if (writesToClient(scenario.then)) {
