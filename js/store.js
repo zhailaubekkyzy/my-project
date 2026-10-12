@@ -279,7 +279,6 @@ class Store {
         instructions: settings.instructions || '',
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
-        followups: settings.followups || null,
         category: p.category || settings.category || 'sales',
         offer: p.offer || '',
         description: p.description || '',

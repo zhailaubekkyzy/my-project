@@ -37,7 +37,6 @@ const EVENTS = {
   paid: 'Оплатил',
   refused: 'Отказ / ушёл',
   reopened: 'Вернули в воронку',
-  followup: 'Догоняющее сообщение',
   contact_shared: 'Поделился контактом',
   condition: 'Условие эксперта',
   scenario: 'Сработал сценарий'
@@ -55,9 +54,18 @@ const SCENARIO_WHEN = {
   buy_clicked: 'Клиент нажал «Купить»',
   receipt_sent: 'Клиент прислал чек',
   refused: 'Клиент отказался',
+  silent: 'Клиент замолчал',
   custom: 'Своё условие'
 };
-// "Клиент замолчал" is not a scenario: the expert sets it up in "Догоняющие сообщения" (below).
+// "Клиент замолчал на N минут" — a follow-up on one branch of the funnel (the funnel is a tree):
+// after what the client went silent. Checked by the server alarm clock (followup-service.js).
+const SILENT_AFTER = {
+  any: 'в любой момент разговора',
+  offer: 'после оффера',
+  objection: 'после возражения',
+  buy_clicked: 'после «Купить», но без чека'
+};
+const SILENT_MINUTES = { min: 5, max: 30 * 24 * 60, default: 60 };
 const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
   handover: 'Передать человеку (SI на паузу)',
@@ -85,7 +93,13 @@ function normalizeScenarios(list) {
       then: raw.then,
       text: clean(raw.text, 500)
     };
-    if (scenario.then === 'si_says' && !scenario.text) continue;
+    if (raw.when === 'silent') {
+      const minutes = parseInt(raw.minutes, 10) || SILENT_MINUTES.default;
+      scenario.minutes = Math.max(SILENT_MINUTES.min, Math.min(SILENT_MINUTES.max, minutes));
+      scenario.after = SILENT_AFTER[raw.after] ? raw.after : 'any';
+    }
+    // "SI отвечает так" needs the words — except after silence: then the hint is optional
+    if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') continue;
     if (scenario.when === 'custom' && !scenario.condition) continue;
     result.push(scenario);
   }
@@ -119,8 +133,9 @@ function customConditions(scenarios) {
  * "SI отвечает так" scenarios as lines for the SI prompt.
  */
 function scenarioPromptLines(scenarios) {
+  // After silence the SI writes the follow-up itself later: not a rule for the conversation
   return normalizeScenarios(scenarios)
-    .filter(s => s.then === 'si_says')
+    .filter(s => s.then === 'si_says' && s.when !== 'silent')
     .map(s => {
       const words = wordsOf(s);
       let when = `Если ${SCENARIO_WHEN[s.when].charAt(0).toLowerCase()}${SCENARIO_WHEN[s.when].slice(1)}`;
@@ -130,58 +145,11 @@ function scenarioPromptLines(scenarios) {
     });
 }
 
-// ---------- "Догоняющие сообщения": the expert's own chain for a silent client ----------
-// Off by default. The expert sets the steps (after how many minutes of silence, what to do) and the
-// rules: how many follow-ups one client may get at most, whether to write to people who never
-// answered, whether the chain starts again when the client answers and goes silent again.
-// Platform rules for everyone (followup-service.js): never to bought / refused clients, the SI is
-// quiet while a person answers the client, and two steps never go one right after the other.
-const FOLLOWUP_ACTIONS = {
-  message: 'Написать клиенту',
-  notify: 'Сообщить мне в Telegram',
-  handover: 'Передать человеку'
-};
-const FOLLOWUP_LIMITS = {
-  maxSteps: 5,
-  minMinutes: 5,
-  maxMinutes: 30 * 24 * 60,
-  maxPerClient: { min: 1, max: 10, default: 2 }
-};
-
 function minutesLabel(minutes) {
   const m = Number(minutes) || 0;
   if (m >= 1440 && m % 1440 === 0) return `${m / 1440} дн.`;
   if (m >= 60 && m % 60 === 0) return `${m / 60} ч`;
   return `${m} мин`;
-}
-
-function normalizeFollowups(raw) {
-  const r = raw && typeof raw === 'object' ? raw : {};
-  const limit = FOLLOWUP_LIMITS.maxPerClient;
-  const steps = [];
-  for (const s of Array.isArray(r.steps) ? r.steps.slice(0, FOLLOWUP_LIMITS.maxSteps) : []) {
-    if (!s || !FOLLOWUP_ACTIONS[s.action]) continue;
-    const minutes = parseInt(s.minutes, 10);
-    if (!minutes || minutes < FOLLOWUP_LIMITS.minMinutes || minutes > FOLLOWUP_LIMITS.maxMinutes) continue;
-    const step = {
-      id: /^fup_[a-z0-9]{4,20}$/.test(s.id) ? s.id : `fup_${crypto.randomBytes(5).toString('hex')}`,
-      minutes,
-      action: s.action,
-      // message: 'si' — the SI writes in its own words by the expert's hint; 'exact' — the expert's text as is
-      mode: s.action === 'message' && s.mode === 'exact' ? 'exact' : 'si',
-      text: clean(s.text, 1000)
-    };
-    if (step.action === 'message' && step.mode === 'exact' && !step.text) continue;
-    steps.push(step);
-  }
-  steps.sort((a, b) => a.minutes - b.minutes);
-  return {
-    enabled: r.enabled === true,
-    maxPerClient: Math.max(limit.min, Math.min(limit.max, parseInt(r.maxPerClient, 10) || limit.default)),
-    includeNeverReplied: r.includeNeverReplied === true,
-    restartOnReply: r.restartOnReply !== false,
-    steps
-  };
 }
 
 // ---------- Status ----------
@@ -265,7 +233,7 @@ async function eventsOf(clientId, limit = 100) {
     let detail = '';
     if (r.type === 'objection') detail = data.objection || '';
     if (r.type === 'scenario') detail = SCENARIO_THEN[data.then] || '';
-    if (r.type === 'followup') detail = `${FOLLOWUP_ACTIONS[data.action] || ''} · через ${minutesLabel(data.minutes)} молчания`;
+    if (r.type === 'scenario' && data.minutes) detail += ` · молчит ${minutesLabel(data.minutes)}`;
     if (r.type === 'condition') detail = data.condition || '';
     return {
       id: r.id,
@@ -338,9 +306,8 @@ module.exports = {
   SCENARIO_WHEN,
   SCENARIO_THEN,
   MAX_SCENARIOS,
-  FOLLOWUP_ACTIONS,
-  FOLLOWUP_LIMITS,
-  normalizeFollowups,
+  SILENT_AFTER,
+  SILENT_MINUTES,
   minutesLabel,
   PAGE_SIZE,
   normalizeScenarios,

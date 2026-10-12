@@ -254,8 +254,38 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
   }
 }
 
+/**
+ * Is this SI message the offer (an invitation to buy / sign up)? For "Клиент замолчал после оффера".
+ * Without OpenAI: the message names the offer, the price or «Купить».
+ */
+async function isOffer({ project, text }) {
+  const message = String(text || '');
+  const fallback = () => {
+    const lower = message.toLowerCase();
+    if (/купить|оплат|записат|записыва/.test(lower)) return true;
+    if (project.price_label && message.includes(project.price_label)) return true;
+    return Boolean(project.offer) && lower.includes(String(project.offer).toLowerCase().slice(0, 30));
+  };
+  if (!isConfigured()) return fallback();
+  const answer = await callOpenAI([
+    {
+      role: 'system',
+      content: 'Ответь только JSON {"offer": bool}: есть ли в сообщении продавца предложение купить или записаться ' +
+        `(оффер продавца: ${project.offer || '(не задан)'}).`
+    },
+    { role: 'user', content: message.slice(0, 1500) }
+  ], { response_format: { type: 'json_object' } });
+  if (!answer) return fallback();
+  try {
+    return JSON.parse(answer).offer === true;
+  } catch (e) {
+    return fallback();
+  }
+}
+
 module.exports = {
   analyzeTurn,
+  isOffer,
   generateFollowUp,
   fallbackFollowUp,
   isConfigured,

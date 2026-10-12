@@ -35,8 +35,22 @@
     buy_clicked: 'Клиент нажал «Купить»',
     receipt_sent: 'Клиент прислал чек',
     refused: 'Клиент отказался',
+    silent: 'Клиент замолчал (догоняющее сообщение)',
     custom: 'Своё условие (напишу словами)'
   };
+  // The funnel is a tree: after what the client went silent
+  const SILENT_AFTER = {
+    any: 'в любой момент разговора',
+    offer: 'после оффера',
+    objection: 'после возражения',
+    buy_clicked: 'после «Купить», но без чека'
+  };
+  function minutesLabel(m) {
+    m = Number(m) || 0;
+    if (m >= 1440 && m % 1440 === 0) return `${m / 1440} дн.`;
+    if (m >= 60 && m % 60 === 0) return `${m / 60} ч`;
+    return `${m} мин`;
+  }
   const MAX_SCENARIOS = 20;
   const SCENARIO_THEN = {
     si_says: 'SI отвечает так',
@@ -48,7 +62,7 @@
     { id: 'methodology', label: 'Карточка и методология', icon: 'git-branch' },
     { id: 'analytics', label: 'Аналитика', icon: 'trending-up' },
     { id: 'income', label: 'Клиенты', icon: 'users' },
-    { id: 'broadcasts', label: 'Догоняющие и рассылки', icon: 'send-horizontal' }
+    { id: 'broadcasts', label: 'Рассылки', icon: 'send-horizontal' }
   ];
 
   const ROLE_SUGGESTIONS = ['SI-продавец', 'SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
@@ -441,7 +455,7 @@
     if (tab === 'methodology') body = renderMethodology(c) + renderConsultantBrain(c, state);
     if (tab === 'analytics') body = renderAnalytics(c, state);
     if (tab === 'income') body = renderClients(c, state);
-    if (tab === 'broadcasts') body = renderFollowups(c) + renderBroadcasts();
+    if (tab === 'broadcasts') body = renderBroadcasts();
 
     return `
       <div class="glass-card-3d p-4 space-y-3 border-[var(--si-bubble-line)]">
@@ -539,6 +553,7 @@
     const list = c.scenarios || [];
     const whenText = (sc) => {
       if (sc.when === 'custom') return SF.esc(sc.condition);
+      if (sc.when === 'silent') return `Клиент молчит ${minutesLabel(sc.minutes)} ${SILENT_AFTER[sc.after] || SILENT_AFTER.any}`;
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     };
     return `
@@ -558,12 +573,21 @@
         <form onsubmit="SF.actions.addScenario(event, '${SF.js(c.id)}')" class="space-y-2 pt-2 border-t border-line">
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Если</span>
-            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="when" onchange="this.form.words.parentElement.style.display = this.value === 'objection' ? '' : 'none'; this.form.condition.parentElement.style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               ${Object.entries(SCENARIO_WHEN).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
             </select>
           </label>
           ${field('words', 'Про что возражение (необязательно, через запятую)', '', { placeholder: 'дорого, нет денег', max: 120 })}
           <div style="display:none">${field('condition', 'Условие словами', '', { placeholder: 'Например: клиент спрашивает, можно ли платить частями', max: 200 })}</div>
+          <div data-silent style="display:none" class="space-y-2">
+            ${field('minutes', 'Через сколько минут молчания', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
+            <label class="block space-y-1">
+              <span class="font-semibold text-ink-2">После чего замолчал</span>
+              <select name="after" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+                ${Object.entries(SILENT_AFTER).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+              </select>
+            </label>
+          </div>
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">То</span>
             <select name="then" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
@@ -627,76 +651,12 @@
     `;
   }
 
-  // "Догоняющие сообщения": the expert's own chain for a silent client. Off by default.
-  const FOLLOWUP_ACTIONS = { message: 'Написать клиенту', notify: 'Сообщить мне в Telegram', handover: 'Передать человеку' };
-  const FOLLOWUP_MAX_STEPS = 5;
-  function minutesLabel(m) {
-    m = Number(m) || 0;
-    if (m >= 1440 && m % 1440 === 0) return `${m / 1440} дн.`;
-    if (m >= 60 && m % 60 === 0) return `${m / 60} ч`;
-    return `${m} мин`;
-  }
-  const followupsOf = (c) => ({ enabled: false, maxPerClient: 2, includeNeverReplied: false, restartOnReply: true, steps: [], ...(c.followups || {}) });
-
-  function renderFollowups(c) {
-    const f = followupsOf(c);
-    const check = (name, on, title, hint) => `
-      <label class="flex gap-2.5 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
-        <input type="checkbox" name="${name}" ${on ? 'checked' : ''} class="mt-0.5 w-4 h-4 accent-[#0d9488]" />
-        <span><span class="block font-semibold text-ink">${title}</span>${hint ? `<span class="block text-[10px] text-muted leading-snug">${hint}</span>` : ''}</span>
-      </label>`;
-    return `
-      <div class="glass-card-3d p-4 space-y-3 text-xs">
-        ${SF.sectionTitle('clock', 'Догоняющие сообщения')}
-        <div class="text-[11px] text-muted leading-snug">Что делать, если клиент замолчал. По умолчанию выключено — включите и настройте сами, чтобы не надоедать клиентам. Купившим и отказавшимся ничего не отправляется; пока клиенту отвечаете вы или помощник, SI молчит.</div>
-        <form onsubmit="SF.actions.saveFollowupRules(event, '${SF.js(c.id)}')" class="space-y-2">
-          ${check('enabled', f.enabled, 'Включить догоняющие сообщения', '')}
-          ${field('maxPerClient', 'Не больше сообщений одному клиенту', f.maxPerClient, { type: 'number', max: 2, hint: 'Сколько раз всего SI может написать молчащему клиенту. «Сообщить мне» и «Передать человеку» сюда не считаются.' })}
-          ${check('includeNeverReplied', f.includeNeverReplied, 'Писать тем, кто ни разу не ответил', 'Человек открыл чат, но ничего не написал. Обычно лучше не писать.')}
-          ${check('restartOnReply', f.restartOnReply, 'Начинать заново, если клиент ответил и снова замолчал', 'Иначе цепочка проходит один раз на клиента.')}
-          <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Сохранить правила</button>
-        </form>
-        <div class="pt-2 border-t border-line space-y-2">
-          <div class="font-semibold text-ink-2">Шаги (по порядку, считаются от последнего сообщения клиента)</div>
-          ${f.steps.map((s, i) => `
-            <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
-              <div class="flex-1 min-w-0 space-y-0.5">
-                <div><span class="text-faint">Через</span> <span class="font-semibold text-ink">${minutesLabel(s.minutes)}</span> <span class="text-faint">молчания</span></div>
-                <div class="font-semibold text-ink">${FOLLOWUP_ACTIONS[s.action] || ''}${s.action === 'message' ? `<span class="font-normal text-muted"> · ${s.mode === 'exact' ? 'мой текст как есть' : 'SI своими словами'}</span>` : ''}</div>
-                ${s.text ? `<div class="text-ink-2">${SF.esc(s.text)}</div>` : ''}
-              </div>
-              <button onclick="SF.actions.removeFollowupStep('${SF.js(c.id)}', ${i})" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить шаг"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-            </div>`).join('')}
-          ${!f.steps.length ? '<div class="text-faint">Шагов пока нет. Например: через 120 минут — SI мягко спрашивает, остались ли вопросы; через 1440 минут — сообщить мне.</div>' : ''}
-          ${f.steps.length >= FOLLOWUP_MAX_STEPS ? `<div class="text-faint">Добавлено ${FOLLOWUP_MAX_STEPS} шагов — это максимум.</div>` : `
-          <form onsubmit="SF.actions.addFollowupStep(event, '${SF.js(c.id)}')" class="space-y-2">
-            ${field('minutes', 'Через сколько минут молчания', 120, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. От 5 минут до 30 дней.' })}
-            <label class="block space-y-1">
-              <span class="font-semibold text-ink-2">Что сделать</span>
-              <select name="action" onchange="this.form.mode.parentElement.style.display = this.value === 'message' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
-                ${Object.entries(FOLLOWUP_ACTIONS).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
-              </select>
-            </label>
-            <label class="block space-y-1">
-              <span class="font-semibold text-ink-2">Как написать</span>
-              <select name="mode" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
-                <option value="si">SI пишет своими словами по моей подсказке</option>
-                <option value="exact">Отправить мой текст как есть</option>
-              </select>
-            </label>
-            ${field('text', 'Подсказка или текст', '', { placeholder: 'Например: мягко спросить, остались ли вопросы по программе', rows: 2, max: 1000 })}
-            <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-dark">Добавить шаг</button>
-          </form>`}
-        </div>
-      </div>
-    `;
-  }
-
   function renderBroadcasts() {
     return `
       <div class="glass-card-3d p-4 space-y-2">
         <div class="flex items-center gap-2"><span class="si-dot"></span><span class="text-sm font-bold text-ink">Рассылки</span>${SF.soonBadge()}</div>
-        <p class="text-xs text-muted leading-relaxed">Напишете обычными словами, кому и что отправить. SI подберёт клиентов по меткам и подготовит текст, а отправка будет только после вашего подтверждения.</p>
+        <p class="text-xs text-muted leading-relaxed">Анонсы для ваших клиентов: мероприятие, новость, акция. Напишете обычными словами, кому и что отправить — SI подберёт клиентов и подготовит текст, отправка только после вашего подтверждения.</p>
+        <p class="text-[11px] text-faint leading-snug">Догоняющие сообщения, если клиент замолчал, настраиваются в методологии: «Карточка и методология» → сценарии «если…, то…».</p>
       </div>
     `;
   }
@@ -1074,69 +1034,6 @@
     store().updateOfficeConsultant(id, { scenarios: (res.custom_ai_settings || {}).scenarios || scenarios });
   }
 
-  // "Догоняющие сообщения" are saved inside custom_ai_settings, merged with what the server has
-  async function saveFollowups(id, patch) {
-    const project = await api().getProject(id);
-    const settings = project.custom_ai_settings || {};
-    const res = await api().updateProject(id, {
-      custom_ai_settings: { ...settings, followups: { ...followupsOf({ followups: settings.followups }), ...patch } }
-    });
-    store().updateOfficeConsultant(id, { followups: (res.custom_ai_settings || {}).followups || null });
-  }
-
-  SF.actions.saveFollowupRules = async (e, id) => {
-    e.preventDefault();
-    if (needServer()) return;
-    const f = e.target;
-    try {
-      await saveFollowups(id, {
-        enabled: f.enabled.checked,
-        maxPerClient: Math.max(1, Math.min(10, parseInt(f.maxPerClient.value, 10) || 2)),
-        includeNeverReplied: f.includeNeverReplied.checked,
-        restartOnReply: f.restartOnReply.checked
-      });
-      showToast(f.enabled.checked ? 'Сохранено. Догоняющие сообщения включены' : 'Сохранено. Догоняющие сообщения выключены');
-    } catch (err) {
-      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
-    }
-  };
-
-  SF.actions.addFollowupStep = async (e, id) => {
-    e.preventDefault();
-    if (needServer()) return;
-    const f = e.target;
-    const c = store().findOfficeConsultant(id);
-    if (!c) return;
-    const minutes = parseInt(f.minutes.value, 10);
-    if (!minutes || minutes < 5 || minutes > 43200) {
-      showToast('Минут — от 5 до 43 200 (30 дней)');
-      return;
-    }
-    const step = { minutes, action: f.action.value, mode: f.mode.value, text: f.text.value.trim() };
-    if (step.action === 'message' && step.mode === 'exact' && !step.text) {
-      showToast('Напишите текст сообщения');
-      return;
-    }
-    try {
-      await saveFollowups(id, { steps: [...followupsOf(c).steps, step] });
-      showToast(followupsOf(store().findOfficeConsultant(id)).enabled ? 'Шаг добавлен' : 'Шаг добавлен. Не забудьте включить догоняющие сообщения');
-    } catch (err) {
-      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
-    }
-  };
-
-  SF.actions.removeFollowupStep = async (id, index) => {
-    if (needServer()) return;
-    const c = store().findOfficeConsultant(id);
-    if (!c || !confirm('Удалить этот шаг?')) return;
-    try {
-      await saveFollowups(id, { steps: followupsOf(c).steps.filter((_, i) => i !== index) });
-      showToast('Шаг удалён');
-    } catch (err) {
-      showToast(SF.withErrorCode(err.message || 'Не удалось удалить', err));
-    }
-  };
-
   SF.actions.addScenario = async (e, id) => {
     e.preventDefault();
     if (needServer()) return;
@@ -1147,6 +1044,8 @@
       when: f.when.value,
       words: f.when.value === 'objection' ? f.words.value.trim() : '',
       condition: f.when.value === 'custom' ? f.condition.value.trim() : '',
+      minutes: f.when.value === 'silent' ? parseInt(f.minutes.value, 10) || 60 : undefined,
+      after: f.when.value === 'silent' ? f.after.value : undefined,
       then: f.then.value,
       text: f.text.value.trim()
     };
@@ -1154,7 +1053,11 @@
       showToast('Напишите условие словами');
       return;
     }
-    if (scenario.then === 'si_says' && !scenario.text) {
+    if (scenario.when === 'silent' && (scenario.minutes < 5 || scenario.minutes > 43200)) {
+      showToast('Минут — от 5 до 43 200 (30 дней)');
+      return;
+    }
+    if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') {
       showToast('Напишите, что SI должен ответить');
       return;
     }
