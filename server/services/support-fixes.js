@@ -8,6 +8,7 @@
 //
 // To add a fix: one more entry in FIXES with plan() and apply(), and a button in js/screens/admin.js.
 const db = require('../db');
+const funnelService = require('./funnel-service');
 const config = require('../config');
 const brainService = require('./brain-service');
 const mediaService = require('./media-service');
@@ -61,7 +62,7 @@ const FIXES = {
     help: 'SI молчит в чате (после «Связаться с человеком» или ответа эксперта). Включает SI только в этом одном чате.',
     async plan(user, { clientId }) {
       const chat = await ownChat(user, clientId);
-      const paused = chat.status === 'human_needed';
+      const paused = chat.responsible_type === 'human';
       return {
         count: paused ? 1 : 0,
         changes: [{ label: `SI в чате «${chat.project_name}» с ${chat.name}`, before: paused ? 'молчит (ждёт эксперта)' : 'уже отвечает', after: 'отвечает' }]
@@ -69,8 +70,12 @@ const FIXES = {
     },
     async apply(user, { clientId }) {
       const chat = await ownChat(user, clientId);
-      await db.run(`UPDATE clients SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'human_needed'`, [chat.id]);
+      await db.run(
+        `UPDATE clients SET responsible_type = 'si', responsible_user_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND responsible_type = 'human'`,
+        [chat.id]
+      );
       await db.run(`UPDATE direct_inquiries SET status = 'answered', updated_at = CURRENT_TIMESTAMP WHERE client_id = ? AND status = 'waiting'`, [chat.id]);
+      await funnelService.recordEvent(chat, 'si_resumed', { type: 'system' }, { by: 'support' });
     }
   },
 

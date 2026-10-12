@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { readImageBody } = require('../middleware/image-upload');
 const mediaService = require('../services/media-service');
 const profileService = require('../services/profile-service');
+const businessService = require('../services/business-service');
 
 router.use(requireAuth);
 
@@ -34,6 +35,11 @@ router.put('/profile', async (req, res, next) => {
   try {
     const user = await profileService.updateProfile(req.user.userId, req.body || {});
     if (!user) return res.status(404).json({ error: 'not_found', message: 'Пользователь не найден' });
+    // Office terms accepted = the expert turns their SI-sellers on: the business appears
+    const agreed = profileService.toPublicUser(user).profile.businessAgreedAt;
+    if (agreed && await db.get('SELECT id FROM projects WHERE owner_id = ? LIMIT 1', [user.id])) {
+      await businessService.ensureBusiness(user.id);
+    }
     res.json({ user: profileService.toPublicUser(user) });
   } catch (err) {
     next(err);

@@ -202,7 +202,7 @@
       return await apiFetch(`/api/projects/${projectId}/conversations/${clientId}/messages`);
     },
 
-    // The expert answers a client personally (SI pauses for this client)
+    // The owner or the assistant answers a client personally (SI pauses for this client)
     async sendMessage(projectId, clientId, text) {
       return await apiFetch(`/api/projects/${projectId}/conversations/${clientId}/messages`, {
         method: 'POST',
@@ -215,6 +215,22 @@
         method: 'POST',
         body: JSON.stringify({ enabled })
       });
+    },
+
+    // Business: members (owner + assistant) and the businesses where I am the assistant
+    async getBusiness() {
+      return await apiFetch('/api/business');
+    },
+
+    async addAssistant(supportCode) {
+      return await apiFetch('/api/business/assistants', {
+        method: 'POST',
+        body: JSON.stringify({ supportCode })
+      });
+    },
+
+    async removeAssistant(userId) {
+      return await apiFetch(`/api/business/assistants/${encodeURIComponent(userId)}`, { method: 'DELETE' });
     },
 
     async getHumanInquiries(projectId) {

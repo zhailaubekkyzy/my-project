@@ -818,10 +818,10 @@ async function runAllTests() {
     assert.strictEqual(preview.body.preview.changes[0].after, 'отвечает');
     const wrong = await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 300 });
     assert.strictEqual(wrong.status, 409, 'Different number of records → stop');
-    assert.strictEqual((await db.get('SELECT status FROM clients WHERE id = ?', [chat.clientId])).status, 'human_needed', 'Nothing changed');
+    assert.strictEqual((await db.get('SELECT responsible_type FROM clients WHERE id = ?', [chat.clientId])).responsible_type, 'human', 'Nothing changed');
     const applied = await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 1 });
     assert.strictEqual(applied.status, 200);
-    assert.strictEqual((await db.get('SELECT status FROM clients WHERE id = ?', [chat.clientId])).status, 'active');
+    assert.strictEqual((await db.get('SELECT responsible_type FROM clients WHERE id = ?', [chat.clientId])).responsible_type, 'si');
     assert.strictEqual((await api('POST', `${url}/apply`, tokenStudent, { params: { clientId: chat.clientId }, expectedCount: 1 })).status, 409, 'Nothing to change twice');
 
     const reset = await api('POST', `/api/admin/users/${clientUser.id}/fixes/reset_device/apply`, tokenStudent, { expectedCount: 1 });
@@ -853,6 +853,216 @@ async function runAllTests() {
     assert.strictEqual((await api('POST', `${url}/apply`, tokenOwner, { params: { blocked: false }, expectedCount: 1 })).status, 200);
     assert.strictEqual((await api('GET', '/api/chat', tokenClient)).status, 200, 'Unblocked again');
     config.adminUsers = [];
+  });
+
+  // 13. Business and one assistant
+  const businessService = require('../server/services/business-service');
+  const funnelService = require('../server/services/funnel-service');
+  const assistantTg = { id: 400004, first_name: 'Анна', last_name: 'Помощник', username: 'anna_helper' };
+  const tokenAssistant = await tokenFor(assistantTg);
+  const assistantUser = await authService.findOrCreateTelegramUser(assistantTg, 'expert');
+  const otherTg = { id: 500005, first_name: 'Олег', last_name: 'Второй', username: 'oleg_second' };
+  const tokenOther = await tokenFor(otherTg);
+
+  await test('35. Бизнес: появляется с включённым SI-продавцом, туда переносятся SI-продавцы, клиенты и переписки', async () => {
+    const business = await db.get('SELECT * FROM businesses WHERE owner_id = ?', [expertA_InternalId]);
+    assert(business, 'Expert A has a business: their SI-seller talks to clients');
+    assert.strictEqual((await db.get('SELECT business_id FROM projects WHERE id = ?', [projectA.id])).business_id, business.id);
+    const orphans = await db.get(
+      `SELECT (SELECT COUNT(*) FROM clients WHERE project_id = ? AND (business_id IS NULL OR business_id <> ?)) +
+              (SELECT COUNT(*) FROM conversations WHERE project_id = ? AND (business_id IS NULL OR business_id <> ?)) AS count`,
+      [projectA.id, business.id, projectA.id, business.id]
+    );
+    assert.strictEqual(orphans.count, 0, 'All clients and messages of the SI-seller are in the business');
+    const owner = await db.get('SELECT role FROM business_members WHERE business_id = ? AND user_id = ?', [business.id, expertA_InternalId]);
+    assert.strictEqual(owner.role, 'owner');
+
+    // Signing in does not create a business; creating an SI-seller in the Office does
+    assert.strictEqual(await db.get('SELECT id FROM businesses WHERE owner_id = ?', [assistantUser.id]), null);
+    const ownView = await api('GET', '/api/business', tokenAssistant);
+    assert.strictEqual(ownView.body.business, null);
+    const created = await api('POST', '/api/projects', tokenOther, { name: 'Oleg SI' });
+    assert.strictEqual(created.status, 201);
+    assert(created.body.business_id, 'The new SI-seller belongs to its owner\'s business');
+    assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS count FROM businesses WHERE owner_id = ?', [created.body.owner_id])).count), 1);
+    await api('POST', '/api/projects', tokenOther, { name: 'Oleg SI 2' });
+    assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS count FROM businesses WHERE owner_id = ?', [created.body.owner_id])).count), 1, 'One business per expert');
+  });
+
+  await test('36. Помощник: владелец приглашает по номеру SF-…, не больше одного', async () => {
+    const assistantCode = (await api('GET', '/api/auth/me', tokenAssistant)).body.user.supportCode;
+    const otherCode = (await api('GET', '/api/auth/me', tokenOther)).body.user.supportCode;
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenAssistant, { supportCode: otherCode })).status, 400, 'No business — nobody to invite into');
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenA, { supportCode: 'SF-00000' })).status, 404);
+    const ownCode = (await api('GET', '/api/auth/me', tokenA)).body.user.supportCode;
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenA, { supportCode: ownCode })).status, 400, 'Not yourself');
+
+    telegramBot.testOutbox.length = 0;
+    const added = await api('POST', '/api/business/assistants', tokenA, { supportCode: assistantCode.toLowerCase() });
+    assert.strictEqual(added.status, 201);
+    assert(added.body.members.some(m => m.userId === assistantUser.id && m.role === 'assistant'));
+    assert(telegramBot.testOutbox.some(m => m.userId === assistantUser.id), 'The assistant gets a bot message');
+
+    const second = await api('POST', '/api/business/assistants', tokenA, { supportCode: otherCode });
+    assert.strictEqual(second.status, 409);
+    assert.strictEqual(second.body.code, 'ASSISTANT_LIMIT', 'Only one assistant');
+    assert.strictEqual(businessService.MAX_ASSISTANTS, 1);
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenA, { supportCode: assistantCode })).status, 409, 'Already the assistant');
+
+    const view = await api('GET', '/api/business', tokenAssistant);
+    assert.strictEqual(view.body.assisting.length, 1);
+    assert.strictEqual(view.body.assisting[0].ownerName, (await api('GET', '/api/auth/me', tokenA)).body.user.displayName);
+  });
+
+  await test('37. Права помощника проверяет сервер: клиенты и пауза SI — да, деньги, SI-мозг и настройки — нет', async () => {
+    const list = await api('GET', '/api/projects', tokenAssistant);
+    const assisted = list.body.assisting.find(p => p.id === projectA.id);
+    assert(assisted, 'The assistant sees the business\'s SI-sellers');
+    for (const hidden of ['payment_url', 'price_label', 'offer', 'custom_ai_settings', 'pricing_options', 'stats']) {
+      assert(!(hidden in assisted), `No ${hidden} for the assistant`);
+    }
+    assert(!list.body.owned.some(p => p.id === projectA.id));
+
+    const clients = await api('GET', `/api/projects/${projectA.id}/clients`, tokenAssistant);
+    assert.strictEqual(clients.status, 200, 'Client cards are visible');
+    assert(clients.body.length > 0 && clients.body.every(c => !('deal_value' in c)), 'No money in client cards');
+    const card = await api('GET', `/api/projects/${projectA.id}/clients/${clients.body[0].id}`, tokenAssistant);
+    assert.strictEqual(card.status, 200);
+    assert(Array.isArray(card.body.events), 'The card shows the event journal');
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}/clients/inquiries/list`, tokenAssistant)).status, 200, '"Мне написали" is open');
+
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}`, tokenAssistant)).status, 403, 'No SI-seller settings and payment link');
+    assert.strictEqual((await api('PUT', `/api/projects/${projectA.id}`, tokenAssistant, { payment_url: 'https://evil.example' })).status, 403, 'Cannot edit the SI-seller');
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}/analytics`, tokenAssistant)).status, 403);
+    assert.strictEqual((await upload(`/api/projects/${projectA.id}/photo`, tokenAssistant, fakeJpeg)).status, 403);
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenAssistant, { supportCode: 'SF-12345' })).status, 400, 'Cannot invite into someone else\'s business');
+    const materialsA = (await api('GET', '/api/brain/materials', tokenA)).body.materials;
+    const materialsAssistant = (await api('GET', '/api/brain/materials', tokenAssistant)).body.materials;
+    assert(materialsA.length > 0 && materialsAssistant.length === 0, 'The owner\'s SI-brain is not visible');
+    if (materialsA.length) {
+      const del = await api('DELETE', `/api/brain/materials/${materialsA[0].id}`, tokenAssistant);
+      assert.strictEqual(del.status, 404, 'Cannot change the owner\'s SI-brain');
+    }
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}/clients`, tokenOther)).status, 403, 'Strangers still have no access');
+  });
+
+  await test('38. Автор сообщения, ответственный за диалог, пауза SI и журнал событий', async () => {
+    telegramBot.testOutbox.length = 0;
+    const human = await api('POST', `/api/chat/${projectA.slug}/human`, tokenClient, { reason: 'Нужен человек' });
+    assert.strictEqual(human.status, 201);
+    assert(telegramBot.testOutbox.some(m => m.userId === assistantUser.id && m.text.includes('Нужен человек')), 'The assistant is notified too');
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    assert.strictEqual(lead.responsible_type, 'human');
+    assert.strictEqual(lead.responsible_user_id, expertA_InternalId, 'The owner is responsible by default');
+    assert.strictEqual(lead.funnel_status, 'waiting_human');
+
+    const reply = await api('POST', `/api/projects/${projectA.id}/conversations/${lead.id}/messages`, tokenAssistant, { text: 'Здравствуйте, я помощник.' });
+    assert.strictEqual(reply.status, 201);
+    assert.strictEqual(reply.body.authorType, 'assistant');
+    assert.strictEqual(reply.body.authorUserId, assistantUser.id);
+    const after = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+    assert.strictEqual(after.responsible_user_id, assistantUser.id, 'The assistant who answered is responsible now');
+    assert.notStrictEqual(after.funnel_status, 'waiting_human');
+    assert(telegramBot.testOutbox.some(m => m.userId === clientUser.id && m.text.includes('Помощник')), 'The client learns it was the assistant');
+
+    const silent = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'А когда созвон?' });
+    assert.strictEqual(silent.body.reply, null, 'SI is quiet while a person is responsible');
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient)).body.siPaused, true);
+
+    const resumed = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/si`, tokenAssistant, { enabled: true });
+    assert.strictEqual(resumed.status, 200, 'The assistant can resume the SI');
+    assert.strictEqual((await db.get('SELECT responsible_type FROM clients WHERE id = ?', [lead.id])).responsible_type, 'si');
+    const answered = await api('POST', `/api/chat/${projectA.slug}/messages`, tokenClient, { text: 'Хорошо' });
+    assert(answered.body.reply && answered.body.reply.authorType === 'si', 'SI answers again');
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/si`, tokenAssistant, { enabled: false })).status, 200, 'And pause it');
+    assert.strictEqual((await db.get('SELECT responsible_user_id FROM clients WHERE id = ?', [lead.id])).responsible_user_id, assistantUser.id);
+
+    const authors = await db.all('SELECT DISTINCT author_type FROM conversations WHERE client_id = ?', [lead.id]);
+    assert.deepStrictEqual(authors.map(a => a.author_type).sort(), ['assistant', 'client', 'owner', 'si'], 'Every message has its author type');
+    assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS count FROM conversations WHERE author_type IS NULL')).count), 0);
+
+    const events = (await db.all('SELECT type FROM client_events WHERE client_id = ?', [lead.id])).map(e => e.type);
+    for (const type of ['client_message', 'handed_to_human', 'human_replied', 'si_resumed', 'si_paused']) {
+      assert(events.includes(type), `Journal has ${type}`);
+    }
+    const funnel = await api('GET', `/api/business/funnel?businessId=${lead.business_id}`, tokenAssistant);
+    assert.strictEqual(funnel.status, 200);
+    assert.deepStrictEqual(Object.keys(funnel.body.counts), ['not_finished', 'talked', 'waiting_human', 'bought', 'refused']);
+    assert.strictEqual((await api('GET', `/api/business/funnel?businessId=${lead.business_id}`, tokenOther)).status, 404, 'Strangers see no funnel');
+    const page = await api('GET', '/api/business/funnel?status=not_finished', tokenA);
+    assert(page.body.clients.length <= funnelService.PAGE_SIZE);
+  });
+
+  await test('39. Воронка: цель-оффер — пообщались / не дообщались, исходы купили и отказ', async () => {
+    const next = funnelService.nextStatus;
+    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'client_message'), 'not_finished', 'No answer to the offer — the path goes on');
+    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'offer_answered'), 'talked', 'Answered the offer — talked');
+    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'client_message'), 'talked');
+    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'paid'), 'bought');
+    assert.strictEqual(next({ funnel_status: 'talked', offer_answered_at: 'x' }, 'refused'), 'refused');
+    assert.strictEqual(next({ funnel_status: 'bought' }, 'client_message'), 'bought', 'Outcome stays');
+    assert.strictEqual(next({ funnel_status: 'not_finished' }, 'handed_to_human'), 'waiting_human');
+    assert.strictEqual(next({ funnel_status: 'waiting_human' }, 'client_message'), 'waiting_human');
+    assert.strictEqual(next({ funnel_status: 'waiting_human', offer_answered_at: 'x' }, 'human_replied'), 'talked');
+
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    await db.run(`UPDATE clients SET funnel_status = 'not_finished', offer_answered_at = NULL WHERE id = ?`, [lead.id]);
+    const fresh = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+    assert.strictEqual(await funnelService.recordEvent(fresh, 'offer_answered', { type: 'client' }), 'talked');
+    const saved = await db.get('SELECT funnel_status, offer_answered_at FROM clients WHERE id = ?', [lead.id]);
+    assert.strictEqual(saved.funnel_status, 'talked');
+    assert(saved.offer_answered_at, 'The moment of the answer is kept');
+  });
+
+  await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
+    assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
+    const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);
+    assert.strictEqual(removed.status, 200);
+    assert(!removed.body.members.some(m => m.userId === assistantUser.id));
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}/clients`, tokenAssistant)).status, 403, 'No access after removal');
+    assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS count FROM clients WHERE responsible_user_id = ?`, [assistantUser.id])).count), 0);
+    const otherCode = (await api('GET', '/api/auth/me', tokenOther)).body.user.supportCode;
+    assert.strictEqual((await api('POST', '/api/business/assistants', tokenA, { supportCode: otherCode })).status, 201, 'A new assistant can be invited');
+  });
+
+  await test('41. Миграция 007: старые данные переходят в бизнесы (SQLite-файл с данными до миграции)', async () => {
+    const Database = require('better-sqlite3');
+    const file = path.join(__dirname, '../data/test_migration_007.db');
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    const mdb = new Database(file);
+    const dir = path.join(__dirname, '../server/db/migrations');
+    const files = fs.readdirSync(dir).filter(f => /^\d+_.+\.sql$/.test(f)).sort();
+    mdb.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+    for (const f of files.filter(f => parseInt(f, 10) < 7)) mdb.exec(migrator.sqlForDriver(fs.readFileSync(path.join(dir, f), 'utf8'), 'sqlite'));
+    // Before: an expert who opened the Office with a paused chat, one who only signed in
+    mdb.exec(`
+      INSERT INTO users (id, display_name, profile) VALUES ('usr_on', 'On', '{"businessAgreedAt":"2026-10-01T00:00:00.000Z"}'), ('usr_off', 'Off', '{"businessAgreedAt":null}'), ('usr_cl', 'Client', NULL);
+      INSERT INTO projects (id, owner_id, name, slug) VALUES ('proj_on', 'usr_on', 'On SI', 'on-si'), ('proj_off', 'usr_off', 'Off SI', 'off-si');
+      INSERT INTO clients (id, project_id, external_client_id, name, status) VALUES ('cli_1', 'proj_on', 'usr_cl', 'Client', 'human_needed');
+      INSERT INTO conversations (id, project_id, client_id, sender, text) VALUES ('m1', 'proj_on', 'cli_1', 'ai', 'Привет'), ('m2', 'proj_on', 'cli_1', 'client', 'Позовите'), ('m3', 'proj_on', 'cli_1', 'expert_human', 'Я тут');
+      INSERT INTO direct_inquiries (id, project_id, client_id, lead_name, reason, status) VALUES ('inq_1', 'proj_on', 'cli_1', 'Client', 'Позовите', 'waiting');
+    `);
+    mdb.exec(migrator.sqlForDriver(fs.readFileSync(path.join(dir, files.find(f => parseInt(f, 10) === 7)), 'utf8'), 'sqlite'));
+    const one = (sql) => mdb.prepare(sql).get();
+    assert.strictEqual(one(`SELECT COUNT(*) AS n FROM businesses`).n, 1, 'Only the expert who turned the SI-seller on');
+    assert.strictEqual(one(`SELECT business_id FROM projects WHERE id = 'proj_on'`).business_id, 'biz_usr_on');
+    assert.strictEqual(one(`SELECT business_id FROM projects WHERE id = 'proj_off'`).business_id, null);
+    assert.strictEqual(one(`SELECT role FROM business_members WHERE user_id = 'usr_on'`).role, 'owner');
+    const client = one(`SELECT * FROM clients WHERE id = 'cli_1'`);
+    assert.strictEqual(client.business_id, 'biz_usr_on');
+    assert.strictEqual(client.responsible_type, 'human');
+    assert.strictEqual(client.responsible_user_id, 'usr_on');
+    assert.strictEqual(client.status, 'active');
+    assert.strictEqual(client.funnel_status, 'waiting_human');
+    assert.deepStrictEqual(mdb.prepare(`SELECT author_type, author_user_id, business_id FROM conversations ORDER BY id`).all(), [
+      { author_type: 'si', author_user_id: null, business_id: 'biz_usr_on' },
+      { author_type: 'client', author_user_id: null, business_id: 'biz_usr_on' },
+      { author_type: 'owner', author_user_id: 'usr_on', business_id: 'biz_usr_on' }
+    ]);
+    assert.strictEqual(one(`SELECT business_id FROM direct_inquiries WHERE id = 'inq_1'`).business_id, 'biz_usr_on');
+    mdb.close();
+    fs.unlinkSync(file);
+    for (const extra of ['-wal', '-shm']) if (fs.existsSync(file + extra)) fs.unlinkSync(file + extra);
   });
 
   await test('34. Неверный DB_DRIVER — понятная ошибка вместо тихого SQLite', async () => {

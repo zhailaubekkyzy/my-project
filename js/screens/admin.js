@@ -367,7 +367,7 @@
       <div class="space-y-2">
         ${d.messages.length ? d.messages.map(m => `
           <div class="${m.sender === 'client' ? 'chat-bubble-human ml-8' : m.sender === 'ai' ? 'chat-bubble-si mr-8' : 'chat-bubble-expert mr-8'}">
-            <div class="text-[9px] font-semibold opacity-70">${who[m.sender] || esc(m.sender)} · ${fmtTime(m.createdAt)}</div>
+            <div class="text-[9px] font-semibold opacity-70">${m.authorType === 'assistant' ? 'Помощник эксперта' : (who[m.sender] || esc(m.sender))} · ${fmtTime(m.createdAt)}</div>
             ${SF.formatChatMarkdown(m.text)}
           </div>`).join('') : '<div class="text-xs text-muted">Сообщений нет</div>'}
       </div>

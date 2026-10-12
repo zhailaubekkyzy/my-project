@@ -25,6 +25,7 @@ const feedbackRoutes = require('./routes/feedback');
 const brainRoutes = require('./routes/brain');
 const supportRoutes = require('./routes/support');
 const adminRoutes = require('./routes/admin');
+const businessRoutes = require('./routes/business');
 const supportService = require('./services/support-service');
 const siEngine = require('./services/si-engine');
 
@@ -91,6 +92,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/brain', brainRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/business', businessRoutes);
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.

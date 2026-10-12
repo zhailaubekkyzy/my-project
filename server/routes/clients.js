@@ -5,8 +5,33 @@ const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const projectService = require('../services/project-service');
+const chatService = require('../services/chat-service');
+const funnelService = require('../services/funnel-service');
 
 router.use(requireAuth);
+
+// A client card for the Office. The assistant does not see money (deal value).
+function toClientCard(c, role) {
+  const card = {
+    ...c,
+    tags: projectService.safeJsonParse(c.tags, []),
+    qualification_answers: projectService.safeJsonParse(c.qualification_answers, {}),
+    si_paused: chatService.isSiPaused(c),
+    responsible_name: c.responsible_name || null
+  };
+  delete card.responsible_profile;
+  if (c.responsible_profile) {
+    const custom = (projectService.safeJsonParse(c.responsible_profile).displayName || '').trim();
+    if (custom) card.responsible_name = custom;
+  }
+  if (role === 'assistant') delete card.deal_value;
+  return card;
+}
+
+const CLIENT_SELECT = `SELECT c.*, u.display_name AS responsible_name, u.profile AS responsible_profile
+  FROM clients c LEFT JOIN users u ON u.id = c.responsible_user_id`;
+
+const memberOf = (req) => ({ userId: req.user.userId, role: req.projectRole === 'assistant' ? 'assistant' : 'owner' });
 
 /**
  * GET /api/projects/:projectId/clients
@@ -15,15 +40,11 @@ router.use(requireAuth);
 router.get('/', requireProjectPermission('conversations:read'), async (req, res, next) => {
   try {
     const clients = await db.all(
-      'SELECT * FROM clients WHERE project_id = ? ORDER BY last_activity DESC',
+      `${CLIENT_SELECT} WHERE c.project_id = ? ORDER BY c.last_activity DESC`,
       [req.project.id]
     );
 
-    res.json(clients.map(c => ({
-      ...c,
-      tags: projectService.safeJsonParse(c.tags, []),
-      qualification_answers: projectService.safeJsonParse(c.qualification_answers, {})
-    })));
+    res.json(clients.map(c => toClientCard(c, req.projectRole)));
   } catch (err) {
     next(err);
   }
@@ -36,7 +57,7 @@ router.get('/', requireProjectPermission('conversations:read'), async (req, res,
 router.get('/:clientId', requireProjectPermission('conversations:read'), async (req, res, next) => {
   try {
     const client = await db.get(
-      'SELECT * FROM clients WHERE id = ? AND project_id = ?',
+      `${CLIENT_SELECT} WHERE c.id = ? AND c.project_id = ?`,
       [req.params.clientId, req.project.id]
     );
 
@@ -45,9 +66,9 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
     }
 
     res.json({
-      ...client,
-      tags: projectService.safeJsonParse(client.tags, []),
-      qualification_answers: projectService.safeJsonParse(client.qualification_answers, {})
+      ...toClientCard(client, req.projectRole),
+      funnel_label: funnelService.STATUSES[client.funnel_status] || null,
+      events: await funnelService.eventsOf(client.id, 50)
     });
   } catch (err) {
     next(err);
@@ -56,23 +77,14 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
 
 /**
  * POST /api/projects/:projectId/clients/:clientId/si  { enabled }
- * Turn the SI back on for a client (or pause it while the expert answers personally)
+ * Turn the SI back on for a client (or pause it: the owner / assistant becomes responsible)
  */
 router.post('/:clientId/si', requireProjectPermission('conversations:write'), async (req, res, next) => {
   try {
     const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
     if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
     const enabled = Boolean(req.body && req.body.enabled);
-    await db.run(
-      'UPDATE clients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [enabled ? 'active' : 'human_needed', client.id]
-    );
-    if (enabled) {
-      await db.run(
-        `UPDATE direct_inquiries SET status = 'answered', updated_at = CURRENT_TIMESTAMP WHERE client_id = ? AND status = 'waiting'`,
-        [client.id]
-      );
-    }
+    await chatService.setSiEnabled(client, enabled, memberOf(req));
     res.json({ clientId: client.id, siEnabled: enabled });
   } catch (err) {
     next(err);

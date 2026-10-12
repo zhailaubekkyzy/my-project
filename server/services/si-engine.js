@@ -134,7 +134,7 @@ async function generateOpener({ project, expertName }) {
 }
 
 /**
- * history: [{ sender: 'client' | 'ai' | 'expert_human', text }] oldest first, without userText.
+ * history: [{ sender: 'client' | 'ai' | 'expert_human', authorType?, text }] oldest first, without userText.
  * knowledge: [{ title, text }] pieces of the consultant's SI-brain materials.
  * Returns { text, source: 'openai' | 'fallback' }.
  */
@@ -148,7 +148,10 @@ async function generateReply({ project, expertName, history = [], userText, know
     if (!m.text) continue;
     if (m.sender === 'client') messages.push({ role: 'user', content: m.text });
     else if (m.sender === 'ai') messages.push({ role: 'assistant', content: m.text });
-    else if (m.sender === 'expert_human') messages.push({ role: 'assistant', content: `(Эксперт лично): ${m.text}` });
+    else if (m.sender === 'expert_human') {
+      const who = m.authorType === 'assistant' ? 'Помощник эксперта лично' : 'Эксперт лично';
+      messages.push({ role: 'assistant', content: `(${who}): ${m.text}` });
+    }
   }
   messages.push({ role: 'user', content: String(userText).slice(0, 4000) });
 

@@ -12,7 +12,7 @@
   const api = () => window.smartFlowApi;
 
   function stripPrefix(text) {
-    return String(text || '').replace(/^\[(SI|Эксперт)\]:\s*/, '');
+    return String(text || '').replace(/^\[(SI|Эксперт|Помощник)\]:\s*/, '');
   }
 
   // ---------------- List: one list of conversations, newest first ----------------
@@ -69,7 +69,7 @@
     if (msg.sender === 'expert_human') {
       return `
         <div class="flex flex-col items-start">
-          <div class="text-[9px] text-brand font-semibold px-1 mb-0.5">👤 ${SF.esc(consultant?.author?.name || 'Эксперт')} лично</div>
+          <div class="text-[9px] text-brand font-semibold px-1 mb-0.5">👤 ${msg.authorType === 'assistant' ? `Помощник ${SF.esc(consultant?.author?.name || 'эксперта')}` : `${SF.esc(consultant?.author?.name || 'Эксперт')} лично`}</div>
           <div class="chat-bubble-expert">${SF.formatChatMarkdown(msg.text)}</div>
         </div>`;
     }

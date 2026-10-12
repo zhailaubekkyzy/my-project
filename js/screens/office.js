@@ -1,6 +1,8 @@
 // screens/office.js - Office (business profile) inside the Marketplace tab. Real data only.
-// Sections: Мои SI-продавцы · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали.
+// Sections: Мои SI-продавцы · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали · Помощник.
 // Each SI-consultant has four tabs: Карточка и методология · Аналитика · Клиенты · Рассылки.
+// The assistant of a business sees its SI-sellers with clients and "Мне написали" only: no money,
+// payment links, SI-brain or settings (the server checks this too).
 
 (function (window) {
   const SF = window.SF;
@@ -9,8 +11,10 @@
   const SECTIONS = [
     { id: 'consultants', label: 'Мои SI', icon: 'bot' },
     { id: 'brain', label: 'SI-мозг', icon: 'brain' },
-    { id: 'inbox', label: 'Мне написали', icon: 'user-check' }
+    { id: 'inbox', label: 'Мне написали', icon: 'user-check' },
+    { id: 'team', label: 'Помощник', icon: 'user-plus' }
   ];
+  const ASSISTANT_SECTIONS = ['consultants', 'inbox'];
 
   const CONSULTANT_TABS = [
     { id: 'methodology', label: 'Карточка и методология', icon: 'git-branch' },
@@ -51,6 +55,10 @@
       </label>`;
   }
 
+  const myUserId = () => store().data.auth.internalUserId;
+  // The Office as the assistant only (no own business profile yet)
+  const assistantOnly = () => !store().isBusinessActive() && store().isAssistant();
+
   function needServer() {
     if (SF.data.signedIn()) return false;
     showToast('Нет связи с сервером. Откройте приложение в Telegram');
@@ -90,16 +98,18 @@
 
   // ---------------- Office home ----------------
   function renderOffice(route, state) {
-    if (!store().isBusinessActive()) return renderTerms();
-    const section = route.section || 'consultants';
+    if (!store().isBusinessActive() && (!store().isAssistant() || route.next === 'create')) return renderTerms();
+    const sections = assistantOnly() ? SECTIONS.filter(s => ASSISTANT_SECTIONS.includes(s.id)) : SECTIONS;
+    const section = sections.some(s => s.id === route.section) ? route.section : 'consultants';
     const waiting = SF.data.waitingInquiries(state).length;
     let body = '';
     if (section === 'consultants') body = renderConsultantList(state);
     if (section === 'brain') body = renderBrain(state);
     if (section === 'inbox') body = renderInbox(state);
+    if (section === 'team') body = renderTeam(state);
     return `
-      <div class="grid grid-cols-3 gap-1.5 bg-raised p-1.5 rounded-2xl border border-line">
-        ${SECTIONS.map(s => `
+      <div class="grid ${sections.length === 4 ? 'grid-cols-4' : 'grid-cols-2'} gap-1.5 bg-raised p-1.5 rounded-2xl border border-line">
+        ${sections.map(s => `
           <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[11px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
             ${s.id === 'inbox' && waiting ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waiting}</span>` : ''}
@@ -110,11 +120,34 @@
   }
 
   function renderConsultantList(state) {
-    const list = state.office.consultants;
+    const list = state.office.consultants.filter(c => !c.assisting);
+    const assisted = state.office.consultants.filter(c => c.assisting);
+    const owners = [...new Set(assisted.map(c => c.ownerName))];
+    const assistedBlock = assisted.length ? `
+      <div class="space-y-2.5">
+        <div class="text-[11px] text-muted px-1 leading-snug">Вы помощник: ${SF.esc(owners.join(', '))}. Отвечаете клиентам и ставите SI на паузу; деньги, SI-мозг и настройки видит только владелец.</div>
+        ${assisted.map(c => `
+          <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'income' })" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
+            ${SF.avatar(c.photoUrl, { size: 48, kind: 'si' })}
+            <span class="flex-1 min-w-0">
+              <span class="block text-sm font-bold text-ink truncate">${SF.esc(c.name)}</span>
+              <span class="block text-[11px]">${SF.siLabel(c.roleTitle)}</span>
+              <span class="block text-[10px] mt-0.5 text-brand">Бизнес: ${SF.esc(c.ownerName)}</span>
+            </span>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+          </button>`).join('')}
+      </div>` : '';
+    if (assistantOnly()) {
+      return `${assistedBlock}
+        <button onclick="SF.actions.startCreateConsultant()" class="w-full py-2.5 rounded-2xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-продавца
+        </button>`;
+    }
     return `
       <button onclick="SF.push('office-create')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
         <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-продавца
       </button>
+      ${assistedBlock}
       <div class="space-y-2.5">
         ${list.map(c => `
           <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
@@ -152,7 +185,7 @@
 
   function renderBrain(state) {
     const materials = state.remote.brain;
-    const consultants = state.office.consultants;
+    const consultants = store().ownConsultants();
     return `
       <div class="glass-card-3d p-4 space-y-3">
         <div class="flex items-center gap-2">
@@ -250,6 +283,56 @@
     `;
   }
 
+  // ---------------- Assistant (one person helps the owner) ----------------
+  function renderTeam(state) {
+    const info = state.remote.business;
+    if (!info) return '<div class="text-xs text-muted">Загружаю…</div>';
+    const rights = `
+      <div class="grid grid-cols-2 gap-2 text-[11px] leading-snug">
+        <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
+          <div class="font-bold text-brand">Может</div>
+          <div class="text-ink-2">Отвечать в «Мне написали»</div>
+          <div class="text-ink-2">Ставить SI на паузу и включать</div>
+          <div class="text-ink-2">Смотреть карточки клиентов</div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
+          <div class="font-bold text-muted">Не может</div>
+          <div class="text-ink-2">Видеть деньги и ссылки на оплату</div>
+          <div class="text-ink-2">Менять SI-мозг</div>
+          <div class="text-ink-2">Менять SI-продавцов и настройки</div>
+        </div>
+      </div>`;
+    if (!info.business) {
+      return `
+        <div class="glass-card-3d p-4 space-y-3">
+          ${SF.sectionTitle('user-plus', 'Помощник')}
+          <p class="text-xs text-muted leading-relaxed">Бизнес появится, как только вы создадите и включите своего SI-продавца. Тогда сюда можно будет пригласить помощника.</p>
+          ${rights}
+        </div>`;
+    }
+    const assistants = info.business.members.filter(m => m.role === 'assistant');
+    const canInvite = assistants.length < (info.maxAssistants || 1);
+    return `
+      <div class="glass-card-3d p-4 space-y-3">
+        ${SF.sectionTitle('user-plus', 'Помощник')}
+        <p class="text-xs text-muted leading-relaxed">Один человек, который отвечает клиентам вместе с вами. Когда он отвечает клиенту, SI для этого клиента встаёт на паузу.</p>
+        ${rights}
+        ${assistants.map(m => `
+          <div class="p-3 rounded-xl bg-card border border-line flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-bold text-ink truncate">${SF.esc(m.name)}</div>
+              <div class="text-[10px] text-muted">${m.username ? `@${SF.esc(m.username)} · ` : ''}${SF.esc(m.supportCode || '')}</div>
+            </div>
+            <button onclick="SF.actions.removeAssistant('${SF.js(m.userId)}', '${SF.js(m.name)}')" class="px-2.5 py-1.5 rounded-lg btn-3d-dark text-[11px]">Убрать</button>
+          </div>`).join('')}
+        ${canInvite ? `
+          <form onsubmit="SF.actions.inviteAssistant(event)" class="space-y-2 text-xs">
+            ${field('supportCode', 'Номер помощника', '', { placeholder: 'SF-48213', max: 12, hint: 'Номер внизу Профиля помощника. Пусть он откроет SmartFlow и продиктует его вам.' })}
+            <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-sm">Пригласить</button>
+          </form>` : ''}
+      </div>`;
+  }
+
   // ---------------- Create a consultant ----------------
   function renderCreate() {
     return `
@@ -272,6 +355,7 @@
   function renderConsultant(route, state) {
     const c = store().findOfficeConsultant(route.id);
     if (!c) return SF.emptyState('assistant', 'SI-продавец не найден', 'Вернитесь в Офис и выберите другого.');
+    if (c.assisting) return renderAssistedConsultant(c, state);
     const tab = route.tab || 'methodology';
     let body = '';
     if (tab === 'methodology') body = renderMethodology(c) + renderConsultantBrain(c, state);
@@ -313,6 +397,21 @@
       </div>
 
       ${body}
+    `;
+  }
+
+  // The assistant: the SI-seller's clients only
+  function renderAssistedConsultant(c, state) {
+    return `
+      <div class="glass-card-3d p-4 flex items-center gap-3 border-[var(--si-bubble-line)]">
+        ${SF.avatar(c.photoUrl, { size: 56, kind: 'si' })}
+        <div class="flex-1 min-w-0">
+          <div class="text-base font-extrabold text-ink truncate">${SF.esc(c.name)}</div>
+          <div class="text-xs">${SF.siLabel(c.roleTitle)}</div>
+          <div class="text-[10px] text-brand mt-0.5">Бизнес: ${SF.esc(c.ownerName)} · вы помощник</div>
+        </div>
+      </div>
+      ${renderClients(c, state)}
     `;
   }
 
@@ -386,7 +485,7 @@
           <button onclick="SF.push('office-client', { id: '${SF.js(cl.id)}', projectId: '${SF.js(c.id)}' })" class="snap-start flex-shrink-0 w-[31%] min-w-[104px] p-2.5 rounded-2xl bg-card border border-line text-left space-y-1">
             ${SF.avatar(cl.avatar_url, { size: 32 })}
             <div class="text-[11px] font-bold text-ink truncate">${SF.esc(cl.name)}</div>
-            <div class="text-[10px] font-semibold truncate ${cl.status === 'human_needed' ? 'text-amber-400' : 'text-muted'}">${cl.status === 'human_needed' ? 'Ждёт вас' : 'Говорит с SI'}</div>
+            <div class="text-[10px] font-semibold truncate ${cl.si_paused ? 'text-amber-400' : 'text-muted'}">${cl.si_paused ? (cl.responsible_user_id === myUserId() ? 'Ждёт вас' : `Отвечает ${SF.esc(cl.responsible_name || 'человек')}`) : 'Говорит с SI'}</div>
           </button>`).join('')}
       </div>
       <div class="space-y-1.5">
@@ -395,7 +494,7 @@
             ${SF.avatar(cl.avatar_url, { size: 32 })}
             <span class="flex-1 min-w-0">
               <span class="block text-xs font-bold text-ink truncate">${SF.esc(cl.name)}</span>
-              <span class="block text-[10px] text-muted truncate">${SF.esc(String(cl.last_message || '').replace(/^\[(SI|Эксперт)\]:\s*/, ''))}</span>
+              <span class="block text-[10px] text-muted truncate">${SF.esc(String(cl.last_message || '').replace(/^\[(SI|Эксперт|Помощник)\]:\s*/, ''))}</span>
             </span>
             <span class="text-[10px] text-faint whitespace-nowrap">${timeLabel(cl.last_activity)}</span>
           </button>`).join('')}
@@ -418,7 +517,12 @@
     const client = clients.find(c => c.id === route.id);
     const messages = state.remote.clientMessages[route.id];
     if (!client) return '<div class="text-xs text-muted">Загружаю…</div>';
-    const paused = client.status === 'human_needed';
+    const paused = Boolean(client.si_paused);
+    const mine = client.responsible_user_id === myUserId();
+    const who = (m) => {
+      if (m.authorUserId && m.authorUserId === myUserId()) return '👤 Вы лично';
+      return m.authorType === 'assistant' ? '👤 Помощник' : '👤 Владелец';
+    };
     return `
       <div class="glass-card-3d p-3.5 flex items-center gap-3">
         ${SF.avatar(client.avatar_url, { size: 44 })}
@@ -430,7 +534,7 @@
 
       <div class="flex items-center justify-between p-2.5 rounded-xl border ${paused ? 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)]' : 'bg-[var(--si-bubble)] border-[var(--si-bubble-line)]'}">
         <span class="text-[11px] font-semibold flex items-center gap-1.5 ${paused ? 'text-brand' : 'text-si'}">
-          ${paused ? '👤 SI на паузе — отвечаете вы' : '<span class="si-dot"></span> SI отвечает этому клиенту'}
+          ${paused ? (mine ? '👤 SI на паузе — отвечаете вы' : `👤 SI на паузе — отвечает ${SF.esc(client.responsible_name || 'человек')}`) : '<span class="si-dot"></span> SI отвечает этому клиенту'}
         </span>
         <button onclick="SF.actions.setClientSi('${SF.js(route.projectId)}', '${SF.js(client.id)}', ${paused})" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] font-bold">${paused ? 'Включить SI' : 'Поставить на паузу'}</button>
       </div>
@@ -441,7 +545,7 @@
           ${(messages || []).map(m => `
             <div class="flex flex-col ${m.sender === 'client' ? 'items-start' : 'items-end'}">
               <div class="text-[9px] text-faint mb-0.5 px-1">
-                ${m.sender === 'client' ? SF.esc(client.name) : (m.sender === 'expert_human' ? '👤 Вы лично' : SF.siLabel('SI'))} · ${timeLabel(m.createdAt || m.created_at)}
+                ${m.sender === 'client' ? SF.esc(client.name) : (m.sender === 'expert_human' ? who(m) : SF.siLabel('SI'))} · ${timeLabel(m.createdAt || m.created_at)}
               </div>
               <div class="${m.sender === 'client' ? 'chat-bubble-human' : (m.sender === 'expert_human' ? 'chat-bubble-expert' : 'chat-bubble-si')} text-xs">${SF.formatChatMarkdown(m.text)}</div>
             </div>`).join('')}
@@ -614,6 +718,34 @@
     }
   };
 
+  SF.actions.inviteAssistant = async (e) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const code = e.target.supportCode.value.trim();
+    if (!code) return;
+    try {
+      await api().addAssistant(code);
+      SF.data.invalidate('business');
+      await SF.data.business();
+      showToast('Помощник добавлен. Бот сообщит ему об этом в Telegram');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось пригласить', err));
+    }
+  };
+
+  SF.actions.removeAssistant = async (userId, name) => {
+    if (needServer()) return;
+    if (!window.confirm(`Убрать помощника ${name}? Его диалоги вернутся к вам.`)) return;
+    try {
+      await api().removeAssistant(userId);
+      SF.data.invalidate('business');
+      await SF.data.business();
+      showToast('Помощник убран');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
   SF.actions.setClientSi = async (projectId, clientId, enabled) => {
     if (needServer()) return;
     try {
@@ -650,7 +782,7 @@
 
   // consultantId: upload from a consultant's tab (only this SI gets it); empty: all my SI get it
   async function uploadMaterial(file, { name, title = '', consultantId = '' }) {
-    const consultantIds = consultantId ? [consultantId] : store().data.office.consultants.map(c => c.id);
+    const consultantIds = consultantId ? [consultantId] : store().ownConsultants().map(c => c.id);
     brainBusy = title || name;
     store().notify();
     try {
@@ -754,18 +886,27 @@
     },
     render(route, state) {
       if (route.screen === 'office') return renderOffice(route, state);
-      if (!store().isBusinessActive()) return renderTerms();
+      if (route.screen === 'office-create' && !store().isBusinessActive()) return renderTerms();
+      if (!store().isBusinessActive() && !store().isAssistant()) return renderTerms();
       if (route.screen === 'office-create') return renderCreate();
       if (route.screen === 'office-consultant') return renderConsultant(route, state);
       if (route.screen === 'office-client') return renderClient(route, state);
       return renderOffice(route, state);
     },
     afterRender(route, state) {
-      if (!store().isBusinessActive()) return;
+      // New or removed assistant roles show up without reopening the app
+      SF.data.officeLists();
+      if (!store().isBusinessActive() && !store().isAssistant()) return;
       if (route.screen === 'office') {
         SF.data.allInquiries();
         if (route.section === 'brain') SF.data.brain();
+        if (route.section === 'team') SF.data.business();
       } else if (route.screen === 'office-consultant') {
+        const c = store().findOfficeConsultant(route.id);
+        if (c && c.assisting) {
+          SF.data.clients(route.id);
+          return;
+        }
         if (!route.tab || route.tab === 'methodology') SF.data.brain();
         if (route.tab === 'analytics') SF.data.analytics(route.id);
         if (route.tab === 'income') SF.data.clients(route.id);
