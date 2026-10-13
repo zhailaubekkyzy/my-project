@@ -31,4 +31,18 @@ function readReceiptBody(req, res, next) {
   });
 }
 
-module.exports = { readImageBody, readReceiptBody };
+// Voice messages: up to 1.5 minutes, 3 MB is plenty (voice-service decides by the bytes what it is)
+const rawVoice = express.raw({ type: () => true, limit: 3 * 1024 * 1024 });
+function readVoiceBody(req, res, next) {
+  rawVoice(req, res, (err) => {
+    if (!err) return next();
+    const tooLarge = err.status === 413;
+    res.status(tooLarge ? 413 : 400).json({
+      error: 'bad_request',
+      code: tooLarge ? 'VOICE_TOO_LARGE' : 'INVALID_VOICE',
+      message: tooLarge ? 'Голосовое слишком длинное — до 1,5 минуты.' : 'Не получилось прочитать запись. Попробуйте ещё раз.'
+    });
+  });
+}
+
+module.exports = { readImageBody, readReceiptBody, readVoiceBody };

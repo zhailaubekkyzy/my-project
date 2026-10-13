@@ -37,6 +37,8 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   // Buddy (personal helper) may use its own, cheaper model; the same as the SI by default
+  // Voice messages: OpenAI speech-to-text model
+  transcribeModel: process.env.TRANSCRIBE_MODEL || 'whisper-1',
   buddyModel: process.env.BUDDY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
   // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.

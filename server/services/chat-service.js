@@ -103,6 +103,8 @@ function toMessage(row) {
     authorUserId: row.author_user_id || null,
     text: row.text,
     isVoice: Boolean(row.is_voice),
+    voiceId: row.voice_id || null,
+    voiceSeconds: row.voice_seconds ? Number(row.voice_seconds) : null,
     createdAt: row.created_at
   };
 }
@@ -136,16 +138,17 @@ async function history(projectId, clientId) {
 /**
  * author: { type: 'si' | 'client' | 'owner' | 'assistant', userId? } (userId for owner / assistant)
  */
-async function saveMessage(client, author, text) {
+async function saveMessage(client, author, text, voice = null) {
   const id = newMessageId();
   await db.run(
-    `INSERT INTO conversations (id, project_id, client_id, business_id, sender, author_type, author_user_id, text, is_voice)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [id, client.project_id, client.id, client.business_id || null, SENDER_OF[author.type], author.type, author.userId || null, text]
+    `INSERT INTO conversations (id, project_id, client_id, business_id, sender, author_type, author_user_id, text, is_voice, voice_id, voice_seconds)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, client.project_id, client.id, client.business_id || null, SENDER_OF[author.type], author.type, author.userId || null, text,
+      voice ? 1 : 0, voice ? voice.id : null, voice ? voice.seconds : null]
   );
   await db.run(
     'UPDATE clients SET last_message = ?, last_activity = CURRENT_TIMESTAMP WHERE id = ?',
-    [`${LAST_MESSAGE_PREFIX[author.type] || ''}${text}`.slice(0, 500), client.id]
+    [`${LAST_MESSAGE_PREFIX[author.type] || ''}${voice ? '🎤 ' : ''}${text}`.slice(0, 500), client.id]
   );
   return toMessage(await db.get('SELECT * FROM conversations WHERE id = ?', [id]));
 }
@@ -157,9 +160,9 @@ const CLIENT = { type: 'client' };
  * A client's message: saved, then the SI answers unless the expert took over (SI paused)
  * or the per-client limit is used up. Returns { message, reply } (reply may be null).
  */
-async function handleClientMessage(project, lead, text) {
+async function handleClientMessage(project, lead, text, voice = null) {
   const past = await history(project.id, lead.id);
-  const message = await saveMessage(lead, CLIENT, text);
+  const message = await saveMessage(lead, CLIENT, text, voice);
   await funnelService.recordEvent(lead, 'client_message', CLIENT);
   if (lead.status === 'new') {
     await db.run(`UPDATE clients SET status = 'active' WHERE id = ? AND status = 'new'`, [lead.id]);

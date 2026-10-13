@@ -512,6 +512,7 @@
         if (mic.url) URL.revokeObjectURL(mic.url);
         mic.url = URL.createObjectURL(blob);
         mic.result = { seconds: Math.round((Date.now() - mic.startedAt) / 1000), size: blob.size, type: blob.type };
+        mic.reported = false;
         mic.state = 'idle';
         store().notify();
       };
@@ -537,6 +538,11 @@
   }
 
   async function micReport() {
+    if (mic.reported) {
+      showToast('Уже отправлено');
+      return;
+    }
+    mic.reported = true;
     const d = micDevice();
     const r = mic.result || {};
     const text = `Проверка микрофона: ${d.platform}, Telegram ${d.telegram}; формат ${r.type || '—'}, ${r.seconds || 0} с, ${Math.round((r.size || 0) / 1024)} КБ. Устройство: ${d.device}`;
@@ -544,6 +550,7 @@
       await api().sendFeedback(text);
       showToast('Отправлено команде');
     } catch (err) {
+      mic.reported = false;
       showToast(err.message || 'Не отправилось');
     }
   }
