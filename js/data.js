@@ -139,6 +139,13 @@
       store().setRemote('myFeedback', res.feedback || []);
     }, maxAge),
 
+    // Buddy: my notifications (the bot sends the same to Telegram)
+    notifications: (maxAge = 15000) => ensure('notifications', async () => {
+      if (!signedIn()) return false;
+      const res = await api().getNotifications();
+      store().setRemote('notifications', { list: res.notifications || [], unread: Number(res.unread) || 0 });
+    }, maxAge),
+
     // My business: owner + assistant
     business: () => ensure('business', async () => {
       if (!signedIn()) return false;

@@ -202,7 +202,11 @@ SF.openIn = (tab, screen, params = {}) => {
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
-  const param = tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
+  SF.openStartParam(tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp'));
+}
+
+// The same places open from a notification in Buddy (it keeps the bot button's start param)
+SF.openStartParam = (param) => {
   if (!param || !/^[A-Za-z0-9_-]{1,64}$/.test(param)) return;
   if (param.startsWith('C_')) {
     SF.openIn('marketplace', 'consultant', { id: param.slice(2) });
@@ -219,7 +223,7 @@ function handleStartParam() {
   } else {
     SF.openIn('chats', 'chat', { slug: param });
   }
-}
+};
 
 // -------------------------------------------------------------
 // Rendering
@@ -303,6 +307,8 @@ function renderApp(state) {
   }
   try {
     if (screen.afterRender) screen.afterRender(route, state);
+    // The red dot on Buddy stays fresh on every screen (a request at most once a minute)
+    if (SF.data.notifications) SF.data.notifications(60000);
   } catch (err) {
     console.error('[SmartFlow] afterRender failed:', err);
     SF.reportAppError(err, `afterRender ${tab}/${route.screen}`);
@@ -314,15 +320,18 @@ function renderBottomNav(state) {
   const badges = {
     chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length
   };
+  // Red dot on Buddy: there are unread notifications
+  const buddyUnread = Boolean(state.remote.notifications && state.remote.notifications.unread);
   return `
     <nav class="tg-nav-bar grid grid-cols-5 items-end">
       ${TABS.map(t => {
         const active = state.ui.tab === t.id;
         if (t.center) {
           return `
-            <button onclick="SF.go('${t.id}')" class="flex flex-col items-center gap-0.5 -mt-6" aria-label="${t.label}">
-              <span class="buddy-nav-btn ${active ? 'active' : ''}">
+            <button onclick="SF.go('${t.id}')" class="flex flex-col items-center gap-0.5 -mt-6" aria-label="${t.label}${buddyUnread ? ': есть новые уведомления' : ''}">
+              <span class="buddy-nav-btn relative ${active ? 'active' : ''}">
                 <img src="${SF.MASCOTS.buddy}" alt="" class="w-11 h-11" />
+                ${buddyUnread ? '<span class="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-rose-500 border-2 border-card"></span>' : ''}
               </span>
               <span class="text-[11px] font-semibold ${active ? 'text-brand' : 'text-muted'}">${t.label}</span>
             </button>`;

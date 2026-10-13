@@ -15,6 +15,41 @@ async function loadUser(userId) {
 }
 
 /**
+ * GET /api/me/notifications — my notifications for Buddy (newest first) and how many are unread
+ */
+router.get('/notifications', async (req, res, next) => {
+  try {
+    const rows = await db.all(
+      'SELECT id, text, start_param, read_at, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 30',
+      [req.user.userId]
+    );
+    const unread = await db.get('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL', [req.user.userId]);
+    res.json({
+      notifications: rows.map(r => ({ id: r.id, text: r.text, startParam: r.start_param, read: Boolean(r.read_at), createdAt: r.created_at })),
+      unread: Number(unread.count) || 0
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/me/notifications/read  { id } — one notification, or all of mine without id
+ */
+router.post('/notifications/read', async (req, res, next) => {
+  try {
+    const id = req.body && req.body.id ? String(req.body.id) : null;
+    await db.run(
+      `UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL${id ? ' AND id = ?' : ''}`,
+      id ? [req.user.userId, id] : [req.user.userId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/me/profile
  */
 router.get('/profile', async (req, res, next) => {

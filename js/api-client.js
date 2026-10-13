@@ -410,6 +410,15 @@
     rememberError,
     reportError,
 
+    // Notifications in Buddy (the same ones the bot sends to Telegram)
+    async getNotifications() {
+      return await apiFetch('/api/me/notifications');
+    },
+
+    async markNotificationRead(id) {
+      return await apiFetch('/api/me/notifications/read', { method: 'POST', body: JSON.stringify(id ? { id } : {}) });
+    },
+
     // Profile & photos
     async getMyProfile() {
       return await apiFetch('/api/me/profile');

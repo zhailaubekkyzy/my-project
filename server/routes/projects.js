@@ -109,6 +109,10 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
 
     // "If…, then…" scenarios are part of the methodology: only known conditions and actions are kept
     let aiSettings = custom_ai_settings;
+    // The general description of the methodology: plain text, limited
+    if (aiSettings && typeof aiSettings === 'object' && aiSettings.methodology !== undefined) {
+      aiSettings = { ...aiSettings, methodology: String(aiSettings.methodology || '').trim().slice(0, 3000) };
+    }
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.scenarios !== undefined) {
       aiSettings = { ...aiSettings, scenarios: funnelService.normalizeScenarios(aiSettings.scenarios) };
     }

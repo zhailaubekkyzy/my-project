@@ -7,7 +7,7 @@
 //  - the client asked for a person and nobody answered yet → "Ждут человека" (waiting_human);
 //  - outcomes: "Купили" (bought, marked by the expert or the assistant) and "Отказ" (refused).
 // Scenarios live in the SI-seller's methodology (custom_ai_settings.scenarios): "если клиент
-// возразил «дорого» → SI отвечает так: …", "→ передать человеку", "→ сообщить мне в Telegram".
+// возразил «дорого» → SI отвечает так: …", "→ передать человеку", "→ сообщить мне в SmartFlow".
 // "SI отвечает так" goes into the SI prompt; the other actions run on events (chat-service.js).
 const crypto = require('crypto');
 const db = require('../db');
@@ -54,12 +54,25 @@ const SCENARIO_WHEN = {
   buy_clicked: 'Клиент нажал «Купить»',
   receipt_sent: 'Клиент прислал чек',
   refused: 'Клиент отказался',
+  silent: 'Клиент замолчал',
   custom: 'Своё условие'
 };
+// "Клиент замолчал на N минут" — a follow-up on one branch of the funnel (the funnel is a tree):
+// after what the client went silent — also "after the branch «…»" (after: the id of another
+// scenario), so branches link into a tree. Checked by the server alarm clock (followup-service.js).
+const SILENT_AFTER = {
+  any: 'в любой момент разговора',
+  text: 'после того, что я опишу словами',
+  offer: 'после оффера',
+  objection: 'после возражения',
+  buy_clicked: 'после «Купить», но без чека'
+};
+const SILENT_MINUTES = { min: 5, max: 30 * 24 * 60, default: 60 };
 const SCENARIO_THEN = {
   si_says: 'SI отвечает так',
+  send_text: 'Отправить клиенту мой текст или ссылку',
   handover: 'Передать человеку (SI на паузу)',
-  notify: 'Сообщить мне в Telegram'
+  notify: 'Сообщить мне в SmartFlow'
 };
 const MAX_SCENARIOS = 20;
 
@@ -77,17 +90,44 @@ function normalizeScenarios(list) {
     if (!raw || !SCENARIO_WHEN[raw.when] || !SCENARIO_THEN[raw.then]) continue;
     const scenario = {
       id: /^scn_[a-z0-9]{4,20}$/.test(raw.id) ? raw.id : `scn_${crypto.randomBytes(5).toString('hex')}`,
+      // A short name of the branch («Хочет рассрочку»), so other branches can refer to it
+      title: clean(raw.title, 60),
       when: raw.when,
       words: raw.when === 'objection' ? clean(raw.words, 120) : '',
       condition: raw.when === 'custom' ? clean(raw.condition, 200) : '',
       then: raw.then,
       text: clean(raw.text, 500)
     };
-    if (scenario.then === 'si_says' && !scenario.text) continue;
+    if (raw.when === 'silent') {
+      const minutes = parseInt(raw.minutes, 10) || SILENT_MINUTES.default;
+      scenario.minutes = Math.max(SILENT_MINUTES.min, Math.min(SILENT_MINUTES.max, minutes));
+      scenario.after = SILENT_AFTER[raw.after] || /^scn_[a-z0-9]{4,20}$/.test(raw.after) ? raw.after : 'any';
+      // "После того, как …" in the expert's own words
+      scenario.afterText = scenario.after === 'text' ? clean(raw.afterText, 200) : '';
+      if (scenario.after === 'text' && !scenario.afterText) scenario.after = 'any';
+      if (!scenario.afterText) delete scenario.afterText;
+    }
+    // "SI отвечает так" needs the words — except after silence: then the hint is optional
+    if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') continue;
+    // The material itself is the text or link the expert typed
+    if (scenario.then === 'send_text' && !scenario.text) continue;
     if (scenario.when === 'custom' && !scenario.condition) continue;
     result.push(scenario);
   }
-  return result;
+  // "После ветки «…»" must point to a branch that exists (and not to itself); otherwise the
+  // branch is dropped rather than turned into "any silence" — it must never fire unexpectedly
+  return result.filter(s => s.when !== 'silent' || SILENT_AFTER[s.after]
+    || (s.after !== s.id && result.some(o => o.id === s.after && o.when !== 'silent')));
+}
+
+/**
+ * What a branch is called in messages to the expert: its title, or its condition.
+ */
+function scenarioName(scenario) {
+  if (!scenario) return '';
+  if (scenario.title) return scenario.title;
+  if (scenario.when === 'custom') return scenario.condition;
+  return SCENARIO_WHEN[scenario.when] || '';
 }
 
 const wordsOf = (scenario) => scenario.words.split(/[,;]/).map(w => w.trim().toLowerCase()).filter(Boolean);
@@ -117,8 +157,9 @@ function customConditions(scenarios) {
  * "SI отвечает так" scenarios as lines for the SI prompt.
  */
 function scenarioPromptLines(scenarios) {
+  // After silence the SI writes the follow-up itself later: not a rule for the conversation
   return normalizeScenarios(scenarios)
-    .filter(s => s.then === 'si_says')
+    .filter(s => s.then === 'si_says' && s.when !== 'silent')
     .map(s => {
       const words = wordsOf(s);
       let when = `Если ${SCENARIO_WHEN[s.when].charAt(0).toLowerCase()}${SCENARIO_WHEN[s.when].slice(1)}`;
@@ -126,6 +167,13 @@ function scenarioPromptLines(scenarios) {
       if (s.when === 'custom') when = `Если ${s.condition}`;
       return `- ${when}: ${s.text}`;
     });
+}
+
+function minutesLabel(minutes) {
+  const m = Number(minutes) || 0;
+  if (m >= 1440 && m % 1440 === 0) return `${m / 1440} дн.`;
+  if (m >= 60 && m % 60 === 0) return `${m / 60} ч`;
+  return `${m} мин`;
 }
 
 // ---------- Status ----------
@@ -209,6 +257,7 @@ async function eventsOf(clientId, limit = 100) {
     let detail = '';
     if (r.type === 'objection') detail = data.objection || '';
     if (r.type === 'scenario') detail = SCENARIO_THEN[data.then] || '';
+    if (r.type === 'scenario' && data.minutes) detail += ` · молчит ${minutesLabel(data.minutes)}`;
     if (r.type === 'condition') detail = data.condition || '';
     return {
       id: r.id,
@@ -281,6 +330,10 @@ module.exports = {
   SCENARIO_WHEN,
   SCENARIO_THEN,
   MAX_SCENARIOS,
+  SILENT_AFTER,
+  scenarioName,
+  SILENT_MINUTES,
+  minutesLabel,
   PAGE_SIZE,
   normalizeScenarios,
   customConditions,

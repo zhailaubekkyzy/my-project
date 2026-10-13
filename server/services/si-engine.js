@@ -71,6 +71,8 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     );
   }
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
+  // The expert's own description of how the SI leads the client to buying (before the scenarios)
+  if (s.methodology) lines.push('Методология эксперта (как вести клиента к покупке, следуй ей мягко):', String(s.methodology).slice(0, 3000));
   const scenarios = scenarioPromptLines(s.scenarios);
   if (scenarios.length) {
     lines.push('Сценарии эксперта «если…, то…» (следуй им мягко, своими словами, без давления):', ...scenarios);
@@ -150,6 +152,34 @@ async function generateOpener({ project, expertName }) {
   return text ? { text, source: 'openai' } : { text: fallbackOpener(project), source: 'fallback' };
 }
 
+// The client has been silent: one warm reminder without OpenAI
+function fallbackFollowUp() {
+  return 'Здравствуйте! Как у вас дела? Если остались вопросы — я здесь и с радостью помогу 🙂';
+}
+
+/**
+ * The client has been silent for a while ("Догоняющие сообщения"): the SI writes one short,
+ * warm message itself. instruction: the expert's hint (may be empty).
+ */
+async function generateFollowUp({ project, expertName, history = [], instruction = '' }) {
+  if (!isConfigured()) return { text: fallbackFollowUp(), source: 'fallback' };
+  const messages = [{ role: 'system', content: buildSystemPrompt(project, expertName) }];
+  for (const m of history.slice(-HISTORY_LIMIT)) {
+    if (!m.text) continue;
+    if (m.sender === 'client') messages.push({ role: 'user', content: m.text });
+    else messages.push({ role: 'assistant', content: m.text });
+  }
+  messages.push({
+    role: 'user',
+    content: '(Служебно: клиент давно не отвечает. Напишите ему одно короткое тёплое сообщение: ' +
+      'без давления и упрёков, не повторяйте прошлые фразы, можно один лёгкий вопрос. ' +
+      (instruction ? `Пожелание эксперта: ${String(instruction).slice(0, 500)}. ` : '') +
+      'Не упоминайте эту служебную пометку и сколько времени прошло.)'
+  });
+  const text = await callOpenAI(messages);
+  return text ? { text, source: 'openai' } : { text: fallbackFollowUp(), source: 'fallback' };
+}
+
 /**
  * history: [{ sender: 'client' | 'ai' | 'expert_human', authorType?, text }] oldest first, without userText.
  * knowledge: [{ title, text }] pieces of the consultant's SI-brain materials.
@@ -183,9 +213,11 @@ async function generateReply({ project, expertName, history = [], userText, know
  * Returns { offerMade, offerAnswered, objection, refused, matched: [ids] } or null (no OpenAI / unclear answer).
  */
 async function analyzeTurn({ project, lastSiText, clientText, conditions = [] }) {
-  if (!isConfigured()) return null;
-  const offer = project.offer || '';
   const list = conditions.slice(0, 20);
+  // Without OpenAI only the words in quotes of the expert's conditions are matched
+  const byWords = () => (list.length ? { offerMade: false, offerAnswered: false, objection: '', refused: false, matched: matchQuoted(list, clientText) } : null);
+  if (!isConfigured()) return byWords();
+  const offer = project.offer || '';
   const text = await callOpenAI([
     {
       role: 'system',
@@ -207,10 +239,10 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
       content: `Продавец: ${String(lastSiText || '(нет)').slice(0, 1500)}\n\nКлиент: ${String(clientText || '').slice(0, 1500)}`
     }
   ], { response_format: { type: 'json_object' } });
-  if (!text) return null;
+  if (!text) return byWords();
   try {
     const r = JSON.parse(text);
-    if (!r || typeof r !== 'object') return null;
+    if (!r || typeof r !== 'object') return byWords();
     return {
       offerMade: r.offer_made === true,
       offerAnswered: r.offer_answered === true,
@@ -222,12 +254,88 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
         .map(c => c.id)
     };
   } catch (e) {
-    return null;
+    return byWords();
+  }
+}
+
+// Words in quotes in the expert's condition: «рассрочка», "скидка"
+function quotedWords(text) {
+  return [...String(text || '').matchAll(/[«"“]([^»"”]{2,60})[»"”]/g)].map(m => m[1].trim().toLowerCase()).filter(Boolean);
+}
+
+function matchQuoted(conditions, text) {
+  const lower = String(text || '').toLowerCase();
+  return conditions.filter(c => quotedWords(c.text).some(w => lower.includes(w))).map(c => c.id);
+}
+
+/**
+ * "Клиент молчит после того, как …" in the expert's own words: does the end of the conversation
+ * match it? messages: [{ sender, text }] oldest first (the last few). Without OpenAI — the words in
+ * quotes must be in the last messages.
+ */
+async function contextMatches({ project, messages = [], description }) {
+  const recent = messages.slice(-6);
+  const byWords = () => {
+    const words = quotedWords(description);
+    const lower = recent.map(m => m.text || '').join('\n').toLowerCase();
+    return words.length > 0 && words.some(w => lower.includes(w));
+  };
+  if (!isConfigured()) return byWords();
+  const answer = await callOpenAI([
+    {
+      role: 'system',
+      content: 'Ответь только JSON {"match": bool}: подходит ли конец переписки продавца с клиентом под описание эксперта. ' +
+        `Описание: «${String(description).slice(0, 300)}». Оффер продавца: ${project.offer || '(не задан)'}.`
+    },
+    {
+      role: 'user',
+      content: recent.map(m => `${m.sender === 'client' ? 'Клиент' : 'Продавец'}: ${String(m.text || '').slice(0, 600)}`).join('\n\n')
+    }
+  ], { response_format: { type: 'json_object' } });
+  if (!answer) return byWords();
+  try {
+    return JSON.parse(answer).match === true;
+  } catch (e) {
+    return byWords();
+  }
+}
+
+/**
+ * Is this SI message the offer (an invitation to buy / sign up)? For "Клиент замолчал после оффера".
+ * Without OpenAI: the message names the offer, the price or «Купить».
+ */
+async function isOffer({ project, text }) {
+  const message = String(text || '');
+  const fallback = () => {
+    const lower = message.toLowerCase();
+    if (/купить|оплат|записат|записыва/.test(lower)) return true;
+    if (project.price_label && message.includes(project.price_label)) return true;
+    return Boolean(project.offer) && lower.includes(String(project.offer).toLowerCase().slice(0, 30));
+  };
+  if (!isConfigured()) return fallback();
+  const answer = await callOpenAI([
+    {
+      role: 'system',
+      content: 'Ответь только JSON {"offer": bool}: есть ли в сообщении продавца предложение купить или записаться ' +
+        `(оффер продавца: ${project.offer || '(не задан)'}).`
+    },
+    { role: 'user', content: message.slice(0, 1500) }
+  ], { response_format: { type: 'json_object' } });
+  if (!answer) return fallback();
+  try {
+    return JSON.parse(answer).offer === true;
+  } catch (e) {
+    return fallback();
   }
 }
 
 module.exports = {
   analyzeTurn,
+  contextMatches,
+  quotedWords,
+  isOffer,
+  generateFollowUp,
+  fallbackFollowUp,
   isConfigured,
   buildSystemPrompt,
   fallbackReply,

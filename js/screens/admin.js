@@ -109,6 +109,7 @@
         ${tile({ icon: 'history', title: 'Журнал команды', sub: 'кто что исправлял', onclick: "SF.push('admin-actions')" })}
         ${o.me.role === 'owner' ? tile({ icon: 'shield-check', title: 'Команда', sub: 'добавить студента', onclick: "SF.push('admin-team')" }) : ''}
         ${tile({ icon: 'book-open', title: 'Как чинить', sub: 'пошаговая инструкция', onclick: "SF.push('admin-help')" })}
+        ${tile({ icon: 'mic', title: 'Проверка микрофона', sub: 'перед голосовыми', onclick: "SF.push('admin-mic')" })}
       </div>
 
       ${card(`
@@ -117,6 +118,7 @@
         ${row('База', sys.database === 'postgres' ? 'Supabase ✓' : esc(sys.database))}
         ${row('OpenAI (ответы SI)', sys.openai ? `работает ✓ (${esc(sys.openaiModel)})` : '<span class="text-si">нет ключа</span>')}
         ${row('Бот Telegram', sys.bot ? 'работает ✓' : '<span class="text-si">нет токена</span>')}
+        ${sys.scheduler ? row('«Будильник» (раз в минуту)', sys.scheduler.running ? `работает ✓${sys.scheduler.lastTickAt ? ` · ${esc(new Date(sys.scheduler.lastTickAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))}` : ''}` : '<span class="text-si">не запущен</span>') : ''}
         ${row('Ваша роль', esc(o.me.roleLabel || o.me.role))}
       `)}
     `;
@@ -442,6 +444,110 @@
     `;
   }
 
+  // ---------------- Microphone test (before voice messages) ----------------
+  // Records a few seconds inside Telegram on this phone/tablet and shows what works: whether the
+  // microphone is allowed, which audio format the device records, size and duration. Nothing is
+  // uploaded; "Отправить результат" sends only the text summary to the team.
+  const MIC_LIMIT_SEC = 90; // voice messages: up to 1.5 minutes (owner's decision)
+  const mic = { state: 'idle', result: null, error: null, url: null, recorder: null, timer: null, startedAt: 0 };
+
+  function micFormat() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/aac'];
+    return types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  function micDevice() {
+    const tg = window.Telegram?.WebApp;
+    return {
+      platform: tg?.platform || 'browser',
+      telegram: tg?.version || '—',
+      device: navigator.userAgent.replace(/\s+/g, ' ').slice(0, 160)
+    };
+  }
+
+  function renderMic() {
+    const d = micDevice();
+    const supported = Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
+    const r = mic.result;
+    const seconds = mic.state === 'recording' ? Math.floor((Date.now() - mic.startedAt) / 1000) : 0;
+    return `
+      ${card(`
+        <div class="text-xs text-ink-2 leading-relaxed">Запишите 5–10 секунд и прослушайте. Проверьте на iPhone, iPad и Android — так узнаем, будут ли работать голосовые внутри Telegram. Запись никуда не отправляется.</div>
+        ${row('Устройство', esc(d.platform))}
+        ${row('Версия Telegram', esc(d.telegram))}
+        ${row('Запись в этом приложении', supported ? 'поддерживается ✓' : '<span class="text-si">не поддерживается</span>')}
+        ${supported ? row('Формат записи', esc(micFormat() || 'по умолчанию')) : ''}
+      `)}
+      ${supported ? `
+        ${mic.state === 'recording'
+          ? `<button onclick="SF.admin.micStop()" class="w-full py-3 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-2"><span class="si-dot"></span>Остановить (${seconds} с из ${MIC_LIMIT_SEC})</button>`
+          : `<button onclick="SF.admin.micStart()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-2"><i data-lucide="mic" class="w-4 h-4"></i>${r ? 'Записать ещё раз' : 'Начать запись'}</button>`}
+        <div class="text-[10px] text-faint text-center">Голосовые будут до 1,5 минуты.</div>` : ''}
+      ${mic.error ? card(`<div class="text-xs text-si font-semibold">Не получилось</div><div class="text-[11px] text-ink-2">${esc(mic.error)}</div>`) : ''}
+      ${r ? card(`
+        <div class="text-xs font-bold text-ink">Результат</div>
+        ${row('Длительность', `${r.seconds} с`)}
+        ${row('Размер', `${Math.round(r.size / 1024)} КБ`)}
+        ${row('Формат', esc(r.type || '—'))}
+        ${mic.url ? `<audio controls src="${mic.url}" class="w-full"></audio>` : ''}
+        <div class="text-[10px] text-faint">Слышно ли себя? Если да — запись работает на этом устройстве.</div>
+        <button onclick="SF.admin.micReport()" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Отправить результат команде</button>
+      `) : ''}
+    `;
+  }
+
+  async function micStart() {
+    mic.error = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = micFormat();
+      const recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(mic.timer);
+        const blob = new Blob(chunks, { type: recorder.mimeType || type || 'audio/webm' });
+        if (mic.url) URL.revokeObjectURL(mic.url);
+        mic.url = URL.createObjectURL(blob);
+        mic.result = { seconds: Math.round((Date.now() - mic.startedAt) / 1000), size: blob.size, type: blob.type };
+        mic.state = 'idle';
+        store().notify();
+      };
+      mic.recorder = recorder;
+      mic.startedAt = Date.now();
+      mic.state = 'recording';
+      recorder.start(1000);
+      mic.timer = setInterval(() => {
+        if ((Date.now() - mic.startedAt) / 1000 >= MIC_LIMIT_SEC) micStop();
+        else store().notify();
+      }, 1000);
+    } catch (err) {
+      mic.state = 'idle';
+      mic.error = err && err.name === 'NotAllowedError'
+        ? 'Доступ к микрофону не разрешён. Разрешите микрофон для Telegram в настройках телефона и попробуйте ещё раз.'
+        : `${err && err.name ? err.name : 'Ошибка'}: ${err && err.message ? err.message : ''}`;
+    }
+    store().notify();
+  }
+
+  function micStop() {
+    if (mic.recorder && mic.recorder.state !== 'inactive') mic.recorder.stop();
+  }
+
+  async function micReport() {
+    const d = micDevice();
+    const r = mic.result || {};
+    const text = `Проверка микрофона: ${d.platform}, Telegram ${d.telegram}; формат ${r.type || '—'}, ${r.seconds || 0} с, ${Math.round((r.size || 0) / 1024)} КБ. Устройство: ${d.device}`;
+    try {
+      await api().sendFeedback(text);
+      showToast('Отправлено команде');
+    } catch (err) {
+      showToast(err.message || 'Не отправилось');
+    }
+  }
+
   // ---------------- How to fix (for a new team member) ----------------
   function renderHelp() {
     const step = (n, title, text) => `
@@ -645,7 +751,8 @@
     'admin-errors': 'Ошибки',
     'admin-actions': 'Журнал команды',
     'admin-team': 'Команда',
-    'admin-help': 'Как чинить'
+    'admin-help': 'Как чинить',
+    'admin-mic': 'Проверка микрофона'
   };
 
   const RENDER = {
@@ -658,7 +765,8 @@
     'admin-errors': renderErrors,
     'admin-actions': renderActions,
     'admin-team': renderTeam,
-    'admin-help': renderHelp
+    'admin-help': renderHelp,
+    'admin-mic': renderMic
   };
 
   function afterRender(route, state) {
@@ -684,13 +792,16 @@
   SF.admin = {
     title: (route) => TITLES[route.screen] || 'Панель поддержки',
     render: (route, state) => {
-      if (!state.me.staffRole && route.screen !== 'admin-help') {
+      if (!state.me.staffRole && route.screen !== 'admin-help' && route.screen !== 'admin-mic') {
         return state.auth?.status === 'checking' ? '<div class="text-xs text-muted px-1">Проверяю вход…</div>' : noAccess();
       }
       return (RENDER[route.screen] || renderHome)(route, state);
     },
     afterRender,
     refresh: () => refresh(),
+    micStart,
+    micStop,
+    micReport,
     pending: null,
     fix,
     confirmFix,

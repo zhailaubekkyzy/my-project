@@ -245,11 +245,19 @@ async function applyAnalysis(project, lead, analysis, text) {
  * "передать человеку" pauses the SI and opens a request in "Мне написали",
  * "сообщить мне" sends the owner and the assistant a bot message. Each fires once per client.
  */
+// Buttons the client pressed, as words for the expert's own conditions ("клиент нажал «Купить»")
+const ACTION_WORDS = {
+  buy_clicked: '(Клиент нажал кнопку «Купить»)',
+  receipt_sent: '(Клиент отправил чек об оплате)',
+  contact_shared: '(Клиент поделился своим номером телефона)'
+};
+
 async function clientEvent(project, client, type, actor, data = null) {
   let saved = null;
   if (data && data.objection) saved = { objection: data.objection };
   if (data && data.condition) saved = { condition: data.condition };
   const status = await funnelService.recordEvent(client, type, actor, saved);
+  if (ACTION_WORDS[type]) await matchActionConditions(project, client, ACTION_WORDS[type]);
   const scenarios = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios)
     .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {}));
   for (const scenario of scenarios) {
@@ -257,10 +265,14 @@ async function clientEvent(project, client, type, actor, data = null) {
     await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
     let what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
     if (scenario.when === 'custom') what = `Условие «${scenario.condition}»`;
+    if (scenario.title) what = `Сценарий «${scenario.title}»: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
     if (scenario.then === 'handover') {
       if (!isSiPaused(client)) {
         await createHumanRequest(project, client, { reason: `Сценарий: ${what}${scenario.text ? `. ${scenario.text}` : ''}` });
       }
+    } else if (scenario.then === 'send_text') {
+      // The expert's material as is (a text or a link), right after the SI's answer
+      await saveMessage(client, SI, scenario.text);
     } else if (scenario.then === 'notify') {
       const people = client.business_id ? await businessService.activeMemberIds(client.business_id) : [];
       if (!people.includes(project.owner_id)) people.unshift(project.owner_id);
@@ -297,6 +309,22 @@ async function chatTools(project, lead, messages) {
     receipt = recent.some(t => ASKS_RECEIPT.test(t)) || await funnelService.hasEvent(lead.id, 'buy_clicked');
   }
   return { contact, receipt };
+}
+
+// The expert's own conditions may be about buttons too: the press is checked like a message
+async function matchActionConditions(project, client, words) {
+  const conditions = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
+  if (!conditions.length) return;
+  try {
+    const past = await history(project.id, client.id);
+    const lastOther = [...past].reverse().find(m => m.sender !== 'client');
+    const analysis = await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: words, conditions });
+    const matched = (analysis && analysis.matched) || [];
+    const texts = conditions.filter(c => matched.includes(c.id)).map(c => c.text);
+    if (texts.length) await clientEvent(project, client, 'condition', { type: 'client' }, { matched, condition: texts.join('; ') });
+  } catch (err) {
+    console.warn('[SmartFlow funnel] action conditions:', err.message);
+  }
 }
 
 /**

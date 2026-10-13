@@ -70,7 +70,8 @@ const defaultData = {
     business: null,          // my business: members, and the businesses I assist
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
-    clientCards: {}          // { [clientId]: { funnel_status, last_objection, events } }
+    clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
+    notifications: null      // { list, unread } Buddy: every notification first comes here
   },
 
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)
@@ -277,6 +278,7 @@ class Store {
         link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
         goal: settings.goal || '',
         instructions: settings.instructions || '',
+        methodology: settings.methodology || '',
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         category: p.category || settings.category || 'sales',
