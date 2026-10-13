@@ -1278,7 +1278,7 @@ async function runAllTests() {
     const token = await tokenFor(fresh);
     await api('POST', `/api/chat/${projectA.slug}/start`, token);
     let thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
-    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false }, 'No buttons by default');
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false, booking: false }, 'No buttons by default');
 
     // «Купить» pressed → "Отправить чек" appears
     await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
@@ -1296,7 +1296,7 @@ async function runAllTests() {
     await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
     await db.run('UPDATE clients SET contact_consent_at = CURRENT_TIMESTAMP WHERE id = ?', [lead.id]);
     thread = await api('GET', `/api/chat/${projectA.slug}/messages`, token);
-    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false });
+    assert.deepStrictEqual(thread.body.tools, { contact: false, receipt: false, booking: false });
 
     // Without a payment link there is never a receipt button
     const t = await chatService.chatTools({ payment_url: null }, { id: lead.id, funnel_status: 'not_finished' }, [{ sender: 'ai', text: 'Пришлите чек' }]);
@@ -1694,6 +1694,105 @@ async function runAllTests() {
       await db.run(`INSERT INTO voice_messages (id, project_id, client_id, mime_type, size_bytes, data_base64) VALUES (?, ?, ?, 'audio/webm', 1, 'AA==')`, [`voi_lim${i}`, projectA.id, lead.id]);
     }
     assert.strictEqual((await upload(webm)).status, 429);
+  });
+
+  await test('52. Календарь: окна владельца и помощника, запись в чате, без двойной брони, правила эксперта, напоминание', async () => {
+    const calendarService = require('../server/services/calendar-service');
+    const business = await db.get('SELECT id FROM businesses WHERE owner_id = ?', [expertA_InternalId]);
+    let cal = await api('GET', '/api/business/calendar', tokenA);
+    assert.strictEqual(cal.status, 200);
+    assert.strictEqual(cal.body.role, 'owner');
+    assert.strictEqual(cal.body.enabled, false, 'Closed until somebody has windows');
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/calendar`, tokenClient)).status, 404, 'No windows — no booking');
+
+    // Only the owner sets rules and windows; the assistant sees the calendar
+    const asAssistant = await api('GET', `/api/business/calendar?businessId=${business.id}`, tokenAssistant);
+    assert.strictEqual(asAssistant.status, 200);
+    assert.strictEqual(asAssistant.body.role, 'assistant');
+    assert.strictEqual((await api('PUT', '/api/business/calendar/settings', tokenAssistant, { businessId: business.id, durationMinutes: 60 })).status, 403);
+    assert.strictEqual((await api('GET', `/api/business/calendar?businessId=${business.id}`, tokenOther)).status, 404, 'A stranger does not see it');
+    assert.deepStrictEqual((await api('GET', '/api/business/calendar', tokenClient)).body, { businessId: null }, 'No business — nothing is created');
+
+    await api('PUT', '/api/business/calendar/settings', tokenA, { tzOffset: 300, durationMinutes: 60, clientCanCancel: true, clientCanReschedule: false, hoursBefore: 3 });
+    const everyDay = (from, to) => [0, 1, 2, 3, 4, 5, 6].map(day => ({ day, from, to }));
+    assert.strictEqual((await api('PUT', `/api/business/calendar/hosts/${expertA_InternalId}`, tokenA, { zoomUrl: 'http://zoom.us/j/1', windows: everyDay('10:00', '12:00') })).status, 400, 'Only https links');
+    assert.strictEqual((await api('PUT', `/api/business/calendar/hosts/${clientUser.id}`, tokenA, { windows: everyDay('10:00', '12:00') })).status, 404, 'Only people of the business');
+    assert.strictEqual((await api('PUT', `/api/business/calendar/hosts/${assistantUser.id}`, tokenAssistant, { businessId: business.id, windows: everyDay('10:00', '12:00') })).status, 403);
+    await api('PUT', `/api/business/calendar/hosts/${expertA_InternalId}`, tokenA, { zoomUrl: 'https://zoom.us/j/111', windows: everyDay('10:00', '12:00') });
+    cal = await api('PUT', `/api/business/calendar/hosts/${assistantUser.id}`, tokenA, { zoomUrl: 'https://zoom.us/j/222', windows: everyDay('10:00', '11:00') });
+    assert.strictEqual(cal.status, 200);
+    assert.strictEqual(cal.body.enabled, true);
+    assert.deepStrictEqual(cal.body.hosts.find(h => h.userId === assistantUser.id).windows[0], { day: 0, from: '10:00', to: '11:00' });
+
+    // Windows are in the business time (UTC+5): 10:00 there = 05:00 UTC; both people free at 10:00, only the owner at 11:00
+    const slots = await calendarService.freeSlots(business.id, new Date('2026-10-13T00:00:00Z'));
+    assert.strictEqual(slots.length, 28, '14 days × 2 hours');
+    assert.strictEqual(slots[0].at, '2026-10-13T05:00:00.000Z');
+    assert.deepStrictEqual(slots[0].hosts.sort(), [expertA_InternalId, assistantUser.id].sort());
+    assert.deepStrictEqual(slots[1].hosts, [expertA_InternalId]);
+    assert.strictEqual((await calendarService.freeSlots(business.id, new Date('2026-10-13T04:30:00Z')))[0].at, '2026-10-13T06:00:00.000Z', 'Not sooner than an hour from now');
+
+    // The client books in the chat; the button appears when the conversation is about a meeting
+    const view = await api('GET', `/api/chat/${projectA.slug}/calendar`, tokenClient);
+    assert.strictEqual(view.status, 200);
+    assert.strictEqual(view.body.meeting, null);
+    const now = Date.now();
+    const both = (await calendarService.freeSlots(business.id)).find(s => s.hosts.length === 2 && new Date(s.at) - now > 5 * 3600000);
+    telegramBot.testOutbox.length = 0;
+    const booked = await api('POST', `/api/chat/${projectA.slug}/calendar/book`, tokenClient, { at: both.at, tzOffset: 180 });
+    assert.strictEqual(booked.status, 201);
+    assert(['https://zoom.us/j/111', 'https://zoom.us/j/222'].includes(booked.body.meeting.zoomUrl), 'The Zoom link of the person who takes it');
+    assert.strictEqual(booked.body.calendar.meeting.canCancel, true);
+    assert.strictEqual(booked.body.calendar.meeting.canReschedule, false, 'The expert did not allow moving');
+    const thread = await api('GET', `/api/chat/${projectA.slug}/messages`, tokenClient);
+    assert(thread.body.messages.some(m => m.sender === 'ai' && m.text.includes('Вы записаны') && m.text.includes('zoom.us')));
+    assert.strictEqual(thread.body.tools.booking, 'meeting');
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, clientUser.id]);
+    assert(await funnelService.hasEvent(lead.id, 'booked'), '«Записался» in the journal');
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('Новая запись') && m.reply_markup.inline_keyboard[0][0].url.includes('CAL')));
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/calendar/book`, tokenClient, { at: both.at })).status, 409, 'One upcoming meeting per client');
+
+    // No double booking: the second person takes the other host, the third gets "занято"
+    const second = await api('POST', `/api/chat/${projectA.slug}/calendar/book`, tokenB, { at: both.at });
+    assert.strictEqual(second.status, 201);
+    assert.notStrictEqual(second.body.meeting.zoomUrl, booked.body.meeting.zoomUrl);
+    const third = await api('POST', `/api/chat/${projectA.slug}/calendar/book`, tokenOther, { at: both.at });
+    assert.strictEqual(third.status, 409);
+    assert.strictEqual(third.body.code, 'TAKEN');
+    await assert.rejects(db.run(
+      `INSERT INTO meetings (id, business_id, client_id, host_user_id, starts_at, ends_at, status) VALUES ('mtg_dup', ?, ?, ?, ?, ?, 'booked')`,
+      [business.id, lead.id, expertA_InternalId, (await db.get('SELECT starts_at FROM meetings WHERE id = ?', [booked.body.meeting.id])).starts_at, '2030-01-01 00:00:00']
+    ), 'The database itself refuses a second booked meeting at the same time');
+
+    // The expert's rules: moving is off; cancelling is on (more than 3 hours before)
+    const meetingId = booked.body.meeting.id;
+    const later = (await calendarService.freeSlots(business.id)).find(s => new Date(s.at) - now > 5 * 3600000);
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/calendar/${meetingId}/reschedule`, tokenClient, { at: later.at })).status, 403);
+    await api('PUT', '/api/business/calendar/settings', tokenA, { clientCanReschedule: true });
+    const moved = await api('POST', `/api/chat/${projectA.slug}/calendar/${meetingId}/reschedule`, tokenClient, { at: later.at });
+    assert.strictEqual(moved.status, 200);
+    assert.strictEqual((await db.get('SELECT status FROM meetings WHERE id = ?', [meetingId])).status, 'rescheduled');
+    assert(await funnelService.hasEvent(lead.id, 'meeting_moved'));
+    assert.strictEqual(calendarService.clientMay('cancel', { startsAt: new Date(now + 2 * 3600000).toISOString() }, { clientCanCancel: true, hoursBefore: 3 }), false, 'Too late to cancel by the rules');
+    const cancelled = await api('POST', `/api/chat/${projectA.slug}/calendar/${moved.body.meeting.id}/cancel`, tokenClient);
+    assert.strictEqual(cancelled.status, 200);
+    assert.strictEqual(cancelled.body.calendar.meeting, null);
+    assert(await funnelService.hasEvent(lead.id, 'meeting_cancelled'));
+
+    // The assistant sees the meetings and may cancel; the outcome only after the start
+    const bMeeting = second.body.meeting.id;
+    assert.strictEqual((await api('POST', `/api/business/calendar/meetings/${bMeeting}`, tokenAssistant, { businessId: business.id, action: 'done' })).status, 400);
+    const reminders = await calendarService.runMeetingReminders(new Date(new Date(second.body.meeting.startsAt).getTime() - 30 * 60000));
+    assert.strictEqual(reminders.sent, 1, 'A reminder an hour before');
+    assert(telegramBot.testOutbox.some(m => m.userId === expertB_InternalId && m.text.includes('Через час')), 'The client gets it');
+    assert.strictEqual((await calendarService.runMeetingReminders(new Date(new Date(second.body.meeting.startsAt).getTime() - 20 * 60000))).sent, 0, 'Only once');
+    const byAssistant = await api('POST', `/api/business/calendar/meetings/${bMeeting}`, tokenAssistant, { businessId: business.id, action: 'cancel' });
+    assert.strictEqual(byAssistant.status, 200);
+    assert.strictEqual(byAssistant.body.meetings.find(m => m.id === bMeeting).status, 'cancelled');
+    assert.strictEqual((await api('POST', `/api/business/calendar/meetings/${bMeeting}`, tokenOther, { businessId: business.id, action: 'cancel' })).status, 404);
+
+    // Close the calendar again for the next tests
+    await db.run('DELETE FROM calendar_hosts WHERE business_id = ?', [business.id]);
   });
 
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {

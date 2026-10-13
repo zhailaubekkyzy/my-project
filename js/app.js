@@ -216,6 +216,8 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'office', { section: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
+  } else if (param === 'CAL') {
+    SF.openIn('marketplace', 'office', { section: 'calendar' });
   } else if (param === 'ADMIN') {
     SF.openIn('profile', 'admin');
   } else if (param.startsWith('GO_')) {

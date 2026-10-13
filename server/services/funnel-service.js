@@ -20,7 +20,7 @@ const STATUSES = {
   refused: 'Отказ'
 };
 
-// Event types. "booked" is reserved for the calendar.
+// Event types
 const EVENTS = {
   client_message: 'Клиент написал',
   handed_to_human: 'Передан человеку',
@@ -31,7 +31,9 @@ const EVENTS = {
   offer_answered: 'Ответил на оффер',
   objection: 'Возражение',
   buy_clicked: 'Нажал «Купить»',
-  booked: 'Записался',                    // later: calendar
+  booked: 'Записался',
+  meeting_moved: 'Перенёс встречу',
+  meeting_cancelled: 'Встреча отменена',
   receipt_sent: 'Прислал чек',
   receipt_rejected: 'Чек не подтверждён',
   paid: 'Оплатил',

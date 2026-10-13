@@ -119,6 +119,12 @@
       store().setRemote(`funnelLists.${businessId}|${days}|${status}`, { clients, done: clients.length < (res.pageSize || 30) });
     }, 15000),
 
+    // Office → Календарь. key: business id, or 'own' (the owner's business is created when needed)
+    calendar: (key) => ensure(`calendar:${key}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`calendar.${key}`, await api().getCalendar(key === 'own' ? '' : key));
+    }, 30000),
+
     // A client card in the Office: funnel status and the event journal
     clientCard: (projectId, clientId) => ensure(`clientCard:${clientId}`, async () => {
       if (!signedIn()) return false;

@@ -243,6 +243,23 @@
       return await apiFetch(`/api/business/funnel?${q.toString()}`);
     },
 
+    // Calendar of a business: rules, free windows of the owner and the assistant, meetings
+    async getCalendar(businessId = '') {
+      return await apiFetch(`/api/business/calendar${businessId ? `?businessId=${encodeURIComponent(businessId)}` : ''}`);
+    },
+
+    async saveCalendarSettings(businessId, settings) {
+      return await apiFetch('/api/business/calendar/settings', { method: 'PUT', body: JSON.stringify({ businessId, ...settings }) });
+    },
+
+    async saveCalendarHost(businessId, userId, host) {
+      return await apiFetch(`/api/business/calendar/hosts/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify({ businessId, ...host }) });
+    },
+
+    async meetingAction(businessId, meetingId, action) {
+      return await apiFetch(`/api/business/calendar/meetings/${encodeURIComponent(meetingId)}`, { method: 'POST', body: JSON.stringify({ businessId, action }) });
+    },
+
     // A client card with the funnel status and the event journal
     async getClient(projectId, clientId) {
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}`);
@@ -375,6 +392,29 @@
         throw error;
       }
       return await res.blob();
+    },
+
+    // Booking a meeting in the chat with an SI-seller (the client's side)
+    async getChatCalendar(slug) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/calendar`);
+    },
+
+    async bookMeeting(slug, at) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/calendar/book`, {
+        method: 'POST',
+        body: JSON.stringify({ at, tzOffset: -new Date().getTimezoneOffset() })
+      });
+    },
+
+    async rescheduleMeeting(slug, meetingId, at) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/calendar/${encodeURIComponent(meetingId)}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({ at, tzOffset: -new Date().getTimezoneOffset() })
+      });
+    },
+
+    async cancelMeeting(slug, meetingId) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/calendar/${encodeURIComponent(meetingId)}/cancel`, { method: 'POST' });
     },
 
     // The client's own actions for the expert's journal (e.g. pressed «Купить»)
