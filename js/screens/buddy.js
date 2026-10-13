@@ -112,7 +112,7 @@
         <img src="${SF.MASCOTS.buddy}" alt="" class="w-16 h-16 flex-shrink-0" />
         <div>
           <div class="text-base font-extrabold text-ink">Привет, ${firstName}!</div>
-          <div class="text-xs text-muted leading-snug">Я Бадди. Все уведомления приходят сюда, и я на вашей стороне: без спама и лишних офферов.</div>
+          <div class="text-xs text-muted leading-snug">Я Бадди. Все уведомления приходят сюда.</div>
         </div>
       </div>
 
