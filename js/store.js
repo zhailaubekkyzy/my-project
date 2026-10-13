@@ -71,7 +71,8 @@ const defaultData = {
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
-    notifications: null      // { list, unread } Buddy: every notification first comes here
+    notifications: null,     // { list, unread } unread Buddy messages (the red dot on the Buddy button)
+    buddy: null              // { messages, unread, usage } the conversation with Buddy
   },
 
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)

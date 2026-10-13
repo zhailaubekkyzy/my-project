@@ -1,5 +1,6 @@
-// screens/buddy.js - SI-Buddy: the central home screen for everyone who just opens the app.
-// Widgets for every section, all notifications, and the next helpful step. Real data only.
+// screens/buddy.js - SI-Buddy: the home screen is a conversation with Buddy (owner's decision): a personal
+// helper for every day (plans, reminders, later the calendar). Every notification is Buddy's message with a
+// button where needed; the next helpful step is Buddy's message too. Real data only.
 
 (function (window) {
   const SF = window.SF;
@@ -55,166 +56,110 @@
     return isNaN(d) ? '' : d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
-  // Notifications from the server: every one comes here first, then the bot repeats it in Telegram
-  function serverNotes(state) {
-    const n = state.remote.notifications;
-    return n ? n.list.slice(0, 10) : [];
-  }
+  // Where a Buddy message's button leads (the same params as the bot's buttons)
+  const BUTTONS = {
+    GO_marketplace: 'Открыть Маркетплейс',
+    GO_office: 'Открыть Офис',
+    GO_chats: 'Открыть Чаты',
+    GO_profile: 'Открыть Профиль',
+    S_support: 'Написать в поддержку'
+  };
+  let sending = false;
 
-  function notifications(state) {
-    const list = [];
-    (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).forEach(c => {
-      const fromExpert = /^\[Эксперт\]/.test(c.lastMessage || '');
-      list.push({
-        kind: fromExpert ? 'human' : 'si',
-        text: fromExpert ? `${c.expertName || 'Эксперт'} ответил(а) вам лично` : `${c.name}: новое сообщение`,
-        action: `SF.actions.openChat('${SF.js(c.slug)}')`
-      });
-    });
-    if (store().isBusinessActive()) {
-      const waiting = SF.data.waitingInquiries(state).length;
-      if (waiting) {
-        list.push({
-          kind: 'human',
-          text: `${waiting} чел. ждут вашего личного ответа в «Мне написали»`,
-          action: "SF.openIn('marketplace', 'office', { section: 'inbox' })"
-        });
-      }
-    }
-    return list;
-  }
-
-  function widget({ icon, title, body, action, tone = 'human', disabled = false }) {
+  function buddyBubble(html, { time = '', buttons = '', unread = false } = {}) {
     return `
-      <button onclick="${action}" class="glass-card-3d p-3 text-left flex flex-col gap-1.5 ${disabled ? 'opacity-60' : ''} ${tone === 'si' ? 'border-[var(--si-bubble-line)]' : ''}">
-        <div class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${tone === 'si' ? 'text-si' : 'text-brand'}">
-          <i data-lucide="${icon}" class="w-4 h-4"></i>
-          <span class="truncate">${title}</span>
+      <div class="flex items-end gap-1.5">
+        <img src="${SF.MASCOTS.buddy}" alt="" class="mascot-avatar" />
+        <div class="max-w-[85%] space-y-1.5">
+          <div class="chat-bubble-si ${unread ? 'ring-2 ring-[#81D8D0]' : ''}">${html}</div>
+          ${buttons}
+          ${time ? `<div class="text-[9px] text-faint px-1">${time}</div>` : ''}
         </div>
-        <div class="text-xs text-ink-2 leading-snug">${body}</div>
-      </button>`;
+      </div>`;
   }
 
   function render(route, state) {
     const me = state.me;
     const firstName = SF.esc((me.displayName || '').split(' ')[0] || 'друг');
+    const buddy = state.remote.buddy;
+    const list = buddy ? buddy.messages : [];
     const step = nextStep(state);
-    const notes = notifications(state);
-    const trust = SF.trustScore(me);
-    const chats = state.remote.chats || [];
-    const unread = chats.filter(c => SF.data.isUnread(state, c)).length;
-    const listed = (state.remote.marketplace || []).length;
-    const business = store().isBusinessActive();
-    const waiting = SF.data.waitingInquiries(state).length;
+    const usage = buddy && buddy.usage;
+    const left = usage ? Math.max(0, usage.max - usage.used) : null;
+    const signedIn = SF.data.signedIn();
 
     return `
-      <div class="glass-card-3d p-4 flex items-center gap-3">
-        <img src="${SF.MASCOTS.buddy}" alt="" class="w-16 h-16 flex-shrink-0" />
-        <div>
-          <div class="text-base font-extrabold text-ink">Привет, ${firstName}!</div>
-          <div class="text-xs text-muted leading-snug">Я Бадди. Все уведомления приходят сюда.</div>
-        </div>
-      </div>
-
       ${state.auth.status === 'offline' ? `
         <div class="p-3 rounded-2xl bg-sunken border border-line text-xs text-muted">Нет связи с сервером. Откройте приложение в Telegram или проверьте интернет.</div>` : ''}
 
-      ${step ? `
-        <div class="hero-tiffany-banner p-4 space-y-3">
-          <div class="text-[11px] font-extrabold uppercase tracking-wider">Следующий шаг</div>
-          <div class="text-sm font-semibold leading-snug">${step.text}</div>
-          ${step.primary ? `
+      <div class="glass-card-3d p-3 flex flex-col space-y-2.5 min-h-[300px] max-h-[62vh] overflow-y-auto" id="buddy-scroll">
+        ${buddyBubble(`Привет, ${firstName}! Я Бадди — ваш помощник на каждый день. Напишите, что запланировать или о чём напомнить, — я запомню. Все уведомления тоже приходят сюда.`)}
+        ${list.map(m => m.sender === 'user'
+          ? `<div class="flex flex-col items-end gap-0.5"><div class="chat-bubble-human">${SF.esc(m.text)}</div><div class="text-[9px] text-faint px-1">${timeLabel(m.createdAt)}</div></div>`
+          : buddyBubble(SF.esc(m.text).replace(/\n/g, '<br>'), {
+            time: timeLabel(m.createdAt),
+            unread: !m.read,
+            buttons: m.startParam ? `<button onclick="SF.openStartParam('${SF.js(m.startParam)}')" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-[11px] font-bold">${BUTTONS[m.startParam] || 'Открыть'}</button>` : ''
+          })).join('')}
+        ${step ? buddyBubble(SF.esc(step.text), {
+          buttons: step.primary ? `
             <div class="flex flex-wrap gap-2">
-              <button onclick="${step.primary.action}" class="px-3 py-2 rounded-xl bg-white/90 text-[#0b2530] text-xs font-bold">${step.primary.label}</button>
-              ${step.secondary ? `<button onclick="${step.secondary.action}" class="px-3 py-2 rounded-xl text-[#0b2530] text-xs font-semibold">${step.secondary.label}</button>` : ''}
-            </div>
-          ` : ''}
+              <button onclick="${step.primary.action}" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-[11px] font-bold">${step.primary.label}</button>
+              ${step.secondary ? `<button onclick="${step.secondary.action}" class="px-3 py-1.5 rounded-xl btn-3d-dark text-[11px]">${step.secondary.label}</button>` : ''}
+            </div>` : ''
+        }) : ''}
+        <div id="buddy-typing" class="hidden flex items-end gap-1.5">
+          <img src="${SF.MASCOTS.buddy}" alt="" class="mascot-avatar" />
+          <div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">печатает</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
         </div>
+      </div>
+
+      ${signedIn ? `
+        <form onsubmit="SF.actions.sendBuddy(event)" class="flex items-center gap-2">
+          <input type="text" name="text" data-keep="buddy-input" maxlength="1000" autocomplete="off" placeholder="Напишите Бадди: план, дело, напоминание…" class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+          <button type="submit" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить"><i data-lucide="send" class="w-4 h-4"></i></button>
+        </form>
+        ${left !== null && left <= 5 ? `<div class="text-[10px] text-faint text-center">${left ? `Сегодня Бадди ответит ещё на ${left} сообщ.` : 'На сегодня сообщения Бадди закончились — продолжим завтра'}</div>` : ''}
       ` : ''}
-
-      <div class="space-y-2">
-        ${SF.sectionTitle('bell', 'Уведомления', state.remote.notifications && state.remote.notifications.unread ? `<button onclick="SF.actions.readAllNotifications()" class="text-[10px] text-brand font-semibold">Прочитать все</button>` : '')}
-        ${serverNotes(state).map(n => `
-          <button onclick="SF.actions.openNotification('${SF.js(n.id)}', '${SF.js(n.startParam || '')}')" class="w-full p-3 rounded-2xl text-left text-xs flex items-start gap-2.5 border ${n.read ? 'bg-card border-line text-muted' : 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)] text-ink font-medium'}">
-            ${n.read ? '<i data-lucide="bell" class="w-4 h-4 text-faint flex-shrink-0 mt-0.5"></i>' : '<span class="w-2 h-2 rounded-full bg-[#81D8D0] flex-shrink-0 mt-1"></span>'}
-            <span class="flex-1 min-w-0">
-              <span class="block whitespace-pre-line leading-snug">${SF.esc(n.text)}</span>
-              <span class="block text-[10px] text-faint mt-0.5">${timeLabel(n.createdAt)}</span>
-            </span>
-            ${n.startParam ? '<i data-lucide="chevron-right" class="w-4 h-4 text-faint flex-shrink-0"></i>' : ''}
-          </button>
-        `).join('')}
-        ${notes.length ? notes.map(n => `
-          <button onclick="${n.action}" class="w-full p-3 rounded-2xl text-left text-xs font-medium flex items-center gap-2.5 border ${n.kind === 'si' ? 'bg-[var(--si-bubble)] border-[var(--si-bubble-line)]' : 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)]'} text-ink">
-            ${n.kind === 'si' ? '<span class="si-dot"></span>' : '<i data-lucide="user" class="w-4 h-4 text-brand"></i>'}
-            <span class="flex-1">${SF.esc(n.text)}</span>
-            <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-          </button>
-        `).join('') : (serverNotes(state).length ? '' : `<div class="text-xs text-muted px-1">Новых уведомлений нет.</div>`)}
-      </div>
-
-      <div class="grid grid-cols-2 gap-2.5">
-        ${widget({
-          icon: 'messages-square',
-          title: 'Чаты',
-          tone: 'si',
-          body: unread ? `Новых сообщений: ${unread}` : (chats.length ? `Переписок: ${chats.length}` : 'Ваши переписки'),
-          action: "SF.go('chats')"
-        })}
-        ${widget({
-          icon: 'store',
-          title: 'Маркетплейс',
-          body: listed ? `SI-продавцов на витрине: ${listed}` : 'Витрина SI-продавцов экспертов',
-          action: "SF.go('marketplace')"
-        })}
-        ${widget({
-          icon: 'briefcase',
-          title: 'Офис',
-          body: business
-            ? (waiting ? `Ждут ответа: ${waiting}` : `SI-продавцов: ${state.office.consultants.length}`)
-            : 'Откройте бизнес-профиль, чтобы продавать через SI',
-          action: "SF.openIn('marketplace', 'office')"
-        })}
-        ${widget({
-          icon: 'badge-check',
-          title: 'Профиль',
-          body: `Доверие ${trust.score}%${SF.progressBar(trust.score)}`,
-          action: "SF.go('profile')"
-        })}
-        ${widget({
-          icon: 'sprout',
-          title: 'Инкубатор',
-          body: 'Группы с целью, серия дней и рейтинг — скоро',
-          action: "SF.go('incubator')",
-          disabled: true
-        })}
-        ${widget({
-          icon: 'life-buoy',
-          title: 'Помощь',
-          tone: 'si',
-          body: 'Поддержка примет жалобу или предложение',
-          action: "SF.actions.openChat('assistant')"
-        })}
-      </div>
     `;
   }
 
-  SF.actions.openNotification = async (id, startParam) => {
-    const n = store().data.remote.notifications;
-    const item = n && n.list.find(x => x.id === id);
-    if (item && !item.read) {
-      store().setRemote('notifications', { list: n.list.map(x => (x.id === id ? { ...x, read: true } : x)), unread: Math.max(0, n.unread - 1) });
-      window.smartFlowApi.markNotificationRead(id).catch(() => {});
+  SF.actions.sendBuddy = async (e) => {
+    e.preventDefault();
+    const input = e.target.text;
+    const text = input.value.trim();
+    if (!text || sending) return;
+    sending = true;
+    input.value = '';
+    const s = store();
+    const buddy = s.data.remote.buddy || { messages: [], unread: 0, usage: null };
+    s.setRemote('buddy', { ...buddy, messages: [...buddy.messages, { id: `local-${Date.now()}`, sender: 'user', text, read: true, createdAt: new Date().toISOString() }] });
+    document.getElementById('buddy-typing')?.classList.remove('hidden');
+    SF.scrollToBottom('buddy-scroll');
+    try {
+      await window.smartFlowApi.sendBuddyMessage(text, -new Date().getTimezoneOffset());
+      SF.data.invalidate('buddy');
+      await SF.data.buddy(0);
+    } catch (err) {
+      input.value = text;
+      SF.showToast(SF.withErrorCode('Не отправилось. Проверьте интернет и попробуйте ещё раз', err));
+    } finally {
+      sending = false;
+      SF.scrollToBottom('buddy-scroll');
     }
-    if (startParam) SF.openStartParam(startParam);
   };
 
-  SF.actions.readAllNotifications = async () => {
-    const n = store().data.remote.notifications;
-    if (!n) return;
-    store().setRemote('notifications', { list: n.list.map(x => ({ ...x, read: true })), unread: 0 });
-    window.smartFlowApi.markNotificationRead().catch(() => {});
-  };
+  // Everything shown on the Buddy screen is read: the red dot on the Buddy button goes away
+  function markRead() {
+    const b = store().data.remote.buddy;
+    if (!b || !b.unread) return;
+    store().setRemote('buddy', { ...b, unread: 0, messages: b.messages.map(m => ({ ...m, read: true })) });
+    store().setRemote('notifications', { list: [], unread: 0 });
+    // After the server marked them read, the red dot is checked again (it must not come back)
+    window.smartFlowApi.markBuddyRead()
+      .then(() => { SF.data.invalidate('notifications'); return SF.data.notifications(0); })
+      .catch(() => {});
+  }
 
   SF.actions.dismissBuddyHint = () => {
     hintDismissed = true;
@@ -226,9 +171,14 @@
     render,
     afterRender() {
       SF.data.myChats();
-      SF.data.notifications();
       SF.data.marketplace();
       if (store().isBusinessActive()) SF.data.allInquiries();
+      SF.data.buddy().then(() => {
+        SF.scrollToBottom('buddy-scroll');
+        markRead();
+      });
+      // New messages (replies, reminders, notifications) come by themselves while Buddy is open
+      SF.data.poll('buddy', () => SF.data.buddy(10000).then(markRead), 15000);
     }
   };
 })(window);

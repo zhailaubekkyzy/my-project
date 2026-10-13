@@ -410,6 +410,19 @@
     rememberError,
     reportError,
 
+    // The conversation with Buddy (personal helper); tzOffset = minutes east of UTC from the phone
+    async getBuddyMessages() {
+      return await apiFetch('/api/buddy/messages');
+    },
+
+    async sendBuddyMessage(text, tzOffset) {
+      return await apiFetch('/api/buddy/messages', { method: 'POST', body: JSON.stringify({ text, tzOffset }) });
+    },
+
+    async markBuddyRead() {
+      return await apiFetch('/api/buddy/read', { method: 'POST' });
+    },
+
     // Notifications in Buddy (the same ones the bot sends to Telegram)
     async getNotifications() {
       return await apiFetch('/api/me/notifications');
