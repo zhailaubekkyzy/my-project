@@ -1543,6 +1543,93 @@ async function runAllTests() {
     assert.strictEqual(await telegramBot.notifyUser('usr_does_not_exist', 'x'), false);
   });
 
+  await test('50. Бадди — переписка: личный помощник, напоминания по часовому поясу, лимит 30 в день', async () => {
+    const buddyService = require('../server/services/buddy-service');
+    const scheduler = require('../server/services/scheduler-service');
+    scheduler.register('buddy-reminders', buddyService.runReminders);
+    const tg = { id: 700020, first_name: 'Айгерим' };
+    const token = await tokenFor(tg);
+    const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+
+    // Without OpenAI: an honest answer, the message is kept
+    let res = await api('POST', '/api/buddy/messages', token, { text: 'Привет!', tzOffset: 300 });
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.messages[0].sender, 'user');
+    assert(res.body.messages[1].text.includes('пока не могу отвечать'));
+    assert.strictEqual((await db.get('SELECT tz_offset_minutes FROM users WHERE id = ?', [user.id])).tz_offset_minutes, 300, 'The time zone of the phone is kept');
+
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let answer = {};
+    let prompt = '';
+    let model = '';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        prompt = body.messages[0].content;
+        model = body.model;
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(answer) } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      // "Напомни завтра в 9:00" in Almaty time (UTC+5) → 04:00 UTC
+      const local = new Date(Date.now() + 300 * 60000);
+      local.setUTCDate(local.getUTCDate() + 1);
+      const day = local.toISOString().slice(0, 10);
+      answer = { reply: `Запомнил: завтра в 9:00 — позвонить маме.`, reminders: [{ text: 'позвонить маме', at: `${day} 09:00` }, { text: 'в прошлом', at: '2020-01-01 09:00' }], cancel: [], open: 'none' };
+      res = await api('POST', '/api/buddy/messages', token, { text: 'Напомни завтра в 9 позвонить маме', tzOffset: 300 });
+      assert.strictEqual(res.body.messages[1].text, 'Запомнил: завтра в 9:00 — позвонить маме.');
+      assert(prompt.includes('Бадди') && prompt.includes('Айгерим'), 'Buddy knows who it talks to');
+      assert.strictEqual(model, config.buddyModel, 'Buddy uses its own model setting');
+      const reminders = await buddyService.activeReminders(user.id);
+      assert.strictEqual(reminders.length, 1, 'Only a future reminder is kept');
+      assert.strictEqual(String(reminders[0].remind_at instanceof Date ? reminders[0].remind_at.toISOString().slice(0, 19).replace('T', ' ') : reminders[0].remind_at), `${day} 04:00:00`, '09:00 in UTC+5 is 04:00 UTC');
+
+      // A button to a section of the app
+      answer = { reply: 'Экспертов можно найти в Маркетплейсе.', reminders: [], cancel: [], open: 'marketplace' };
+      res = await api('POST', '/api/buddy/messages', token, { text: 'Где найти эксперта?', tzOffset: 300 });
+      assert.strictEqual(res.body.messages[1].startParam, 'GO_marketplace');
+
+      // "Что у меня запланировано?" — Buddy sees the list; cancel by number
+      answer = { reply: 'Отменил.', reminders: [], cancel: [1], open: 'none' };
+      await api('POST', '/api/buddy/messages', token, { text: 'Отмени напоминание про маму', tzOffset: 300 });
+      assert(prompt.includes('позвонить маме'), 'Buddy is told the reminders');
+      assert.strictEqual((await buddyService.activeReminders(user.id)).length, 0, 'Cancelled');
+
+      // A reminder whose time has come: Buddy's message (+ Telegram), once
+      await db.run('INSERT INTO buddy_reminders (id, user_id, text, remind_at) VALUES (?, ?, ?, ?)', ['rem_test1', user.id, 'выпить воды', '2020-01-01 00:00:00']);
+      telegramBot.testOutbox.length = 0;
+      await scheduler.tick();
+      await scheduler.tick();
+      const list = (await api('GET', '/api/buddy/messages', token)).body;
+      assert.strictEqual(list.messages.filter(m => m.text === '⏰ Напоминаю: выпить воды').length, 1, 'The reminder came once');
+      assert(list.unread >= 1, 'It is unread (red dot)');
+      assert.strictEqual(telegramBot.testOutbox.filter(m => m.text.includes('выпить воды')).length, 1, 'And to Telegram');
+      await api('POST', '/api/buddy/read', token);
+      assert.strictEqual((await api('GET', '/api/buddy/messages', token)).body.unread, 0);
+
+      // Nobody else sees this conversation
+      assert(!(await api('GET', '/api/buddy/messages', tokenB)).body.messages.some(m => m.text.includes('маме')));
+
+      // The daily limit: 30 messages; then one gentle message and no OpenAI calls
+      for (let i = 0; i < 30; i++) {
+        await db.run(`INSERT INTO notifications (id, user_id, text, sender, kind) VALUES (?, ?, 'x', 'user', 'chat')`, [`ntf_lim${i}`, user.id]);
+      }
+      prompt = '';
+      res = await api('POST', '/api/buddy/messages', token, { text: 'Ещё вопрос', tzOffset: 300 });
+      assert.strictEqual(res.body.limitReached, true);
+      assert.strictEqual(res.body.messages[1].text, buddyService.LIMIT_TEXT);
+      assert.strictEqual(prompt, '', 'No OpenAI after the limit');
+      res = await api('POST', '/api/buddy/messages', token, { text: 'И ещё', tzOffset: 300 });
+      assert.strictEqual(res.body.messages.length, 1, 'The limit message is said once a day');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

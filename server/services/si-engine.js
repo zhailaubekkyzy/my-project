@@ -330,6 +330,7 @@ async function isOffer({ project, text }) {
 }
 
 module.exports = {
+  callOpenAI,
   analyzeTurn,
   contextMatches,
   quotedWords,

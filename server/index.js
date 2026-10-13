@@ -11,6 +11,7 @@ const followupService = require('./services/followup-service');
 
 // The server alarm clock (once a minute): "Клиент замолчал" scenarios; later meetings and webinars
 scheduler.register('silent-clients', followupService.runSilentScenarios);
+scheduler.register('buddy-reminders', require('./services/buddy-service').runReminders);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 
@@ -100,6 +101,7 @@ app.use('/api/brain', brainRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/business', businessRoutes);
+app.use('/api/buddy', require('./routes/buddy'));
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.

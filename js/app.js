@@ -218,6 +218,11 @@ SF.openStartParam = (param) => {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
   } else if (param === 'ADMIN') {
     SF.openIn('profile', 'admin');
+  } else if (param.startsWith('GO_')) {
+    // A button under Buddy's message: a section of the app
+    const tab = param.slice(3);
+    if (tab === 'office') SF.openIn('marketplace', 'office');
+    else if (['marketplace', 'chats', 'profile'].includes(tab)) SF.go(tab);
   } else if (param.startsWith('S_')) {
     SF.openIn('chats', 'chat', { slug: 'assistant' });
   } else {

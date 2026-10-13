@@ -146,6 +146,14 @@
       store().setRemote('notifications', { list: res.notifications || [], unread: Number(res.unread) || 0 });
     }, maxAge),
 
+    // The conversation with Buddy; also keeps the red dot on the Buddy button fresh
+    buddy: (maxAge = 15000) => ensure('buddy', async () => {
+      if (!signedIn()) return false;
+      const res = await api().getBuddyMessages();
+      store().setRemote('buddy', { messages: res.messages || [], unread: Number(res.unread) || 0, usage: res.usage || null });
+      store().setRemote('notifications', { list: [], unread: Number(res.unread) || 0 });
+    }, maxAge),
+
     // My business: owner + assistant
     business: () => ensure('business', async () => {
       if (!signedIn()) return false;

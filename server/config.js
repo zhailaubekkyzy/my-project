@@ -36,6 +36,8 @@ const config = {
   // OpenAI for SI replies. The key may have been saved in Railway as OPEN_API_KEY.
   openaiApiKey: process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  // Buddy (personal helper) may use its own, cheaper model; the same as the SI by default
+  buddyModel: process.env.BUDDY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
   // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.
   // Telegram ids (digits) and usr_... ids work too. The support team is added in the panel itself.
