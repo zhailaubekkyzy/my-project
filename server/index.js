@@ -12,6 +12,7 @@ const followupService = require('./services/followup-service');
 // The server alarm clock (once a minute): "Клиент замолчал" scenarios; later meetings and webinars
 scheduler.register('silent-clients', followupService.runSilentScenarios);
 scheduler.register('buddy-reminders', require('./services/buddy-service').runReminders);
+scheduler.register('meeting-reminders', require('./services/calendar-service').runMeetingReminders);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 

@@ -1,5 +1,5 @@
 // screens/office.js - Office (business profile) inside the Marketplace tab. Real data only.
-// Sections: Мои SI-продавцы · Воронка · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали · Помощник.
+// Sections: Мои SI-продавцы · Воронка · Календарь · Мой SI-мозг (материалы, по которым отвечает SI) · Мне написали · Помощник.
 // Each SI-consultant has four tabs: Карточка и методология · Аналитика · Клиенты · Рассылки.
 // The assistant of a business sees its SI-sellers with clients, the funnel and "Мне написали" only: no money,
 // payment links, SI-brain or settings (the server checks this too).
@@ -11,11 +11,12 @@
   const SECTIONS = [
     { id: 'consultants', label: 'Мои SI', icon: 'bot' },
     { id: 'funnel', label: 'Воронка', icon: 'filter' },
+    { id: 'calendar', label: 'Календарь', icon: 'calendar' },
     { id: 'brain', label: 'SI-мозг', icon: 'brain' },
     { id: 'inbox', label: 'Мне написали', icon: 'user-check' },
     { id: 'team', label: 'Помощник', icon: 'user-plus' }
   ];
-  const ASSISTANT_SECTIONS = ['consultants', 'funnel', 'inbox'];
+  const ASSISTANT_SECTIONS = ['consultants', 'funnel', 'calendar', 'inbox'];
 
   // Funnel: 5 statuses (names chosen by the owner), colors: waiting — bright, bought — green, refused — gray
   const FUNNEL = [
@@ -148,11 +149,12 @@
     let body = '';
     if (section === 'consultants') body = renderConsultantList(state);
     if (section === 'funnel') body = renderFunnel(route, state);
+    if (section === 'calendar') body = renderCalendar(state);
     if (section === 'brain') body = renderBrain(state);
     if (section === 'inbox') body = renderInbox(state);
     if (section === 'team') body = renderTeam(state);
     return `
-      <div class="grid ${sections.length === 5 ? 'grid-cols-5' : 'grid-cols-3'} gap-1 bg-raised p-1.5 rounded-2xl border border-line">
+      <div class="grid ${sections.length === 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-raised p-1.5 rounded-2xl border border-line">
         ${sections.map(s => `
           <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[10px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
@@ -258,6 +260,220 @@
       ${list && !list.done ? `<button onclick="SF.actions.moreFunnel('${SF.js(businessId)}', '${days}', '${status}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}
     `;
   }
+
+  // ---------------- Calendar: free windows of the owner and the assistant, meetings ----------------
+  // The owner sets the rules and the windows (for himself and for the assistant); both see meetings.
+  // Windows are typed in the owner's phone time; clients see free times in their own time.
+  const WEEK = [{ day: 1, label: 'Пн' }, { day: 2, label: 'Вт' }, { day: 3, label: 'Ср' }, { day: 4, label: 'Чт' }, { day: 5, label: 'Пт' }, { day: 6, label: 'Сб' }, { day: 0, label: 'Вс' }];
+  const MEETING_STATUS = { booked: 'Запланирована', done: 'Состоялась', no_show: 'Не пришёл', cancelled: 'Отменена' };
+  const calDrafts = {}; // { [userId]: windows being edited }
+  const phoneOffset = () => -new Date().getTimezoneOffset();
+  const utcLabel = (offset) => `UTC${offset >= 0 ? '+' : '−'}${Math.floor(Math.abs(offset) / 60)}${Math.abs(offset) % 60 ? `:${String(Math.abs(offset) % 60).padStart(2, '0')}` : ''}`;
+  const meetingWhen = (iso) => new Date(iso).toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  function calendarKey(state) {
+    const businessId = funnelBusinessId(state);
+    if (businessId === null) return null;
+    return businessId || (store().isBusinessActive() ? 'own' : '');
+  }
+
+  function renderMeeting(m, businessId) {
+    const started = new Date(m.startsAt) <= new Date();
+    const id = SF.js(m.id);
+    const b = SF.js(businessId);
+    return `
+      <div class="p-3 rounded-2xl bg-card border ${m.status === 'booked' && !started ? 'border-[#81D8D0]' : 'border-line'} space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-ink">${SF.esc(meetingWhen(m.startsAt))}</span>
+          <span class="text-[10px] ${m.status === 'booked' ? 'text-brand' : 'text-faint'}">${MEETING_STATUS[m.status] || ''}</span>
+        </div>
+        <div class="text-[11px] text-ink-2">${SF.esc(m.clientName || 'Клиент')}${m.clientUsername ? ` · @${SF.esc(m.clientUsername)}` : ''}</div>
+        <div class="text-[10px] text-muted">Ведёт: ${SF.esc(m.hostName)}${m.projectName ? ` · SI-продавец «${SF.esc(m.projectName)}»` : ''}</div>
+        ${m.status === 'booked' ? `
+          <div class="flex gap-1.5 pt-0.5">
+            ${m.zoomUrl ? `<button onclick="SF.openLink('${SF.js(m.zoomUrl)}')" class="flex-1 py-1.5 rounded-xl btn-3d-tiffany text-[11px] flex items-center justify-center gap-1"><i data-lucide="video" class="w-3.5 h-3.5"></i>Zoom</button>` : ''}
+            ${started ? `
+              <button onclick="SF.actions.meetingAction('${b}', '${id}', 'done')" class="flex-1 py-1.5 rounded-xl bg-sunken border border-line text-[11px] text-ink-2">Состоялась</button>
+              <button onclick="SF.actions.meetingAction('${b}', '${id}', 'no_show')" class="flex-1 py-1.5 rounded-xl bg-sunken border border-line text-[11px] text-ink-2">Не пришёл</button>` : `
+              <button onclick="SF.actions.meetingAction('${b}', '${id}', 'cancel')" class="flex-1 py-1.5 rounded-xl bg-sunken border border-line text-[11px] text-ink-2">Отменить</button>`}
+          </div>` : ''}
+      </div>`;
+  }
+
+  function renderHostForm(h, settings) {
+    const uid = SF.js(h.userId);
+    // Every row has its own key, so a typed value never moves to another row after adding or removing one
+    const windows = calDrafts[h.userId] || h.windows.map((w, i) => ({ ...w, key: `s${i}` }));
+    return `
+      <div class="glass-card-3d p-3.5 space-y-2.5" data-host="${SF.esc(h.userId)}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="min-w-0">
+            <span class="block text-xs font-bold text-ink truncate">${SF.esc(h.name)}</span>
+            <span class="block text-[10px] text-muted">${h.role === 'owner' ? 'Вы' : 'Помощник'}</span>
+          </span>
+          <label class="flex items-center gap-1.5 text-[11px] text-ink-2">
+            <input type="checkbox" name="active" ${h.active || !h.windows.length ? 'checked' : ''} class="w-4 h-4 accent-[#0d9488]" />Принимает встречи
+          </label>
+        </div>
+        <input type="url" name="zoom" data-keep="cal-${SF.esc(h.userId)}-zoom" value="${SF.esc(h.zoomUrl)}" placeholder="Постоянная ссылка Zoom: https://…" class="w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        <div class="text-[11px] text-muted">Свободные окна каждую неделю (время ${utcLabel(settings.tzOffset)}):</div>
+        <div class="space-y-1.5">
+          ${windows.map((w, i) => `
+            <div class="flex items-center gap-1.5" data-window="${w.key}">
+              <select name="day" data-keep="cal-${SF.esc(h.userId)}-${w.key}-day" class="bg-card border border-line-2 rounded-lg px-1.5 py-1.5 text-xs text-ink">
+                ${WEEK.map(d => `<option value="${d.day}" ${d.day === Number(w.day) ? 'selected' : ''}>${d.label}</option>`).join('')}
+              </select>
+              <input type="time" name="from" data-keep="cal-${SF.esc(h.userId)}-${w.key}-from" value="${SF.esc(w.from)}" step="900" class="flex-1 min-w-0 bg-card border border-line-2 rounded-lg px-1.5 py-1.5 text-xs text-ink" />
+              <span class="text-faint text-xs">–</span>
+              <input type="time" name="to" data-keep="cal-${SF.esc(h.userId)}-${w.key}-to" value="${SF.esc(w.to)}" step="900" class="flex-1 min-w-0 bg-card border border-line-2 rounded-lg px-1.5 py-1.5 text-xs text-ink" />
+              <button onclick="SF.actions.removeCalendarWindow('${uid}', '${SF.js(w.key)}')" class="px-1.5 text-faint text-lg leading-none" aria-label="Убрать окно">&times;</button>
+            </div>`).join('')}
+          ${!windows.length ? '<div class="text-[11px] text-faint">Окон пока нет — клиенты не смогут записаться к этому человеку.</div>' : ''}
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="SF.actions.addCalendarWindow('${uid}')" class="py-2 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Окно</button>
+          <button onclick="SF.actions.saveCalendarHost('${uid}')" class="py-2 rounded-xl btn-3d-tiffany text-xs">Сохранить</button>
+        </div>
+      </div>`;
+  }
+
+  function renderCalendar(state) {
+    const key = calendarKey(state);
+    if (key === null) return '<div class="text-xs text-muted">Загружаю…</div>';
+    const cal = key && state.remote.calendar[key];
+    if (key && !cal) return '<div class="text-xs text-muted">Загружаю…</div>';
+    if (!cal || !cal.businessId) return SF.emptyState('consultant', 'Календарь появится с первым SI-продавцом', 'Создайте и включите SI-продавца — клиенты смогут записываться к вам на встречу прямо в чате.');
+    const owner = cal.role === 'owner';
+    const b = SF.js(cal.businessId);
+    const s = cal.settings;
+    const now = Date.now();
+    const upcoming = cal.meetings.filter(m => m.status === 'booked' && new Date(m.endsAt) > now);
+    const past = cal.meetings.filter(m => !upcoming.includes(m)).reverse();
+    return `
+      <div class="p-3 rounded-2xl ${cal.enabled ? 'bg-card border border-[#81D8D0]' : 'bg-sunken border border-line'} text-[11px] text-ink-2 leading-snug">
+        ${cal.enabled
+          ? '📅 Запись открыта: когда SI-продавец предложит встречу, у клиента в чате появится кнопка «Записаться» со свободным временем на 2 недели вперёд.'
+          : (owner ? 'Запись закрыта. Добавьте свободные окна себе или помощнику и нажмите «Сохранить» — клиенты смогут записываться прямо в чате.' : 'Запись пока закрыта: свободные окна задаёт владелец бизнеса.')}
+      </div>
+
+      ${SF.sectionTitle('', 'Встречи')}
+      <div class="space-y-1.5">
+        ${upcoming.map(m => renderMeeting(m, cal.businessId)).join('')}
+        ${!upcoming.length ? '<div class="text-xs text-muted px-1">Запланированных встреч пока нет.</div>' : ''}
+      </div>
+      ${past.length ? `
+        <details class="space-y-1.5">
+          <summary class="text-[11px] text-muted px-1 cursor-pointer">Прошедшие и отменённые (${past.length})</summary>
+          <div class="space-y-1.5 pt-1.5">${past.map(m => renderMeeting(m, cal.businessId)).join('')}</div>
+        </details>` : ''}
+
+      ${owner ? `
+        ${SF.sectionTitle('', 'Кто принимает встречи')}
+        ${cal.hosts.map(h => renderHostForm(h, s)).join('')}
+        ${cal.hosts.length < 2 ? '<div class="text-[10px] text-faint px-1">Помощника можно добавить в разделе «Помощник» — потом задать окна и ему.</div>' : ''}
+
+        ${SF.sectionTitle('', 'Правила записи')}
+        <div class="glass-card-3d p-3.5 space-y-2.5" id="calendar-rules">
+          <div class="text-[11px] text-muted">Длительность встречи</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${cal.durations.map(d => `<button onclick="SF.actions.saveCalendarRules('${b}', { durationMinutes: ${d} })" class="px-2.5 py-1.5 rounded-xl text-[11px] ${s.durationMinutes === d ? 'btn-3d-tiffany' : 'bg-sunken border border-line text-ink-2'}">${d} мин</button>`).join('')}
+          </div>
+          <label class="flex items-center gap-2 text-xs text-ink-2">
+            <input type="checkbox" ${s.clientCanReschedule ? 'checked' : ''} onchange="SF.actions.saveCalendarRules('${b}', { clientCanReschedule: this.checked })" class="w-4 h-4 accent-[#0d9488]" />Клиент может сам перенести встречу
+          </label>
+          <label class="flex items-center gap-2 text-xs text-ink-2">
+            <input type="checkbox" ${s.clientCanCancel ? 'checked' : ''} onchange="SF.actions.saveCalendarRules('${b}', { clientCanCancel: this.checked })" class="w-4 h-4 accent-[#0d9488]" />Клиент может сам отменить встречу
+          </label>
+          <label class="flex items-center gap-2 text-xs text-ink-2">
+            Не позже чем за
+            <input type="number" min="0" max="168" value="${s.hoursBefore}" onchange="SF.actions.saveCalendarRules('${b}', { hoursBefore: this.value })" class="w-16 bg-card border border-line-2 rounded-lg px-2 py-1 text-xs text-ink" />
+            ч до встречи
+          </label>
+          <div class="text-[10px] text-faint leading-snug">Вы и помощник можете отменить встречу всегда. Клиент получит сообщение в чате, а вы — у Бадди и в Telegram. За час до встречи напоминание придёт обеим сторонам.</div>
+        </div>` : ''}
+    `;
+  }
+
+  function readHostForm(userId) {
+    const card = [...document.querySelectorAll('[data-host]')].find(el => el.dataset.host === userId);
+    if (!card) return null;
+    return {
+      active: card.querySelector('[name="active"]').checked,
+      zoomUrl: card.querySelector('[name="zoom"]').value.trim(),
+      windows: [...card.querySelectorAll('[data-window]')].map(row => ({
+        key: row.dataset.window,
+        day: Number(row.querySelector('[name="day"]').value),
+        from: row.querySelector('[name="from"]').value,
+        to: row.querySelector('[name="to"]').value
+      }))
+    };
+  }
+
+  function calendarOf(businessId) {
+    const remote = store().data.remote.calendar;
+    return Object.keys(remote).find(k => remote[k] && remote[k].businessId === businessId);
+  }
+
+  SF.actions.addCalendarWindow = (userId) => {
+    const form = readHostForm(userId);
+    if (!form) return;
+    const last = form.windows[form.windows.length - 1];
+    const next = last ? WEEK[(WEEK.findIndex(d => d.day === last.day) + 1) % 7].day : 1;
+    calDrafts[userId] = [...form.windows, { key: `n${Date.now()}`, day: next, from: last ? last.from : '10:00', to: last ? last.to : '13:00' }];
+    store().notify();
+  };
+
+  SF.actions.removeCalendarWindow = (userId, key) => {
+    const form = readHostForm(userId);
+    if (!form) return;
+    calDrafts[userId] = form.windows.filter(w => w.key !== key);
+    store().notify();
+  };
+
+  async function saveCalendar(businessId, request, toast) {
+    const key = calendarOf(businessId);
+    try {
+      const res = await request();
+      if (key) store().setRemote(`calendar.${key}`, res);
+      showToast(toast);
+      return true;
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+      return false;
+    }
+  }
+
+  SF.actions.saveCalendarHost = async (userId) => {
+    const form = readHostForm(userId);
+    const key = Object.keys(store().data.remote.calendar).find(k => (store().data.remote.calendar[k].hosts || []).some(h => h.userId === userId));
+    const cal = key && store().data.remote.calendar[key];
+    if (!form || !cal) return;
+    if (form.windows.some(w => !w.from || !w.to || w.to <= w.from)) {
+      showToast('Проверьте окна: конец должен быть позже начала');
+      return;
+    }
+    // The windows are typed in the phone's time: the business time follows the owner's phone
+    if (cal.settings.tzOffset !== phoneOffset()) await api().saveCalendarSettings(cal.businessId, { tzOffset: phoneOffset() });
+    const windows = form.windows.map(({ day, from, to }) => ({ day, from, to }));
+    const saved = await saveCalendar(cal.businessId, () => api().saveCalendarHost(cal.businessId, userId, { ...form, windows }), 'Сохранено');
+    if (saved) {
+      delete calDrafts[userId];
+      store().notify();
+    }
+  };
+
+  SF.actions.saveCalendarRules = (businessId, change) => {
+    saveCalendar(businessId, () => api().saveCalendarSettings(businessId, change), 'Сохранено');
+  };
+
+  SF.actions.meetingAction = async (businessId, meetingId, action) => {
+    const key = calendarOf(businessId);
+    const meeting = key && store().data.remote.calendar[key].meetings.find(m => m.id === meetingId);
+    if (!meeting) return;
+    if (action === 'cancel' && !confirm(`Отменить встречу ${meetingWhen(meeting.startsAt)} с ${meeting.clientName || 'клиентом'}? Клиент получит сообщение в чате.`)) return;
+    await saveCalendar(businessId, () => api().meetingAction(businessId, meetingId, action),
+      action === 'cancel' ? 'Встреча отменена' : `Отмечено: ${MEETING_STATUS[action]}`);
+  };
 
   // ---------------- SI-brain: materials the SI answers from ----------------
   const BRAIN_ACCEPT = '.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain';
@@ -1313,6 +1529,11 @@
         SF.data.allInquiries();
         if (route.section === 'brain') SF.data.brain();
         if (route.section === 'team') SF.data.business();
+        if (route.section === 'calendar') {
+          SF.data.business();
+          const key = calendarKey(state);
+          if (key) SF.data.calendar(key);
+        }
         if (route.section === 'funnel') {
           SF.data.business();
           const businessId = funnelBusinessId(state);

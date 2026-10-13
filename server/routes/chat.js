@@ -10,6 +10,7 @@ const { mediaUrl } = require('../services/media-service');
 const receiptService = require('../services/receipt-service');
 const { readReceiptBody, readVoiceBody } = require('../middleware/image-upload');
 const voiceService = require('../services/voice-service');
+const calendarService = require('../services/calendar-service');
 
 router.use(requireAuth);
 
@@ -274,6 +275,120 @@ router.post('/:slug/contact', async (req, res, next) => {
     res.json({ shared: true, phone: result.phone });
   } catch (err) {
     sendReceiptError(res, err, next);
+  }
+});
+
+function sendCalendarError(res, err, next) {
+  if (err instanceof calendarService.CalendarError) {
+    return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+  }
+  next(err);
+}
+
+// What the client sees: free times, the meeting and the expert's rules
+async function calendarView(lead, now = new Date()) {
+  const settings = await calendarService.settingsOf(lead.business_id);
+  const meeting = await calendarService.upcomingOfClient(lead.id, now);
+  return {
+    enabled: await calendarService.isEnabled(lead.business_id),
+    durationMinutes: settings.durationMinutes,
+    rules: {
+      clientCanCancel: settings.clientCanCancel,
+      clientCanReschedule: settings.clientCanReschedule,
+      hoursBefore: settings.hoursBefore
+    },
+    slots: (await calendarService.freeSlots(lead.business_id, now, { excludeMeetingId: meeting && meeting.id })).map(s => s.at),
+    meeting: meeting && {
+      id: meeting.id,
+      startsAt: meeting.startsAt,
+      endsAt: meeting.endsAt,
+      zoomUrl: meeting.zoomUrl,
+      canCancel: calendarService.clientMay('cancel', meeting, settings, now),
+      canReschedule: calendarService.clientMay('reschedule', meeting, settings, now)
+    }
+  };
+}
+
+async function loadLeadWithCalendar(req, res) {
+  const project = await loadConsultant(req, res);
+  if (!project) return {};
+  const lead = await chatService.leadForUser(project, req.user.userId);
+  if (!lead.business_id || !(await calendarService.isEnabled(lead.business_id))) {
+    res.status(404).json({ error: 'not_found', code: 'NO_CALENDAR', message: 'Запись к этому эксперту пока не открыта.' });
+    return {};
+  }
+  return { project, lead };
+}
+
+/**
+ * GET /api/chat/:slug/calendar — free times (14 days ahead) and my upcoming meeting
+ */
+router.get('/:slug/calendar', async (req, res, next) => {
+  try {
+    const { lead } = await loadLeadWithCalendar(req, res);
+    if (!lead) return;
+    res.json(await calendarView(lead));
+  } catch (err) {
+    sendCalendarError(res, err, next);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/calendar/book  { at, tzOffset }
+ */
+router.post('/:slug/calendar/book', async (req, res, next) => {
+  try {
+    const { project, lead } = await loadLeadWithCalendar(req, res);
+    if (!lead) return;
+    const meeting = await calendarService.book(chatService, project, lead, req.body?.at, { tzOffset: req.body?.tzOffset });
+    res.status(201).json({ meeting, calendar: await calendarView(lead) });
+  } catch (err) {
+    sendCalendarError(res, err, next);
+  }
+});
+
+async function myMeeting(lead, meetingId) {
+  const meeting = await calendarService.upcomingOfClient(lead.id);
+  if (!meeting || meeting.id !== meetingId) {
+    throw new calendarService.CalendarError('Встреча не найдена.', 404, 'NO_MEETING');
+  }
+  return meeting;
+}
+
+/**
+ * POST /api/chat/:slug/calendar/:meetingId/reschedule  { at, tzOffset }
+ * Allowed by the expert's rules (whether and how many hours before)
+ */
+router.post('/:slug/calendar/:meetingId/reschedule', async (req, res, next) => {
+  try {
+    const { project, lead } = await loadLeadWithCalendar(req, res);
+    if (!lead) return;
+    const meeting = await myMeeting(lead, req.params.meetingId);
+    const settings = await calendarService.settingsOf(lead.business_id);
+    if (!calendarService.clientMay('reschedule', meeting, settings)) {
+      throw new calendarService.CalendarError(settings.clientCanReschedule
+        ? `Перенести можно не позже чем за ${settings.hoursBefore} ч до встречи — напишите, пожалуйста, в чат.`
+        : 'Перенести встречу можно только через эксперта — напишите, пожалуйста, в чат.', 403, 'NOT_ALLOWED');
+    }
+    const moved = await calendarService.book(chatService, project, lead, req.body?.at, { tzOffset: req.body?.tzOffset, replaceMeeting: meeting });
+    res.json({ meeting: moved, calendar: await calendarView(lead) });
+  } catch (err) {
+    sendCalendarError(res, err, next);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/calendar/:meetingId/cancel
+ */
+router.post('/:slug/calendar/:meetingId/cancel', async (req, res, next) => {
+  try {
+    const { project, lead } = await loadLeadWithCalendar(req, res);
+    if (!lead) return;
+    const meeting = await myMeeting(lead, req.params.meetingId);
+    await calendarService.cancel(chatService, project, lead, meeting, { type: 'client', userId: req.user.userId });
+    res.json({ cancelled: true, calendar: await calendarView(lead) });
+  } catch (err) {
+    sendCalendarError(res, err, next);
   }
 });
 

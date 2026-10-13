@@ -106,9 +106,11 @@
     const tools = (thread && thread.tools) || {};
     const contact = Boolean(tools.contact) && !thread.contactShared && canShareContact();
     const receipt = Boolean(tools.receipt) && Boolean(consultant?.paymentUrl);
-    if (!contact && !receipt) return '';
+    const book = tools.booking === 'book' || tools.booking === 'meeting';
+    if (!contact && !receipt && !book) return '';
     return `
       <div class="flex gap-2">
+        ${book ? `<button onclick="SF.actions.openBooking('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-card border border-[#81D8D0] text-[11px] text-ink-2 flex items-center justify-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i>${tools.booking === 'meeting' ? 'Моя встреча' : 'Записаться'}</button>` : ''}
         ${contact ? `<button onclick="SF.actions.shareContact('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-card border border-line text-[11px] text-ink-2 flex items-center justify-center gap-1"><i data-lucide="phone" class="w-3.5 h-3.5"></i>Поделиться контактом</button>` : ''}
         ${receipt ? `<button onclick="SF.actions.sendReceipt('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-card border border-line text-[11px] text-ink-2 flex items-center justify-center gap-1"><i data-lucide="receipt" class="w-3.5 h-3.5"></i>Отправить чек</button>` : ''}
       </div>`;
@@ -156,6 +158,7 @@
       </div>
 
       ${chatTools(slug, consultant, thread)}
+      ${bookingPanel(slug)}
 
       ${voice && voice.slug === slug ? `
         <div class="flex items-center gap-2 p-2 rounded-xl bg-card border border-[#81D8D0]">
@@ -322,6 +325,157 @@
     } finally {
       sending = false;
       SF.scrollToBottom('chat-scroll');
+    }
+  };
+
+  // ---------------- Booking a meeting (free times of the expert and the assistant) ----------------
+  // Times come from the server in UTC and are shown in the phone's own time zone.
+  let booking = null; // { slug, data, mode: 'book' | 'reschedule', day }
+  const dayKey = (iso) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  };
+  const dayLabel = (iso) => new Date(iso).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const timeLabel = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const whenLabel = (iso) => `${dayLabel(iso)}, ${timeLabel(iso)}`;
+
+  function rulesText(rules) {
+    if (!rules) return '';
+    const can = [rules.clientCanReschedule && 'перенести', rules.clientCanCancel && 'отменить'].filter(Boolean);
+    if (!can.length) return 'Перенести или отменить встречу можно через чат — напишите эксперту.';
+    return `${can.join(' или ')[0].toUpperCase()}${can.join(' или ').slice(1)} можно${rules.hoursBefore ? ` не позже чем за ${rules.hoursBefore} ч` : ''} — здесь же.`;
+  }
+
+  function bookingPanel(slug) {
+    if (!booking || booking.slug !== slug) return '';
+    const d = booking.data;
+    const head = (title) => `
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-ink flex items-center gap-1.5"><i data-lucide="calendar" class="w-4 h-4 text-brand"></i>${title}</span>
+        <button onclick="SF.actions.closeBooking()" class="px-1 text-faint text-lg leading-none" aria-label="Закрыть">&times;</button>
+      </div>`;
+    const box = (inner) => `<div class="p-3 rounded-2xl bg-card border border-[#81D8D0] space-y-2.5">${inner}</div>`;
+    if (!d) return box(`${head('Запись на встречу')}<div class="text-[11px] text-muted">Загружаю свободное время…</div>`);
+
+    if (d.meeting && booking.mode !== 'reschedule') {
+      const m = d.meeting;
+      return box(`
+        ${head('Ваша встреча')}
+        <div class="text-sm font-semibold text-ink">${SF.esc(whenLabel(m.startsAt))}</div>
+        <div class="text-[11px] text-muted">${d.durationMinutes} мин · время на вашем телефоне</div>
+        ${m.zoomUrl ? `<button onclick="SF.openLink('${SF.js(m.zoomUrl)}')" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1"><i data-lucide="video" class="w-3.5 h-3.5"></i>Ссылка на встречу</button>` : '<div class="text-[11px] text-muted">Ссылку на встречу пришлют в этот чат.</div>'}
+        ${m.canReschedule || m.canCancel ? `
+          <div class="flex gap-2">
+            ${m.canReschedule ? `<button onclick="SF.actions.startReschedule()" class="flex-1 py-1.5 rounded-xl bg-sunken border border-line text-[11px] text-ink-2">Перенести</button>` : ''}
+            ${m.canCancel ? `<button onclick="SF.actions.cancelMeeting('${SF.js(slug)}')" class="flex-1 py-1.5 rounded-xl bg-sunken border border-line text-[11px] text-ink-2">Отменить</button>` : ''}
+          </div>` : ''}
+        <div class="text-[10px] text-faint">${SF.esc(m.canReschedule || m.canCancel ? rulesText(d.rules) : 'Перенести или отменить встречу теперь можно через чат — напишите эксперту.')}</div>`);
+    }
+
+    const days = [];
+    for (const at of d.slots || []) {
+      const key = dayKey(at);
+      if (!days.find(x => x.key === key)) days.push({ key, at });
+    }
+    const title = booking.mode === 'reschedule' ? 'Перенести встречу' : 'Запись на встречу';
+    if (!days.length) {
+      return box(`${head(title)}<div class="text-[11px] text-muted">Свободного времени в ближайшие две недели пока нет. Напишите в чат — эксперт подберёт время.</div>`);
+    }
+    const day = days.find(x => x.key === booking.day) ? booking.day : days[0].key;
+    const times = d.slots.filter(at => dayKey(at) === day);
+    return box(`
+      ${head(title)}
+      <div class="text-[11px] text-muted">${d.durationMinutes} мин · время на вашем телефоне${booking.mode === 'reschedule' && d.meeting ? ` · сейчас: ${SF.esc(whenLabel(d.meeting.startsAt))}` : ''}</div>
+      <div class="flex gap-1.5 overflow-x-auto pb-1">
+        ${days.map(x => `<button onclick="SF.actions.pickBookingDay('${x.key}')" class="flex-shrink-0 px-2.5 py-1.5 rounded-xl text-[11px] ${x.key === day ? 'btn-3d-tiffany' : 'bg-sunken border border-line text-ink-2'}">${SF.esc(dayLabel(x.at))}</button>`).join('')}
+      </div>
+      <div class="grid grid-cols-4 gap-1.5">
+        ${times.map(at => `<button onclick="SF.actions.pickSlot('${SF.js(slug)}', '${SF.js(at)}')" class="py-1.5 rounded-xl bg-sunken border border-line text-xs text-ink">${timeLabel(at)}</button>`).join('')}
+      </div>
+      ${booking.mode === 'reschedule' ? `<button onclick="SF.actions.stopReschedule()" class="w-full text-[11px] text-muted">Оставить как было</button>` : ''}`);
+  }
+
+  async function reloadBooking(slug) {
+    try {
+      const data = await api().getChatCalendar(slug);
+      if (booking && booking.slug === slug) booking.data = data;
+    } catch (err) {
+      booking = null;
+      showToast(SF.withErrorCode(err.message || 'Не получилось открыть запись', err));
+    }
+    store().notify();
+  }
+
+  SF.actions.openBooking = (slug) => {
+    booking = { slug, data: null, mode: 'book', day: null };
+    store().notify();
+    reloadBooking(slug);
+  };
+
+  SF.actions.closeBooking = () => {
+    booking = null;
+    store().notify();
+  };
+
+  SF.actions.pickBookingDay = (key) => {
+    if (!booking) return;
+    booking.day = key;
+    store().notify();
+  };
+
+  SF.actions.startReschedule = () => {
+    if (!booking) return;
+    booking.mode = 'reschedule';
+    store().notify();
+  };
+
+  SF.actions.stopReschedule = () => {
+    if (!booking) return;
+    booking.mode = 'book';
+    store().notify();
+  };
+
+  async function afterMeetingChange(slug, data, toast) {
+    if (booking && booking.slug === slug) {
+      booking.data = data;
+      booking.mode = 'book';
+    }
+    SF.data.invalidate(`messages:${slug}`);
+    await SF.data.chatMessages(slug);
+    showToast(toast);
+    SF.scrollToBottom('chat-scroll');
+  }
+
+  SF.actions.pickSlot = async (slug, at) => {
+    if (!booking || sending) return;
+    const moving = booking.mode === 'reschedule' && booking.data?.meeting;
+    if (!window.confirm(`${moving ? 'Перенести встречу на' : 'Записаться на'} ${whenLabel(at)}?`)) return;
+    sending = true;
+    try {
+      const res = moving
+        ? await api().rescheduleMeeting(slug, booking.data.meeting.id, at)
+        : await api().bookMeeting(slug, at);
+      SF.askWriteAccess(); // so the bot can remind about the meeting an hour before
+      await afterMeetingChange(slug, res.calendar, moving ? 'Встреча перенесена' : 'Готово, вы записаны');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось записаться', err));
+      if (err.status === 409) reloadBooking(slug);
+    } finally {
+      sending = false;
+    }
+  };
+
+  SF.actions.cancelMeeting = async (slug) => {
+    const meeting = booking?.data?.meeting;
+    if (!meeting || sending || !window.confirm(`Отменить встречу ${whenLabel(meeting.startsAt)}?`)) return;
+    sending = true;
+    try {
+      const res = await api().cancelMeeting(slug, meeting.id);
+      await afterMeetingChange(slug, res.calendar, 'Встреча отменена');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось отменить', err));
+    } finally {
+      sending = false;
     }
   };
 

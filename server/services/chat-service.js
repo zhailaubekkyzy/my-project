@@ -9,6 +9,7 @@ const brainService = require('./brain-service');
 const telegramBot = require('./telegram-bot');
 const businessService = require('./business-service');
 const funnelService = require('./funnel-service');
+const calendarService = require('./calendar-service');
 const { mediaUrl } = require('./media-service');
 
 const DEFAULT_CLIENT_LIMIT = 40;
@@ -190,9 +191,11 @@ async function handleClientMessage(project, lead, text, voice = null) {
     const previous = [...past].reverse().find(m => m.sender === 'client');
     knowledge = await brainService.contextFor(project.id, [previous && previous.text, text].filter(Boolean).join('\n'));
   }
+  // With free windows in the calendar the SI may offer the «Записаться» button
+  const calendarEnabled = await calendarService.isEnabled(lead.business_id);
   const [result, analysis] = await Promise.all([
     siEngine.generateReply({
-      project,
+      project: { ...project, calendarEnabled },
       expertName: await expertNameOf(project),
       history: past,
       userText: text,
@@ -298,20 +301,29 @@ async function clientEvent(project, client, type, actor, data = null) {
  *    or a receipt; hidden again once the client has bought;
  *  - "Поделиться контактом": the SI / a person just asked for a phone number or contact; hidden
  *    once the client shared it.
+ *  - "Записаться": the business has free windows and the SI / a person just spoke about a meeting
+ *    or a call, or the client already has a meeting (to see, move or cancel it).
  * "Just" = the last 3 messages from the SI or a person.
  */
 const RECENT_OTHER = 3;
 const ASKS_RECEIPT = /(чек|оплат|оплач)/i;
 const ASKS_CONTACT = /(номер|телефон|контакт)/i;
+const ASKS_MEETING = /(запис|встреч|созвон|консультац|zoom|зум)/i;
 async function chatTools(project, lead, messages) {
-  if (!lead) return { contact: false, receipt: false };
+  if (!lead) return { contact: false, receipt: false, booking: false };
   const recent = messages.filter(m => m.sender !== 'client').slice(-RECENT_OTHER).map(m => m.text || '');
   const contact = !lead.contact_consent_at && recent.some(t => ASKS_CONTACT.test(t));
   let receipt = false;
   if (project.payment_url && lead.funnel_status !== 'bought') {
     receipt = recent.some(t => ASKS_RECEIPT.test(t)) || await funnelService.hasEvent(lead.id, 'buy_clicked');
   }
-  return { contact, receipt };
+  // booking: 'meeting' — the client has a meeting; 'book' — the conversation came to a meeting
+  let booking = false;
+  if (await calendarService.isEnabled(lead.business_id)) {
+    if (await calendarService.upcomingOfClient(lead.id)) booking = 'meeting';
+    else if (recent.some(t => ASKS_MEETING.test(t))) booking = 'book';
+  }
+  return { contact, receipt, booking };
 }
 
 // The expert's own conditions may be about buttons too: the press is checked like a message
