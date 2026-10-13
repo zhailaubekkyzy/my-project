@@ -178,8 +178,49 @@
     }, 50);
   }
 
+  // A voice message in a chat: "▶ 0:18" and the transcript under it. path: where the server gives the
+  // recording (private, loaded with the session), e.g. /api/chat/<slug>/voice/<id>
+  const voiceLabel = (s) => `${Math.floor((s || 0) / 60)}:${String((s || 0) % 60).padStart(2, '0')}`;
+  function voiceContent(msg, path) {
+    const transcript = msg.text && msg.text !== 'Голосовое сообщение' ? msg.text : '';
+    return `
+      <button onclick="SF.playVoice(this, '${js(path)}')" class="flex items-center gap-1.5 text-xs font-semibold">
+        <span data-voice-icon>▶</span><span>🎤 ${voiceLabel(msg.voiceSeconds)}</span>
+      </button>
+      ${transcript ? `<div class="text-[11px] opacity-80 mt-1 italic">${esc(transcript)}</div>` : ''}`;
+  }
+
+  let playing = null;
+  async function playVoice(button, path) {
+    if (playing && playing.path === path) {
+      playing.audio.pause();
+      playing.button.querySelector('[data-voice-icon]').textContent = '▶';
+      playing = null;
+      return;
+    }
+    if (playing) {
+      playing.audio.pause();
+      playing.button.querySelector('[data-voice-icon]').textContent = '▶';
+    }
+    const icon = button.querySelector('[data-voice-icon]');
+    icon.textContent = '…';
+    try {
+      const blob = await window.smartFlowApi.getPrivateBlob(path);
+      const audio = new Audio(URL.createObjectURL(blob));
+      playing = { path, audio, button };
+      audio.onended = () => { icon.textContent = '▶'; playing = null; };
+      await audio.play();
+      icon.textContent = '⏸';
+    } catch (err) {
+      icon.textContent = '▶';
+      showToast('Не получилось проиграть голосовое');
+    }
+  }
+
   Object.assign(SF, {
     MASCOTS,
+    voiceContent,
+    playVoice,
     esc,
     js,
     formatMoney,

@@ -492,7 +492,9 @@
         ${row('Формат', esc(r.type || '—'))}
         ${mic.url ? `<audio controls src="${mic.url}" class="w-full"></audio>` : ''}
         <div class="text-[10px] text-faint">Слышно ли себя? Если да — запись работает на этом устройстве.</div>
-        <button onclick="SF.admin.micReport()" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Отправить результат команде</button>
+        ${mic.reported === 'sent'
+          ? '<div class="w-full py-2.5 rounded-xl bg-[var(--human-bubble)] border border-[var(--human-bubble-line)] text-xs text-brand font-bold text-center">✓ Отправлено команде</div>'
+          : `<button onclick="SF.admin.micReport()" ${mic.reported === 'sending' ? 'disabled' : ''} class="w-full py-2.5 rounded-xl btn-3d-dark text-xs disabled:opacity-60">${mic.reported === 'sending' ? 'Отправляю…' : 'Отправить результат команде'}</button>`}
       `) : ''}
     `;
   }
@@ -512,6 +514,7 @@
         if (mic.url) URL.revokeObjectURL(mic.url);
         mic.url = URL.createObjectURL(blob);
         mic.result = { seconds: Math.round((Date.now() - mic.startedAt) / 1000), size: blob.size, type: blob.type };
+        mic.reported = false;
         mic.state = 'idle';
         store().notify();
       };
@@ -537,15 +540,21 @@
   }
 
   async function micReport() {
+    // The button itself shows what happens: «Отправляю…» → «✓ Отправлено команде» (sent once)
+    if (mic.reported) return;
+    mic.reported = 'sending';
+    store().notify();
     const d = micDevice();
     const r = mic.result || {};
     const text = `Проверка микрофона: ${d.platform}, Telegram ${d.telegram}; формат ${r.type || '—'}, ${r.seconds || 0} с, ${Math.round((r.size || 0) / 1024)} КБ. Устройство: ${d.device}`;
     try {
       await api().sendFeedback(text);
-      showToast('Отправлено команде');
+      mic.reported = 'sent';
     } catch (err) {
-      showToast(err.message || 'Не отправилось');
+      mic.reported = false;
+      showToast(err.message || 'Не отправилось. Попробуйте ещё раз');
     }
+    store().notify();
   }
 
   // ---------------- How to fix (for a new team member) ----------------

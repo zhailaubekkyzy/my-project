@@ -1630,6 +1630,72 @@ async function runAllTests() {
     }
   });
 
+  await test('51. Голосовые: до 1,5 минуты, расшифровка OpenAI, SI отвечает на текст, слушать могут только свои', async () => {
+    const tg = { id: 700030, first_name: 'Голос' };
+    const token = await tokenFor(tg);
+    const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(2000, 7)]);
+    const upload = (body, seconds = 18, t = token) => fetch(`${baseUrl}/api/chat/${projectA.slug}/voice?seconds=${seconds}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'audio/webm' }, body
+    }).then(async r => ({ status: r.status, body: await r.json() }));
+
+    assert.strictEqual((await upload(Buffer.from('not audio at all, really'))).status, 400, 'Only real audio');
+
+    // Without OpenAI: the voice is kept, the SI honestly asks to write instead
+    let res = await upload(webm);
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.message.isVoice, true);
+    assert.strictEqual(res.body.message.voiceSeconds, 18);
+    assert(res.body.reply.text.includes('расслышать'));
+
+    // With OpenAI: the transcript is the message, the SI answers it
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let transcribeModel = '';
+    global.fetch = async (url, options) => {
+      if (String(url) === 'https://api.openai.com/v1/audio/transcriptions') {
+        transcribeModel = options.body.get('model');
+        return new Response(JSON.stringify({ text: 'Сколько стоит ваш курс и есть ли рассрочка?' }), { status: 200 });
+      }
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        const content = body.response_format ? '{"offer_made":false,"offer_answered":false,"objection":"","refused":false,"conditions":[]}' : 'Курс стоит 25 000 ₽, рассрочка есть.';
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      res = await upload(webm, 500);
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(transcribeModel, config.transcribeModel);
+      assert.strictEqual(res.body.message.text, 'Сколько стоит ваш курс и есть ли рассрочка?', 'The transcript is the message');
+      assert.strictEqual(res.body.message.voiceSeconds, 90, 'Up to 1.5 minutes');
+      assert.strictEqual(res.body.reply.text, 'Курс стоит 25 000 ₽, рассрочка есть.', 'The SI answers the transcript');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // Playing: the client, the owner and the assistant — yes; others — no
+    const voiceId = res.body.message.voiceId;
+    const mine = await fetch(`${baseUrl}/api/chat/${projectA.slug}/voice/${voiceId}`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.strictEqual(mine.status, 200);
+    assert.strictEqual(mine.headers.get('content-type'), 'audio/webm');
+    assert.strictEqual((await fetch(`${baseUrl}/api/chat/${projectA.slug}/voice/${voiceId}`, { headers: { Authorization: `Bearer ${tokenB}` } })).status, 404, 'Another client cannot');
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg, 'expert')).id]);
+    const ownerUrl = `${baseUrl}/api/projects/${projectA.id}/conversations/${lead.id}/voice/${voiceId}`;
+    assert.strictEqual((await fetch(ownerUrl, { headers: { Authorization: `Bearer ${tokenA}` } })).status, 200, 'The owner can');
+    assert.strictEqual((await fetch(ownerUrl, { headers: { Authorization: `Bearer ${tokenOther}` } })).status, 403, 'A stranger cannot');
+    const history = (await api('GET', `/api/projects/${projectA.id}/conversations/${lead.id}/messages`, tokenA)).body;
+    assert(history.some(m => m.voiceId === voiceId && m.isVoice), 'The expert sees the voice message with its transcript');
+
+    // At most 20 voice messages a day per client
+    for (let i = 0; i < 18; i++) {
+      await db.run(`INSERT INTO voice_messages (id, project_id, client_id, mime_type, size_bytes, data_base64) VALUES (?, ?, ?, 'audio/webm', 1, 'AA==')`, [`voi_lim${i}`, projectA.id, lead.id]);
+    }
+    assert.strictEqual((await upload(webm)).status, 429);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

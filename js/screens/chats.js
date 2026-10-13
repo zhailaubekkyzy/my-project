@@ -62,9 +62,10 @@
   }
 
   // ---------------- Chat with an SI-consultant ----------------
-  function bubble(msg, consultant) {
+  function bubble(msg, consultant, slug) {
     if (msg.sender === 'client') {
-      return `<div class="flex justify-end"><div class="chat-bubble-human">${SF.formatChatMarkdown(msg.text)}</div></div>`;
+      const body = msg.voiceId ? SF.voiceContent(msg, `/api/chat/${encodeURIComponent(slug)}/voice/${msg.voiceId}`) : SF.formatChatMarkdown(msg.text);
+      return `<div class="flex justify-end"><div class="chat-bubble-human">${body}</div></div>`;
     }
     if (msg.sender === 'expert_human') {
       return `
@@ -147,7 +148,7 @@
         </div>` : ''}
 
       <div class="glass-card-3d p-3 flex flex-col space-y-2.5 min-h-[320px] max-h-[460px] overflow-y-auto" id="chat-scroll">
-        ${messages.map(m => bubble(m, consultant)).join('')}
+        ${messages.map(m => bubble(m, consultant, slug)).join('')}
         <div id="si-typing" class="${messages.length ? 'hidden' : ''} flex items-end gap-1.5">
           <img src="${SF.photoSrc(consultant?.photoUrl, SF.MASCOTS.consultant)}" alt="" class="mascot-avatar object-cover" />
           <div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">печатает</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
@@ -156,12 +157,20 @@
 
       ${chatTools(slug, consultant, thread)}
 
+      ${voice && voice.slug === slug ? `
+        <div class="flex items-center gap-2 p-2 rounded-xl bg-card border border-[#81D8D0]">
+          <button onclick="SF.actions.cancelVoice()" class="p-2 rounded-lg btn-3d-dark" aria-label="Отменить запись"><i data-lucide="x" class="w-4 h-4"></i></button>
+          <span class="flex-1 flex items-center gap-1.5 text-xs text-ink"><span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>Запись <span id="voice-timer" class="font-semibold">${voiceTime(voice.seconds)}</span><span class="text-faint">/ ${voiceTime(VOICE_MAX)}</span></span>
+          <button onclick="SF.actions.sendVoice('${SF.js(slug)}')" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить голосовое"><i data-lucide="send" class="w-4 h-4"></i></button>
+        </div>` : `
       <form onsubmit="SF.actions.sendChat(event, '${SF.js(slug)}')" class="flex items-center gap-2">
         <input type="text" name="text" data-keep="chat-input" maxlength="2000" autocomplete="off" placeholder="Напишите сообщение..." class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        ${window.sfMedia && window.sfMedia.canRecord() ? `
+          <button type="button" onclick="SF.actions.startVoice('${SF.js(slug)}')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Записать голосовое"><i data-lucide="mic" class="w-4 h-4"></i></button>` : ''}
         <button type="submit" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить">
           <i data-lucide="send" class="w-4 h-4"></i>
         </button>
-      </form>
+      </form>`}
     `;
   }
 
@@ -310,6 +319,66 @@
       showToast('Чек отправлен. Эксперт проверит оплату и напишет здесь');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
+    } finally {
+      sending = false;
+      SF.scrollToBottom('chat-scroll');
+    }
+  };
+
+  // ---------------- Voice messages (up to 1.5 minutes; the limit is a quiet timer) ----------------
+  const VOICE_MAX = 90;
+  let voice = null; // { slug, seconds, controller }
+  const voiceTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  SF.actions.startVoice = async (slug) => {
+    if (voice || sending || !window.sfMedia) return;
+    try {
+      const controller = await window.sfMedia.recordVoice({
+        maxSeconds: VOICE_MAX,
+        onTick: (s) => {
+          if (!voice) return;
+          voice.seconds = s;
+          const el = document.getElementById('voice-timer');
+          if (el) el.textContent = voiceTime(Math.min(s, VOICE_MAX));
+        },
+        onLimit: () => SF.actions.sendVoice(slug)
+      });
+      voice = { slug, seconds: 0, controller };
+      store().notify();
+    } catch (err) {
+      voice = null;
+      showToast(err && err.name === 'NotAllowedError'
+        ? 'Разрешите доступ к микрофону для Telegram в настройках телефона'
+        : 'Не получилось включить микрофон');
+    }
+  };
+
+  SF.actions.cancelVoice = () => {
+    if (!voice) return;
+    voice.controller.cancel();
+    voice = null;
+    store().notify();
+  };
+
+  SF.actions.sendVoice = async (slug) => {
+    if (!voice || voice.sending) return;
+    voice.sending = true;
+    const controller = voice.controller;
+    const result = await controller.stop();
+    voice = null;
+    store().notify();
+    if (!result || !result.blob.size) return;
+    sending = true;
+    document.getElementById('si-typing')?.classList.remove('hidden');
+    SF.scrollToBottom('chat-scroll');
+    try {
+      await api().uploadVoice(slug, result.blob, Math.min(result.seconds, VOICE_MAX));
+      SF.data.invalidate(`messages:${slug}`);
+      SF.data.invalidate('chats');
+      await SF.data.chatMessages(slug);
+      SF.data.myChats();
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Голосовое не отправилось. Попробуйте ещё раз', err));
     } finally {
       sending = false;
       SF.scrollToBottom('chat-scroll');

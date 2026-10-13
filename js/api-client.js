@@ -357,6 +357,26 @@
       return await res.blob();
     },
 
+    // Voice message (the recording itself); the server transcribes it and the SI answers
+    async uploadVoice(slug, blob, seconds) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/voice?seconds=${encodeURIComponent(seconds)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob
+      });
+    },
+
+    // A private file (voice message) as a Blob: it needs the session, so no plain link
+    async getPrivateBlob(path) {
+      const res = await fetch(`${API_BASE}${path}`, { headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {} });
+      if (!res.ok) {
+        const error = new Error(res.status === 404 ? 'Не найдено' : `Ошибка сервера ${res.status}`);
+        error.status = res.status;
+        throw error;
+      }
+      return await res.blob();
+    },
+
     // The client's own actions for the expert's journal (e.g. pressed «Купить»)
     async sendChatEvent(slug, type) {
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/events`, {

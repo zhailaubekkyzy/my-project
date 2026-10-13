@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router({ mergeParams: true });
 const db = require('../db');
 const chatService = require('../services/chat-service');
+const voiceService = require('../services/voice-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 
@@ -15,6 +16,25 @@ router.use(requireAuth);
 router.get('/:clientId/messages', requireProjectPermission('conversations:read'), async (req, res, next) => {
   try {
     res.json(await chatService.history(req.project.id, req.params.clientId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/conversations/:clientId/voice/:voiceId
+ * A client's voice message, to play it (the owner and the assistant of the business)
+ */
+router.get('/:clientId/voice/:voiceId', requireProjectPermission('conversations:read'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT id FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    const file = client ? await voiceService.voiceFile(client.id, req.params.voiceId) : null;
+    if (!file) return res.status(404).json({ error: 'not_found', message: 'Голосовое не найдено' });
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.send(file.buffer);
   } catch (err) {
     next(err);
   }

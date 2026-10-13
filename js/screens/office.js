@@ -744,7 +744,7 @@
               <div class="text-[9px] text-faint mb-0.5 px-1">
                 ${m.sender === 'client' ? SF.esc(client.name) : (m.sender === 'expert_human' ? who(m) : SF.siLabel('SI'))} · ${timeLabel(m.createdAt || m.created_at)}
               </div>
-              <div class="${m.sender === 'client' ? 'chat-bubble-human' : (m.sender === 'expert_human' ? 'chat-bubble-expert' : 'chat-bubble-si')} text-xs">${SF.formatChatMarkdown(m.text)}</div>
+              <div class="${m.sender === 'client' ? 'chat-bubble-human' : (m.sender === 'expert_human' ? 'chat-bubble-expert' : 'chat-bubble-si')} text-xs">${m.voiceId ? SF.voiceContent(m, `/api/projects/${encodeURIComponent(route.projectId)}/conversations/${encodeURIComponent(client.id)}/voice/${m.voiceId}`) : SF.formatChatMarkdown(m.text)}</div>
             </div>`).join('')}
         </div>
         <form onsubmit="SF.actions.replyToClient(event, '${SF.js(route.projectId)}', '${SF.js(client.id)}')" class="flex gap-2 pt-2 border-t border-line">

@@ -8,7 +8,8 @@ const chatService = require('../services/chat-service');
 const marketplaceService = require('../services/marketplace-service');
 const { mediaUrl } = require('../services/media-service');
 const receiptService = require('../services/receipt-service');
-const { readReceiptBody } = require('../middleware/image-upload');
+const { readReceiptBody, readVoiceBody } = require('../middleware/image-upload');
+const voiceService = require('../services/voice-service');
 
 router.use(requireAuth);
 
@@ -193,6 +194,58 @@ router.post('/:slug/receipts', readReceiptBody, async (req, res, next) => {
     sendReceiptError(res, err, next);
   }
 });
+
+const NOT_HEARD = 'Не получилось расслышать голосовое 🙏 Напишите, пожалуйста, текстом — я сразу отвечу.';
+
+/**
+ * POST /api/chat/:slug/voice?seconds=18  (body: the recording itself, up to 1.5 minutes)
+ * A voice message: kept privately, transcribed, and the SI answers the transcript like any text
+ */
+router.post('/:slug/voice', readVoiceBody, async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId);
+    const voice = await voiceService.saveVoice(project, lead, req.body, req.query.seconds, req.user.userId);
+    if (voice.transcript) {
+      const result = await chatService.handleClientMessage(project, lead, voice.transcript, voice);
+      return res.status(201).json(result);
+    }
+    // Not transcribed (no OpenAI key or a failure): the voice is kept; the SI asks to write instead
+    const message = await chatService.saveMessage(lead, { type: 'client' }, 'Голосовое сообщение', voice);
+    const reply = chatService.isSiPaused(lead) ? null : await chatService.saveMessage(lead, { type: 'si' }, NOT_HEARD);
+    res.status(201).json({ message, reply, transcribed: false });
+  } catch (err) {
+    if (err instanceof voiceService.VoiceError) {
+      return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * GET /api/chat/:slug/voice/:voiceId — my own voice message, to play it
+ */
+router.get('/:slug/voice/:voiceId', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    const file = lead ? await voiceService.voiceFile(lead.id, req.params.voiceId) : null;
+    if (!file) return res.status(404).json({ error: 'not_found', message: 'Голосовое не найдено' });
+    sendPrivateFile(res, file);
+  } catch (err) {
+    next(err);
+  }
+});
+
+function sendPrivateFile(res, file) {
+  res.setHeader('Content-Type', file.mimeType);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'");
+  res.send(file.buffer);
+}
 
 /**
  * GET /api/chat/:slug/receipts — my receipts for this SI-seller and their status

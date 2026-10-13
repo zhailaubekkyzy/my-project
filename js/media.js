@@ -124,5 +124,60 @@
     });
   }
 
-  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile, pickReceipt };
+  // Voice message: records up to maxSeconds (1.5 min — owner's decision) at a small bitrate
+  // (~400 KB for 1.5 min). Returns { stop() → Promise<{ blob, seconds }>, cancel() }.
+  function voiceFormat() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/aac'];
+    return types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  const canRecord = () => Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
+
+  async function recordVoice({ maxSeconds = 90, onTick = () => {}, onLimit = () => {} } = {}) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const type = voiceFormat();
+    const options = { audioBitsPerSecond: 32000 };
+    if (type) options.mimeType = type;
+    let recorder;
+    try {
+      recorder = new MediaRecorder(stream, options);
+    } catch (e) {
+      recorder = new MediaRecorder(stream);
+    }
+    const chunks = [];
+    const startedAt = Date.now();
+    let cancelled = false;
+    let resolveStop;
+    const stopped = new Promise((resolve) => { resolveStop = resolve; });
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(timer);
+      const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      resolveStop(cancelled ? null : { blob: new Blob(chunks, { type: recorder.mimeType || type || 'audio/webm' }), seconds });
+    };
+    recorder.start(1000);
+    const timer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      onTick(s);
+      if (s >= maxSeconds && recorder.state !== 'inactive') {
+        recorder.stop();
+        onLimit();
+      }
+    }, 250);
+    const stop = () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+      return stopped;
+    };
+    return {
+      stop,
+      cancel() {
+        cancelled = true;
+        stop();
+      }
+    };
+  }
+
+  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile, pickReceipt, recordVoice, canRecord };
 })(window);
