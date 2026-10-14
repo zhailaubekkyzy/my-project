@@ -334,6 +334,15 @@
       return await apiFetch(`/api/people/${encodeURIComponent(userId)}/messages`, { method: 'POST', body: JSON.stringify({ text }) });
     },
 
+    // A voice (1.5 min), a photo or a round video (30 s) in a conversation with a person
+    async sendPersonFile(userId, kind, blob, seconds = '') {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/files?kind=${encodeURIComponent(kind)}&seconds=${encodeURIComponent(seconds)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob
+      });
+    },
+
     async answerPerson(userId, action) {
       return await apiFetch(`/api/people/${encodeURIComponent(userId)}/answer`, { method: 'POST', body: JSON.stringify({ action }) });
     },

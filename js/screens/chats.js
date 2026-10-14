@@ -78,7 +78,7 @@
     const searchBox = SF.data.signedIn() ? `
       <div class="relative">
         <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
-        <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека" autocomplete="off"
+        <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека: имя, @ник, чем занимается" autocomplete="off"
           class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
       </div>` : '';
 
@@ -106,15 +106,19 @@
           ${SF.sectionTitle('', 'Люди в SmartFlow')}
           <div class="space-y-2">
             ${searchResults.people === null ? '<div class="text-xs text-muted px-1">Ищу…</div>' : ''}
-            ${found.map(p => row({
-              onclick: `SF.actions.openPerson('${SF.js(p.id)}')`,
-              kind: 'human',
-              photoUrl: p.photoUrl,
-              title: p.displayName,
-              preview: p.headline || (p.username ? `@${p.username}` : 'Написать'),
-              unread: false
-            })).join('')}
-            ${searchResults.people && !found.length && !mine.length ? '<div class="text-xs text-muted px-1">Никого не нашли. Попробуйте имя или @ник из Telegram.</div>' : ''}
+            ${found.map(p => `
+              <div class="w-full p-3 rounded-2xl flex items-center gap-3 bg-card border border-line">
+                ${SF.avatar(p.photoUrl, { size: 44, kind: 'human' })}
+                <span class="flex-1 min-w-0">
+                  <span class="block text-sm font-bold text-ink truncate">${SF.esc(p.displayName)}</span>
+                  <span class="block text-[11px] text-muted truncate">${SF.esc(p.headline || (p.username ? `@${p.username}` : ''))}</span>
+                </span>
+                <span class="flex flex-col gap-1 flex-shrink-0">
+                  <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="px-2.5 py-1 rounded-lg btn-3d-dark text-[11px]">Профиль</button>
+                  <button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="px-2.5 py-1 rounded-lg btn-3d-tiffany text-[11px]">Написать</button>
+                </span>
+              </div>`).join('')}
+            ${searchResults.people && !found.length && !mine.length ? '<div class="text-xs text-muted px-1">Никого не нашли. Попробуйте имя, @ник или слово о том, чем человек занимается.</div>' : ''}
           </div>` : ''}
       `;
     }
@@ -144,6 +148,157 @@
 
   // ---------------- Conversation with a person ----------------
   const msgTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
+
+  // Files of a conversation (photo, round video, voice) come with the session, so they are
+  // fetched as blobs; the object URLs are kept while the app is open (re-renders reuse them).
+  const fileUrls = new Map();
+  const filePath = (userId, fileId) => `/api/people/${encodeURIComponent(userId)}/files/${encodeURIComponent(fileId)}`;
+
+  function personMessage(m, userId) {
+    const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
+    const side = m.mine ? 'justify-end' : 'justify-start';
+    const path = m.fileId ? filePath(userId, m.fileId) : '';
+    const src = m.fileId && fileUrls.get(m.fileId) ? `src="${fileUrls.get(m.fileId)}"` : '';
+    if (m.kind === 'video' && m.fileId) {
+      return `
+        <div class="flex ${side}">
+          <div class="flex flex-col items-center">
+            <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
+              class="w-44 h-44 rounded-full object-cover bg-sunken border-2 ${m.mine ? 'border-[#81D8D0]' : 'border-line'}"></video>
+            <div class="text-[9px] text-faint mt-0.5">🎥 0:${String(m.seconds || 0).padStart(2, '0')} · ${msgTime(m.createdAt)}</div>
+          </div>
+        </div>`;
+    }
+    if (m.kind === 'photo' && m.fileId) {
+      return `
+        <div class="flex ${side}">
+          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'} !p-1">
+            <img data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} alt="Фото" onclick="SF.actions.openPhoto(this)" class="rounded-xl max-w-[220px] max-h-[280px] min-w-[80px] min-h-[80px] object-cover bg-sunken" />
+            <div class="px-1">${time}</div>
+          </div>
+        </div>`;
+    }
+    if (m.kind === 'voice' && m.fileId) {
+      return `
+        <div class="flex ${side}">
+          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
+        </div>`;
+    }
+    return `
+      <div class="flex ${side}">
+        <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.formatChatMarkdown(m.text)}${time}</div>
+      </div>`;
+  }
+
+  // After a render: load the photos and videos that are not loaded yet
+  function loadPersonFiles() {
+    document.querySelectorAll('[data-dm-file]:not([src])').forEach(async (el) => {
+      const id = el.dataset.fileId;
+      if (el.dataset.loading) return;
+      el.dataset.loading = '1';
+      try {
+        if (!fileUrls.has(id)) fileUrls.set(id, URL.createObjectURL(await api().getPrivateBlob(el.dataset.dmFile)));
+        el.src = fileUrls.get(id);
+      } catch (err) {
+        el.dataset.loading = '';
+      }
+    });
+  }
+
+  SF.actions.toggleCircle = (video) => {
+    if (video.paused) {
+      document.querySelectorAll('video[data-dm-file]').forEach(v => { if (v !== video) v.pause(); });
+      video.muted = false;
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  };
+
+  SF.actions.openPhoto = (img) => {
+    if (!img.src) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-3';
+    overlay.innerHTML = `<img src="${img.src}" alt="Фото" class="max-w-full max-h-full rounded-xl" />`;
+    overlay.onclick = () => overlay.remove();
+    document.body.appendChild(overlay);
+  };
+
+  SF.actions.sendPersonPhoto = async (userId) => {
+    if (sending || !window.sfMedia) return;
+    try {
+      const blob = await window.sfMedia.pickChatPhoto();
+      if (!blob) return;
+      await sendPersonFile(userId, 'photo', blob, '');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось', err));
+    }
+  };
+
+  async function sendPersonFile(userId, kind, blob, seconds) {
+    sending = true;
+    showToast(kind === 'photo' ? 'Отправляю фото…' : kind === 'video' ? 'Отправляю видео…' : 'Отправляю голосовое…');
+    try {
+      await api().sendPersonFile(userId, kind, blob, seconds);
+      SF.askWriteAccess();
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
+    } finally {
+      sending = false;
+      await reloadPerson(userId);
+      SF.scrollToBottom('chat-scroll');
+    }
+  }
+
+  // Recording a voice (1.5 min) or a round video (30 s): a small window over the screen, so new
+  // messages arriving meanwhile do not interrupt it. The limit is a quiet timer.
+  let personRec = null;
+  SF.actions.recordPerson = async (userId, kind) => {
+    if (personRec || sending || !window.sfMedia) return;
+    const max = kind === 'video' ? 30 : 90;
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4';
+    overlay.innerHTML = `
+      <div class="w-full max-w-sm p-4 rounded-3xl bg-card border border-line space-y-3 text-center">
+        ${kind === 'video'
+          ? '<video data-rec-preview playsinline muted class="mx-auto w-56 h-56 rounded-full object-cover bg-sunken border-4 border-[#81D8D0]" style="transform: scaleX(-1)"></video>'
+          : '<div class="mx-auto w-20 h-20 rounded-full bg-[#81D8D0]/20 flex items-center justify-center text-3xl">🎤</div>'}
+        <div class="text-xs text-ink flex items-center justify-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span><span data-rec-timer>0:00</span><span class="text-faint">/ ${Math.floor(max / 60)}:${String(max % 60).padStart(2, '0')}</span></div>
+        <div class="flex gap-2">
+          <button data-rec-cancel class="flex-1 py-2.5 rounded-xl bg-sunken border border-line text-xs text-ink-2">Отмена</button>
+          <button data-rec-send class="flex-1 py-2.5 rounded-xl btn-3d-tiffany text-xs">Отправить</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const timerEl = overlay.querySelector('[data-rec-timer]');
+    const close = () => { overlay.remove(); personRec = null; };
+    const finish = async () => {
+      if (!personRec || personRec.finishing) return;
+      personRec.finishing = true;
+      const result = await personRec.controller.stop();
+      close();
+      if (result && result.blob.size) await sendPersonFile(userId, kind, result.blob, result.seconds);
+    };
+    try {
+      const options = {
+        maxSeconds: max,
+        onTick: (sec) => { timerEl.textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; },
+        onLimit: () => finish()
+      };
+      personRec = { finishing: false };
+      personRec.controller = kind === 'video'
+        ? await window.sfMedia.recordVideo({ ...options, preview: overlay.querySelector('[data-rec-preview]') })
+        : await window.sfMedia.recordVoice(options);
+    } catch (err) {
+      close();
+      showToast(kind === 'video'
+        ? 'Нет доступа к камере. Разрешите камеру и микрофон для Telegram в настройках телефона.'
+        : 'Нет доступа к микрофону. Разрешите микрофон для Telegram в настройках телефона.');
+      return;
+    }
+    overlay.querySelector('[data-rec-cancel]').onclick = () => { if (personRec) personRec.controller.cancel(); close(); };
+    overlay.querySelector('[data-rec-send]').onclick = finish;
+  };
 
   function renderPerson(state, userId) {
     if (!SF.data.signedIn()) {
@@ -178,10 +333,7 @@
 
       <div class="glass-card-3d p-3 flex flex-col space-y-2 min-h-[300px] max-h-[460px] overflow-y-auto" id="chat-scroll">
         ${!data.messages.length ? `<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите ${name} первым — например, поздоровайтесь и расскажите, чем вы занимаетесь 🙂</div>` : ''}
-        ${data.messages.map(m => `
-          <div class="flex ${m.mine ? 'justify-end' : 'justify-start'}">
-            <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.formatChatMarkdown(m.text)}<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div></div>
-          </div>`).join('')}
+        ${data.messages.map(m => personMessage(m, p.id)).join('')}
       </div>
 
       ${t && t.needsMyAnswer ? `
@@ -199,8 +351,12 @@
           <span>Вы заблокировали ${name}.</span>
           <button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'unblock')" class="px-3 py-1.5 rounded-xl btn-3d-dark text-[11px]">Разблокировать</button>
         </div>` : data.canWrite ? `
-        <form onsubmit="SF.actions.sendPerson(event, '${SF.js(p.id)}')" class="flex items-center gap-2">
-          <input type="text" name="text" data-keep="person-input" maxlength="2000" autocomplete="off" placeholder="Напишите сообщение..." class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        <form onsubmit="SF.actions.sendPerson(event, '${SF.js(p.id)}')" class="flex items-center gap-1.5">
+          <button type="button" onclick="SF.actions.sendPersonPhoto('${SF.js(p.id)}')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Отправить фото"><i data-lucide="image" class="w-4 h-4"></i></button>
+          <input type="text" name="text" data-keep="person-input" maxlength="2000" autocomplete="off" placeholder="Сообщение..." class="flex-1 min-w-0 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+          ${window.sfMedia && window.sfMedia.canRecord() ? `
+            <button type="button" onclick="SF.actions.recordPerson('${SF.js(p.id)}', 'voice')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Записать голосовое"><i data-lucide="mic" class="w-4 h-4"></i></button>
+            <button type="button" onclick="SF.actions.recordPerson('${SF.js(p.id)}', 'video')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Записать видео-кружок"><i data-lucide="circle-play" class="w-4 h-4"></i></button>` : ''}
           <button type="submit" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить">
             <i data-lucide="send" class="w-4 h-4"></i>
           </button>
@@ -818,6 +974,7 @@
         const userId = route.id;
         SF.data.personMessages(userId);
         SF.scrollToBottom('chat-scroll');
+        loadPersonFiles();
         SF.data.poll(`person:${userId}`, () => {
           SF.data.personMessages(userId, 4000);
           SF.data.peopleChats(4000);

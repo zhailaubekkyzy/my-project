@@ -10,17 +10,27 @@
 //  - at most NEW_PER_DAY new conversations a day from one person;
 //  - blocked: the other side cannot write any more and does not find the blocker in search;
 //  - «Пожаловаться» sends the last messages to the support team (they see a conversation only then).
+// Besides text: voice (1.5 min), photo and a round video (30 s); the files are given to the two people only.
 const crypto = require('crypto');
 const db = require('../db');
 const telegramBot = require('./telegram-bot');
 const profileService = require('./profile-service');
 const supportService = require('./support-service');
+const { detectImageType } = require('./media-service');
+const { detectAudioType } = require('./voice-service');
 
 const MAX_TEXT = 2000;
 const PENDING_LIMIT = 3;
 const NEW_PER_DAY = 20;
 const SEARCH_LIMIT = 20;
 const PAGE = 200;
+// Voice up to 1.5 minutes, a round video up to 30 seconds (owner's decisions), a photo
+const FILES = {
+  voice: { maxBytes: 3 * 1024 * 1024, maxSeconds: 90, label: '🎤 Голосовое' },
+  photo: { maxBytes: 3 * 1024 * 1024, label: '📷 Фото' },
+  video: { maxBytes: 8 * 1024 * 1024, maxSeconds: 30, label: '🎥 Видео' }
+};
+const FILES_PER_DAY = 60;
 
 class PeopleError extends Error {
   constructor(message, status = 400, code = 'PEOPLE') {
@@ -73,10 +83,13 @@ async function activeUser(userId) {
 async function search(meId, query) {
   const q = String(query || '').trim().replace(/^@/, '').toLowerCase().slice(0, 60);
   if (q.length < 2) return [];
+  // Several words: each must be in the name, @username, the line under the name or «О себе»
+  const words = q.split(/\s+/).filter(Boolean).slice(0, 5);
+  const key = words.reduce((a, b) => (b.length > a.length ? b : a), '');
   const esc = (v) => v.replace(/[\\%_]/g, '\\$&');
-  const like = `%${esc(q)}%`;
+  const like = `%${esc(key)}%`;
   // SQLite lowers only Latin letters: also look for "Анна" when "анна" is typed
-  const title = `%${esc(q.charAt(0).toUpperCase() + q.slice(1))}%`;
+  const title = `%${esc(key.charAt(0).toUpperCase() + key.slice(1))}%`;
   const rows = await db.all(
     `SELECT u.* FROM users u
      WHERE u.id <> ? AND u.is_demo = 0 AND u.status <> 'blocked' AND COALESCE(u.hidden_from_search, 0) = 0
@@ -88,14 +101,19 @@ async function search(meId, query) {
            AND ((t.user_a = u.id AND t.user_b = ?) OR (t.user_b = u.id AND t.user_a = ?))
        )
      ORDER BY COALESCE(u.last_seen_at, u.created_at) DESC
-     LIMIT 60`,
+     LIMIT 200`,
     [meId, like, title, like, like, title, meId, meId]
   );
-  // The profile text matched may be "bio" or a link: keep only matches in the name, @username or headline
-  return rows
-    .map(personOf)
-    .filter(p => [p.displayName, p.username || '', p.headline].some(v => v.toLowerCase().includes(q)))
-    .slice(0, SEARCH_LIMIT);
+  // The profile text may match in a link or another field: check the words in the shown fields
+  const result = [];
+  for (const row of rows) {
+    const p = personOf(row);
+    const bio = String(profileService.toPublicUser(row).profile.bio || '');
+    const haystack = [p.displayName, p.username || '', p.headline, bio].join(' ').toLowerCase();
+    if (words.every(w => haystack.includes(w))) result.push(p);
+    if (result.length >= SEARCH_LIMIT) break;
+  }
+  return result;
 }
 
 async function setHidden(userId, hidden) {
@@ -156,7 +174,32 @@ async function myThreads(meId) {
 }
 
 function toMessage(r, meId) {
-  return { id: r.id, text: r.text, mine: r.sender_id === meId, createdAt: toIso(r.created_at) };
+  const kind = r.kind || 'text';
+  return {
+    id: r.id,
+    kind,
+    text: kind === 'text' ? r.text : '',
+    fileId: r.file_id || null,
+    seconds: r.seconds ? Number(r.seconds) : null,
+    mine: r.sender_id === meId,
+    createdAt: toIso(r.created_at)
+  };
+}
+
+// What a file really is, by its own first bytes (never by what the phone says)
+function detectFile(kind, buffer) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) return null;
+  if (kind === 'photo') return detectImageType(buffer);
+  if (kind === 'voice') {
+    const type = detectAudioType(buffer);
+    return type && type.mime;
+  }
+  if (kind === 'video') {
+    if (buffer.length < 12) return null;
+    if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) return 'video/webm';
+    if (buffer.slice(4, 8).toString('ascii') === 'ftyp') return 'video/mp4';
+  }
+  return null;
 }
 
 /**
@@ -191,13 +234,31 @@ async function conversation(meId, otherId) {
 }
 
 /**
- * Sends a message. The first one starts a conversation (with «Принять / Заблокировать» for the
- * other person); the other person's answer accepts it.
+ * Sends a message: text, or a file (kind voice / photo / video with buffer and seconds).
+ * The first one starts a conversation (with «Принять / Заблокировать» for the other person);
+ * the other person's answer accepts it.
  */
-async function send(meId, otherId, rawText) {
-  const text = String(rawText || '').trim().slice(0, MAX_TEXT);
+async function send(meId, otherId, rawText, file = null) {
+  const kind = file ? file.kind : 'text';
+  const text = file ? FILES[kind] && FILES[kind].label : String(rawText || '').trim().slice(0, MAX_TEXT);
+  if (file && !FILES[kind]) throw new PeopleError('Неизвестный тип файла', 400, 'BAD_KIND');
   if (!text) throw new PeopleError('Сообщение не может быть пустым', 400, 'EMPTY');
   if (otherId === meId) throw new PeopleError('Нельзя написать самому себе', 400, 'SELF');
+  let mime = null;
+  let seconds = null;
+  if (file) {
+    const rule = FILES[kind];
+    if (!Buffer.isBuffer(file.buffer) || !file.buffer.length) throw new PeopleError('Файл не получен. Попробуйте ещё раз.', 400, 'EMPTY_FILE');
+    if (file.buffer.length > rule.maxBytes) throw new PeopleError('Файл слишком большой.', 413, 'FILE_TOO_LARGE');
+    mime = detectFile(kind, file.buffer);
+    if (!mime) throw new PeopleError(kind === 'photo' ? 'Это не фото (подходят JPEG, PNG, WebP).' : 'Не получилось прочитать запись. Попробуйте ещё раз.', 400, 'INVALID_FILE');
+    if (rule.maxSeconds) seconds = Math.max(1, Math.min(rule.maxSeconds, parseInt(file.seconds, 10) || 1));
+    const today = await db.get(
+      'SELECT COUNT(*) AS count FROM dm_files WHERE sender_id = ? AND created_at >= ?',
+      [meId, sqlTime(new Date(Date.now() - 24 * 3600000))]
+    );
+    if (Number(today.count) >= FILES_PER_DAY) throw new PeopleError('На сегодня файлов достаточно — продолжите завтра 🙂', 429, 'FILES_LIMIT');
+  }
   const otherUser = await activeUser(otherId);
   if (!otherUser) throw new PeopleError('Человек не найден', 404, 'NOT_FOUND');
   const me = await db.get('SELECT * FROM users WHERE id = ?', [meId]);
@@ -239,7 +300,18 @@ async function send(meId, otherId, rawText) {
 
   const now = sqlTime();
   const id = newMessageId();
-  await db.run('INSERT INTO dm_messages (id, thread_id, sender_id, text, created_at) VALUES (?, ?, ?, ?, ?)', [id, thread.id, meId, text, now]);
+  let fileId = null;
+  if (file) {
+    fileId = `dmf_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+    await db.run(
+      'INSERT INTO dm_files (id, thread_id, sender_id, mime_type, size_bytes, data_base64, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [fileId, thread.id, meId, mime, file.buffer.length, file.buffer.toString('base64'), now]
+    );
+  }
+  await db.run(
+    'INSERT INTO dm_messages (id, thread_id, sender_id, text, kind, file_id, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, thread.id, meId, text, kind, fileId, seconds, now]
+  );
   const myRead = thread.user_a === meId ? 'a_read_at' : 'b_read_at';
   await db.run(
     `UPDATE dm_threads SET last_message = ?, last_sender = ?, last_activity = ?, ${myRead} = ? WHERE id = ?`,
@@ -259,7 +331,17 @@ async function send(meId, otherId, rawText) {
       { buttonText: 'Открыть', startParam: `U_${meId}` }
     );
   }
-  return { message: toMessage({ id, text, sender_id: meId, created_at: now }, meId) };
+  return { message: toMessage({ id, text, kind, file_id: fileId, seconds, sender_id: meId, created_at: now }, meId) };
+}
+
+/**
+ * A file of a conversation — only for its two people.
+ */
+async function fileOf(meId, otherId, fileId) {
+  const thread = await threadWith(meId, otherId);
+  if (!thread) return null;
+  const row = await db.get('SELECT * FROM dm_files WHERE id = ? AND thread_id = ?', [fileId, thread.id]);
+  return row ? { mimeType: row.mime_type, buffer: Buffer.from(row.data_base64, 'base64') } : null;
 }
 
 /**
@@ -294,7 +376,7 @@ async function report(meId, otherId, reason) {
   const rows = (await db.all(
     'SELECT * FROM dm_messages WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT 20', [thread.id]
   )).reverse();
-  const lines = rows.map(r => `${r.sender_id === meId ? 'Я' : other.displayName}: ${r.text.slice(0, 200)}`);
+  const lines = rows.map(r => `${r.sender_id === meId ? 'Я' : other.displayName}: ${(r.kind && r.kind !== 'text' ? `[${r.text}]` : r.text).slice(0, 200)}`);
   let text = `Жалоба на переписку с ${other.displayName}${code ? ` (${code})` : ''}.`;
   const why = String(reason || '').trim().slice(0, 300);
   if (why) text += `\nПричина: ${why}`;
@@ -316,7 +398,9 @@ module.exports = {
   setHidden,
   myThreads,
   conversation,
+  FILES,
   send,
+  fileOf,
   answer,
   report
 };

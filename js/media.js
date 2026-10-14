@@ -179,5 +179,85 @@
     };
   }
 
-  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile, pickReceipt, recordVoice, canRecord };
+  // A photo for a conversation: shrunk to 1280 px on the long side, JPEG (≈150–400 KB)
+  const CHAT_PHOTO_SIDE = 1280;
+  async function pickChatPhoto() {
+    const file = await pickImageFile();
+    if (!file) return null;
+    const img = await loadImage(file);
+    const scale = Math.min(1, CHAT_PHOTO_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Не удалось обработать фото.'))), 'image/jpeg', 0.85);
+    });
+  }
+
+  // A round video (like Telegram's): the front camera, up to 30 s (owner's decision), a small
+  // bitrate (≈2 MB for 30 s). preview: a <video> element that shows the camera while recording.
+  function videoFormat() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    const types = ['video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    return types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  async function recordVideo({ maxSeconds = 30, preview = null, onTick = () => {}, onLimit = () => {} } = {}) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } }
+    });
+    if (preview) {
+      preview.srcObject = stream;
+      preview.muted = true;
+      preview.play().catch(() => {});
+    }
+    const type = videoFormat();
+    const options = { videoBitsPerSecond: 500000, audioBitsPerSecond: 32000 };
+    if (type) options.mimeType = type;
+    let recorder;
+    try {
+      recorder = new MediaRecorder(stream, options);
+    } catch (e) {
+      recorder = new MediaRecorder(stream);
+    }
+    const chunks = [];
+    const startedAt = Date.now();
+    let cancelled = false;
+    let resolveStop;
+    const stopped = new Promise((resolve) => { resolveStop = resolve; });
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(timer);
+      const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      resolveStop(cancelled ? null : { blob: new Blob(chunks, { type: recorder.mimeType || type || 'video/webm' }), seconds });
+    };
+    recorder.start(1000);
+    const timer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      onTick(s);
+      if (s >= maxSeconds && recorder.state !== 'inactive') {
+        recorder.stop();
+        onLimit();
+      }
+    }, 250);
+    const stop = () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+      return stopped;
+    };
+    return {
+      stop,
+      cancel() {
+        cancelled = true;
+        stop();
+      }
+    };
+  }
+
+  window.sfMedia = { choosePhoto, toAvatarBlob, pickImageFile, pickReceipt, pickChatPhoto, recordVoice, recordVideo, canRecord };
 })(window);

@@ -1811,6 +1811,10 @@ async function runAllTests() {
     assert((await api('GET', '/api/people/search?q=@client_ser', tokenA)).body.people.some(p => p.id === clientUser.id), 'Found by @username');
     assert.strictEqual((await api('GET', '/api/people/search?q=a', tokenA)).body.people.length, 0, 'At least 2 letters');
     assert.strictEqual((await api('GET', '/api/people/search?q=client', null)).status, 401, 'Only after signing in');
+    // Keywords from the line under the name and «О себе», several words at once
+    await profileService.updateProfile(clientUser.id, { headline: 'Коуч по продажам', bio: 'Помогаю экспертам запускать марафоны' });
+    assert((await api('GET', '/api/people/search?q=' + encodeURIComponent('марафон коуч'), tokenA)).body.people.some(p => p.id === clientUser.id), 'Found by keywords');
+    assert.strictEqual((await api('GET', '/api/people/search?q=' + encodeURIComponent('марафон дизайн'), tokenA)).body.people.some(p => p.id === clientUser.id), false, 'Every word must match');
     await api('PUT', '/api/people/visibility', tokenClient, { hidden: true });
     assert.strictEqual((await api('GET', '/api/people/search?q=@client_ser', tokenA)).body.people.length, 0, 'Hidden from search');
     assert.strictEqual((await api('GET', '/api/auth/me', tokenClient)).body.user.hiddenFromSearch, true);
@@ -1842,6 +1846,31 @@ async function runAllTests() {
     assert.strictEqual((await api('POST', `/api/people/${clientUser.id}/messages`, tokenA, { text: 'Привет! Рада знакомству' })).status, 201);
     assert.strictEqual((await api('GET', `${url}/messages`, tokenClient)).body.thread.status, 'accepted');
     assert.strictEqual((await api('POST', `${url}/messages`, tokenClient, { text: 'Отлично!' })).status, 201);
+
+    // Voice (1.5 min), photo and a round video (30 s); files go only to the two people
+    const sendFile = (kind, body, seconds = '') => fetch(`${baseUrl}${url}/files?kind=${kind}&seconds=${seconds}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tokenClient}`, 'Content-Type': 'application/octet-stream' }, body
+    }).then(async r => ({ status: r.status, body: await r.json() }));
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(500, 1)]);
+    const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(800, 2)]);
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypmp42'), Buffer.alloc(800, 3)]);
+    assert.strictEqual((await sendFile('photo', Buffer.from('<svg onload=alert(1)>  not a photo'))).status, 400, 'Only real photos');
+    assert.strictEqual((await sendFile('gif', jpeg)).status, 400);
+    const photo = await sendFile('photo', jpeg);
+    assert.strictEqual(photo.status, 201);
+    assert.strictEqual(photo.body.message.kind, 'photo');
+    const voice = await sendFile('voice', webm, 500);
+    assert.strictEqual(voice.body.message.seconds, 90, 'Voice up to 1.5 minutes');
+    const circle = await sendFile('video', mp4, 45);
+    assert.strictEqual(circle.body.message.kind, 'video');
+    assert.strictEqual(circle.body.message.seconds, 30, 'A round video up to 30 seconds');
+    const fileUrl = `/api/people/${clientUser.id}/files/${circle.body.message.fileId}`;
+    const got = await fetch(baseUrl + fileUrl, { headers: { Authorization: `Bearer ${tokenA}` } });
+    assert.strictEqual(got.status, 200, 'The other person gets the file');
+    assert.strictEqual(got.headers.get('content-type'), 'video/mp4');
+    assert.strictEqual((await fetch(`${baseUrl}/api/people/${clientUser.id}/files/${circle.body.message.fileId}`, { headers: { Authorization: `Bearer ${tokenOther}` } })).status, 404, 'Others do not');
+    const listA = (await api('GET', '/api/people/chats', tokenA)).body.chats.find(c => c.person.id === clientUser.id);
+    assert.strictEqual(listA.lastMessage, '🎥 Видео');
 
     // Block: the other side cannot write and does not find the blocker; unblock works
     const blocked = await api('POST', `/api/people/${clientUser.id}/answer`, tokenA, { action: 'block' });

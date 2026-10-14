@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const peopleService = require('../services/people-service');
+const { readDmFileBody } = require('../middleware/image-upload');
 
 router.use(requireAuth);
 
@@ -66,6 +67,36 @@ router.get('/:userId/messages', async (req, res, next) => {
 router.post('/:userId/messages', async (req, res, next) => {
   try {
     res.status(201).json(await peopleService.send(req.user.userId, req.params.userId, req.body?.text));
+  } catch (err) {
+    sendError(res, err, next);
+  }
+});
+
+/**
+ * POST /api/people/:userId/files?kind=voice|photo|video&seconds=18  (body: the file itself)
+ * Voice up to 1.5 minutes, a photo, a round video up to 30 seconds
+ */
+router.post('/:userId/files', readDmFileBody, async (req, res, next) => {
+  try {
+    const file = { kind: String(req.query.kind || ''), buffer: req.body, seconds: req.query.seconds };
+    res.status(201).json(await peopleService.send(req.user.userId, req.params.userId, null, file));
+  } catch (err) {
+    sendError(res, err, next);
+  }
+});
+
+/**
+ * GET /api/people/:userId/files/:fileId — a file of my conversation with this person
+ */
+router.get('/:userId/files/:fileId', async (req, res, next) => {
+  try {
+    const file = await peopleService.fileOf(req.user.userId, req.params.userId, req.params.fileId);
+    if (!file) return res.status(404).json({ error: 'not_found', message: 'Файл не найден' });
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.send(file.buffer);
   } catch (err) {
     sendError(res, err, next);
   }
