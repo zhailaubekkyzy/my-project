@@ -73,6 +73,8 @@ const defaultData = {
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
+    funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
+    funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
     notifications: null,     // { list, unread } unread Buddy messages (the red dot on the Buddy button)
     buddy: null              // { messages, unread, usage } the conversation with Buddy
@@ -286,6 +288,7 @@ class Store {
         methodology: settings.methodology || '',
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
+        steps: Array.isArray(settings.steps) ? settings.steps : [],
         category: p.category || settings.category || 'sales',
         offer: p.offer || '',
         description: p.description || '',

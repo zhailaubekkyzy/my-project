@@ -66,8 +66,12 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
       return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
     }
 
+    // Steps of the funnel (titles only: the assistant sees where the client is, not the settings)
+    const steps = funnelService.normalizeSteps(projectService.safeJsonParse(req.project.custom_ai_settings).steps);
     res.json({
       ...toClientCard(client, req.projectRole),
+      steps: steps.map(s => ({ id: s.id, title: s.title })),
+      current_step_id: steps.length ? funnelService.currentStep(steps, client).id : null,
       funnel_label: funnelService.STATUSES[client.funnel_status] || null,
       events: await funnelService.eventsOf(client.id, 50),
       receipts: await receiptService.receiptsOf(client.id)
@@ -109,6 +113,26 @@ router.post('/:clientId/funnel', requireProjectPermission('conversations:write')
       funnelLabel: funnelService.STATUSES[status],
       events: await funnelService.eventsOf(client.id, 50)
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/clients/:clientId/step  { stepId }
+ * The owner or the assistant moves the client to a step of the funnel by hand (forward or back).
+ * The step's material is not sent: a hand move must never write to the client unexpectedly.
+ */
+router.post('/:clientId/step', requireProjectPermission('conversations:write'), async (req, res, next) => {
+  try {
+    const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
+    if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
+    const steps = funnelService.normalizeSteps(projectService.safeJsonParse(req.project.custom_ai_settings).steps);
+    const stepId = String(req.body?.stepId || '');
+    if (!steps.some(s => s.id === stepId)) return res.status(400).json({ error: 'bad_request', message: 'Такого шага нет' });
+    const member = memberOf(req);
+    await chatService.moveToStep(req.project, client, stepId, { type: member.role, userId: member.userId });
+    res.json({ clientId: client.id, currentStepId: stepId, events: await funnelService.eventsOf(client.id, 50) });
   } catch (err) {
     next(err);
   }

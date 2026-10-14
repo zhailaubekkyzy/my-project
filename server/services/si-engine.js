@@ -5,7 +5,7 @@
 // It never invents facts; when it does not know, it says so and offers the expert.
 // Without an OpenAI key (or if OpenAI fails) the reply is an honest fallback, not made-up text.
 const config = require('../config');
-const { scenarioPromptLines } = require('./funnel-service');
+const { scenarioPromptLines, stepPromptLines } = require('./funnel-service');
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const HISTORY_LIMIT = 20;
@@ -79,7 +79,10 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
   if (s.instructions) lines.push(`Инструкции эксперта: ${s.instructions}`);
   // The expert's own description of how the SI leads the client to buying (before the scenarios)
   if (s.methodology) lines.push('Методология эксперта (как вести клиента к покупке, следуй ей мягко):', String(s.methodology).slice(0, 3000));
-  const scenarios = scenarioPromptLines(s.scenarios);
+  // Steps of the funnel: the whole path and the client's step now (project.clientStepId)
+  const steps = stepPromptLines(s.steps, project.clientStepId);
+  if (steps.length) lines.push(...steps);
+  const scenarios = scenarioPromptLines(s.scenarios, s.steps, project.clientStepId);
   if (scenarios.length) {
     lines.push('Сценарии эксперта «если…, то…» (следуй им мягко, своими словами, без давления):', ...scenarios);
   }
@@ -216,12 +219,18 @@ async function generateReply({ project, expertName, history = [], userText, know
  * Funnel events of one turn, for the event journal (runs next to the SI reply, not after it).
  * lastSiText: the SI's message the client answers; clientText: the client's message.
  * conditions: the expert's own conditions [{ id, text }] — which of them this client's message meets.
- * Returns { offerMade, offerAnswered, objection, refused, matched: [ids] } or null (no OpenAI / unclear answer).
+ * steps: { steps, index } — the funnel steps and the client's step: up to which step the client has come now.
+ * Returns { offerMade, offerAnswered, objection, refused, matched: [ids], stepIndex } or null (no OpenAI / unclear answer).
+ * stepIndex: the index of the step the client should be on now (> steps.index = moved forward), or null.
  */
-async function analyzeTurn({ project, lastSiText, clientText, conditions = [] }) {
+async function analyzeTurn({ project, lastSiText, clientText, conditions = [], steps = null }) {
   const list = conditions.slice(0, 20);
-  // Without OpenAI only the words in quotes of the expert's conditions are matched
-  const byWords = () => (list.length ? { offerMade: false, offerAnswered: false, objection: '', refused: false, matched: matchQuoted(list, clientText) } : null);
+  // Without OpenAI only the words in quotes of the expert's conditions (and of "шаг пройден, когда") are matched
+  const byWords = () => {
+    const stepIndex = stepByWords(steps, clientText);
+    if (!list.length && stepIndex === null) return null;
+    return { offerMade: false, offerAnswered: false, objection: '', refused: false, matched: matchQuoted(list, clientText), stepIndex };
+  };
   if (!isConfigured()) return byWords();
   const offer = project.offer || '';
   const text = await callOpenAI([
@@ -229,7 +238,7 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
       role: 'system',
       content: [
         'Ты размечаешь переписку продавца с клиентом для воронки продаж. Ответь только JSON:',
-        '{"offer_made": bool, "offer_answered": bool, "objection": string, "refused": bool, "conditions": [numbers]}',
+        `{"offer_made": bool, "offer_answered": bool, "objection": string, "refused": bool, "conditions": [numbers]${steps ? ', "steps_done": number' : ''}}`,
         '- offer_made: в сообщении продавца есть предложение купить / записаться (оффер ниже или его суть).',
         '- offer_answered: клиент отвечает на такое предложение (согласие, вопрос по условиям, сомнение, отказ).',
         '- objection: если клиент сомневается или возражает — суть в 2–5 словах («дорого», «нет времени», «подумаю»), иначе "".',
@@ -237,7 +246,8 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
         '- conditions: номера условий эксперта ниже, которые явно выполнились в сообщении клиента; если ни одно — [].',
         `Оффер продавца: ${offer || '(не задан)'}`,
         'Условия эксперта:',
-        ...(list.length ? list.map((c, i) => `${i + 1}. ${c.text}`) : ['(нет)'])
+        ...(list.length ? list.map((c, i) => `${i + 1}. ${c.text}`) : ['(нет)']),
+        ...stepsPrompt(steps)
       ].join('\n')
     },
     {
@@ -257,11 +267,44 @@ async function analyzeTurn({ project, lastSiText, clientText, conditions = [] })
       matched: (Array.isArray(r.conditions) ? r.conditions : [])
         .map(n => list[Number(n) - 1])
         .filter(Boolean)
-        .map(c => c.id)
+        .map(c => c.id),
+      stepIndex: stepFromAnswer(steps, r.steps_done)
     };
   } catch (e) {
     return byWords();
   }
+}
+
+// Steps in the analysis: "steps_done" = the number of the last step whose "пройден, когда" is met
+function stepsPrompt(steps) {
+  if (!steps) return [];
+  const current = steps.index + 1;
+  return [
+    'Шаги воронки (путь клиента к покупке):',
+    ...steps.steps.map((s, i) => `${i + 1}. ${s.title} — пройден, когда ${s.doneWhen || (s.goal ? `достигнута цель: ${s.goal}` : 'клиент готов идти дальше')}`),
+    `Клиент сейчас на шаге ${current}.`,
+    `- steps_done: номер последнего шага, условие которого явно выполнено этим сообщением клиента (не меньше ${current}); если шаг ${current} ещё не пройден — 0.`
+  ];
+}
+
+// The step the client moves to: after step N is done — step N+1 (the last step stays the last)
+function stepFromAnswer(steps, done) {
+  if (!steps) return null;
+  const n = parseInt(done, 10);
+  if (!n || n <= steps.index) return null;
+  const index = Math.min(n, steps.steps.length - 1);
+  return index > steps.index ? index : null;
+}
+
+// Without OpenAI: a word in quotes from "пройден, когда" of the client's step or a later one
+function stepByWords(steps, text) {
+  if (!steps) return null;
+  const lower = String(text || '').toLowerCase();
+  let done = 0;
+  steps.steps.forEach((s, i) => {
+    if (i >= steps.index && quotedWords(s.doneWhen).some(w => lower.includes(w))) done = i + 1;
+  });
+  return stepFromAnswer(steps, done);
 }
 
 // Words in quotes in the expert's condition: «рассрочка», "скидка"

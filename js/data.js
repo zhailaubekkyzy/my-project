@@ -130,6 +130,20 @@
       store().setRemote(`funnelLists.${businessId}|${days}|${status}`, { clients, done: clients.length < (res.pageSize || 30) });
     }, 15000),
 
+    // Office → Воронка → «По шагам»: one SI-seller, and the first 30 clients of one step
+    funnelSteps: (projectId, days) => ensure(`funnelSteps:${projectId}|${days}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnelSteps({ projectId, days: days === 'all' ? '' : days });
+      store().setRemote(`funnelSteps.${projectId}|${days}`, { steps: res.steps || [], bought: res.bought || 0, total: res.total || 0, stopStepId: res.stopStepId || null });
+    }, 15000),
+
+    funnelStepList: (projectId, days, stepId) => ensure(`funnelStepList:${projectId}|${days}|${stepId}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnelSteps({ projectId, days: days === 'all' ? '' : days, step: stepId });
+      const clients = res.clients || [];
+      store().setRemote(`funnelStepLists.${projectId}|${days}|${stepId}`, { clients, done: clients.length < (res.pageSize || 30) });
+    }, 15000),
+
     // Office → Календарь. key: business id, or 'own' (the owner's business is created when needed)
     calendar: (key) => ensure(`calendar:${key}`, async () => {
       if (!signedIn()) return false;

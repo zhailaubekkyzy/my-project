@@ -113,8 +113,13 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.methodology !== undefined) {
       aiSettings = { ...aiSettings, methodology: String(aiSettings.methodology || '').trim().slice(0, 3000) };
     }
+    // Steps of the funnel: up to 8, each with a title. Scenarios of a deleted step are dropped
+    if (aiSettings && typeof aiSettings === 'object' && aiSettings.steps !== undefined) {
+      aiSettings = { ...aiSettings, steps: funnelService.normalizeSteps(aiSettings.steps) };
+    }
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.scenarios !== undefined) {
-      aiSettings = { ...aiSettings, scenarios: funnelService.normalizeScenarios(aiSettings.scenarios) };
+      const steps = aiSettings.steps !== undefined ? aiSettings.steps : (projectService.safeJsonParse(req.project.custom_ai_settings).steps || []);
+      aiSettings = { ...aiSettings, scenarios: funnelService.normalizeScenarios(aiSettings.scenarios, steps) };
     }
 
     const updated = await projectService.updateProject(req.params.projectId, {
