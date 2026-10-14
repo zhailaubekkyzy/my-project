@@ -69,6 +69,17 @@
       store().setRemote('chats', res.chats || []);
     }, 15000),
 
+    // Conversations with people (Chats tab) and one conversation
+    peopleChats: (maxAge = 15000) => ensure('peopleChats', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('peopleChats', (await api().getPeopleChats()).chats || []);
+    }, maxAge),
+
+    personMessages: (userId, maxAge = 5000) => ensure(`person:${userId}`, () => orMissing(`person:${userId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`personThreads.${userId}`, await api().getPersonMessages(userId));
+    }), maxAge),
+
     chatMessages: (slug, maxAge = 5000) => ensure(`messages:${slug}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getChatMessages(slug);

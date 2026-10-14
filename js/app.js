@@ -216,6 +216,8 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'office', { section: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
+  } else if (param.startsWith('U_')) {
+    SF.openIn('chats', 'person', { id: param.slice(2) });
   } else if (param === 'CAL') {
     SF.openIn('marketplace', 'office', { section: 'calendar' });
   } else if (param === 'ADMIN') {
@@ -309,13 +311,15 @@ function renderApp(state) {
   lastRouteKey = routeKey;
 
   syncTelegramBackButton(canGoBack);
-  if (!(tab === 'chats' && route.screen === 'chat') && !(tab === 'marketplace' && route.screen === 'office-client')) {
+  if (!(tab === 'chats' && (route.screen === 'chat' || route.screen === 'person')) && !(tab === 'marketplace' && route.screen === 'office-client')) {
     SF.data.stopPolling();
   }
   try {
     if (screen.afterRender) screen.afterRender(route, state);
     // The red dot on Buddy stays fresh on every screen (a request at most once a minute)
     if (SF.data.notifications) SF.data.notifications(60000);
+    // Messages from people: the number on «Чаты» stays fresh too
+    if (SF.data.peopleChats) SF.data.peopleChats(60000);
   } catch (err) {
     console.error('[SmartFlow] afterRender failed:', err);
     SF.reportAppError(err, `afterRender ${tab}/${route.screen}`);
@@ -325,7 +329,8 @@ function renderApp(state) {
 
 function renderBottomNav(state) {
   const badges = {
-    chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length
+    chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length +
+      (state.remote.peopleChats || []).filter(c => c.unread || c.needsMyAnswer).length
   };
   // Red dot on Buddy: there are unread notifications
   const buddyUnread = Boolean(state.remote.notifications && state.remote.notifications.unread);

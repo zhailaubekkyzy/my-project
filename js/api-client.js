@@ -313,6 +313,35 @@
     },
 
     // My chats with SI-consultants (as a client)
+    // People: search and conversations between people inside SmartFlow
+    async searchPeople(q) {
+      return await apiFetch(`/api/people/search?q=${encodeURIComponent(q)}`);
+    },
+
+    async setSearchVisibility(hidden) {
+      return await apiFetch('/api/people/visibility', { method: 'PUT', body: JSON.stringify({ hidden }) });
+    },
+
+    async getPeopleChats() {
+      return await apiFetch('/api/people/chats');
+    },
+
+    async getPersonMessages(userId) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/messages`);
+    },
+
+    async sendPersonMessage(userId, text) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/messages`, { method: 'POST', body: JSON.stringify({ text }) });
+    },
+
+    async answerPerson(userId, action) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/answer`, { method: 'POST', body: JSON.stringify({ action }) });
+    },
+
+    async reportPerson(userId, reason) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+    },
+
     async getMyChats() {
       return await apiFetch('/api/chat');
     },

@@ -69,6 +69,8 @@ const defaultData = {
     myFeedback: null,        // my messages to support with the team's answers
     business: null,          // my business: members, and the businesses I assist
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
+    peopleChats: null,       // my conversations with people (Chats tab)
+    personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
@@ -231,6 +233,7 @@ class Store {
     me.hasUploadedPhoto = Boolean(user.hasUploadedPhoto);
     if (user.supportCode) me.supportCode = user.supportCode;
     if (user.staffRole !== undefined) me.staffRole = user.staffRole;
+    if (user.hiddenFromSearch !== undefined) me.hiddenFromSearch = Boolean(user.hiddenFromSearch);
     if (user.profile) me.profile = { ...me.profile, ...user.profile };
   }
 

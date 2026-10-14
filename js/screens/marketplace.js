@@ -77,10 +77,19 @@
   function renderList(state) {
     const filter = state.ui.marketplaceFilter || 'all';
     const all = state.remote.marketplace;
-    const items = (all || []).filter(c => filter === 'all' || c.category === filter);
+    const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
+    const matches = (c) => !q || [c.name, c.offer, c.roleTitle, c.description, c.priceLabel, c.author && c.author.name]
+      .some(v => String(v || '').toLowerCase().includes(q));
+    const items = (all || []).filter(c => (filter === 'all' || c.category === filter) && matches(c));
     return `
       ${officeEntry(state)}
       ${createButton()}
+
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input type="search" data-keep="market-search" value="${SF.esc(state.ui.marketplaceSearch || '')}" oninput="SF.actions.searchMarket(this.value)" placeholder="Найти SI-продавца: имя, тема, эксперт" autocomplete="off"
+          class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+      </div>
 
       <div class="flex gap-1.5 overflow-x-auto pb-1">
         ${CATEGORIES.map(cat => `
@@ -91,7 +100,8 @@
       <div class="space-y-2.5">
         ${all === null ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
         ${items.map(card).join('')}
-        ${all && !items.length ? SF.emptyState('consultant', 'Витрина только открывается',
+        ${all && !items.length && q ? '<div class="text-xs text-muted px-1">Ничего не нашли. Людей можно найти во вкладке «Чаты».</div>' : ''}
+        ${all && !items.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
           'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».') : ''}
       </div>
     `;
@@ -184,6 +194,7 @@
           ${SF.progressBar(p.trust)}
         </div>
         ${pr.offerButton ? `<button onclick="${pr.offerButton.consultantId ? `SF.actions.openChat('${SF.js(pr.offerButton.consultantId)}')` : `SF.openLink('${SF.js(pr.offerButton.url)}')`}" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-tiffany text-sm">${SF.esc(pr.offerButton.label)}</button>` : ''}
+        ${p.id !== store().data.me.id ? `<button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i>Написать</button>` : ''}
       </div>
       ${block('О себе', pr.bio)}
       ${block('Регалии и сертификаты', pr.regalia)}
@@ -201,6 +212,11 @@
   }
 
   // ---------------- Actions ----------------
+  SF.actions.searchMarket = (value) => {
+    store().data.ui.marketplaceSearch = String(value || '');
+    store().notify();
+  };
+
   SF.actions.setMarketFilter = (filter) => {
     store().data.ui.marketplaceFilter = filter;
     store().notify();

@@ -1,4 +1,5 @@
 // screens/chats.js - Chats: with SI-consultants (soft red) and with people (Tiffany).
+// People find anyone in SmartFlow with the search at the top and write right here (screen 'person').
 // Real data from the server (js/data.js): my chats as a client, messages, SI replies.
 // A chat opens by the consultant's link: t.me/smartflow_ai_support_bot/app?startapp=<slug>.
 
@@ -28,25 +29,105 @@
       </button>`;
   }
 
+  // Search in the Chats tab: my chats (SI-sellers and people) and anyone in SmartFlow
+  let searchQuery = '';
+  let searchTimer = null;
+  let searchResults = { q: '', people: null };
+  const norm = (v) => String(v || '').toLowerCase();
+
+  SF.actions.searchChats = (value) => {
+    searchQuery = String(value || '').trim();
+    clearTimeout(searchTimer);
+    const q = searchQuery.replace(/^@/, '');
+    if (q.length < 2) {
+      searchResults = { q: '', people: null };
+      store().notify();
+      return;
+    }
+    store().notify();
+    searchTimer = setTimeout(async () => {
+      try {
+        const res = await api().searchPeople(q);
+        if (searchQuery.replace(/^@/, '') === q) searchResults = { q, people: res.people || [] };
+      } catch (err) {
+        searchResults = { q, people: [] };
+      }
+      store().notify();
+    }, 350);
+  };
+
+  function personRow(c) {
+    const preview = c.needsMyAnswer ? 'Хочет с вами пообщаться'
+      : `${c.lastFromMe ? 'Вы: ' : ''}${c.lastMessage}`;
+    return row({
+      onclick: `SF.actions.openPerson('${SF.js(c.person.id)}')`,
+      kind: 'human',
+      photoUrl: c.person.photoUrl,
+      title: c.person.displayName,
+      preview,
+      unread: c.unread || c.needsMyAnswer
+    });
+  }
+
   function renderList(state) {
     const chats = state.remote.chats;
+    const people = state.remote.peopleChats || [];
     const assistantList = assistantMessages(state);
     const lastAssistant = assistantList[assistantList.length - 1];
+    const q = norm(searchQuery.replace(/^@/, ''));
+    const searchBox = SF.data.signedIn() ? `
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека" autocomplete="off"
+          class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+      </div>` : '';
+
+    // One list, newest first: SI-sellers and people together
+    const items = [
+      ...(chats || []).map(c => ({ at: c.lastActivity, title: c.name, html: () => row({
+        onclick: `SF.actions.openChat('${SF.js(c.slug)}')`,
+        kind: 'si',
+        photoUrl: c.photoUrl,
+        title: c.name,
+        preview: stripPrefix(c.lastMessage),
+        unread: SF.data.isUnread(state, c)
+      }) })),
+      ...people.map(c => ({ at: c.lastActivity, title: c.person.displayName, username: c.person.username, html: () => personRow(c) }))
+    ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+
+    if (q.length >= 2 || q.length === 1) {
+      const mine = items.filter(i => norm(i.title).includes(q) || norm(i.username).includes(q));
+      const known = new Set(people.map(c => c.person.id));
+      const found = (searchResults.people || []).filter(p => !known.has(p.id));
+      return `
+        ${searchBox}
+        ${mine.length ? `${SF.sectionTitle('', 'Мои чаты')}<div class="space-y-2">${mine.map(i => i.html()).join('')}</div>` : ''}
+        ${q.length >= 2 ? `
+          ${SF.sectionTitle('', 'Люди в SmartFlow')}
+          <div class="space-y-2">
+            ${searchResults.people === null ? '<div class="text-xs text-muted px-1">Ищу…</div>' : ''}
+            ${found.map(p => row({
+              onclick: `SF.actions.openPerson('${SF.js(p.id)}')`,
+              kind: 'human',
+              photoUrl: p.photoUrl,
+              title: p.displayName,
+              preview: p.headline || (p.username ? `@${p.username}` : 'Написать'),
+              unread: false
+            })).join('')}
+            ${searchResults.people && !found.length && !mine.length ? '<div class="text-xs text-muted px-1">Никого не нашли. Попробуйте имя или @ник из Telegram.</div>' : ''}
+          </div>` : ''}
+      `;
+    }
+
     return `
+      ${searchBox}
       <div class="space-y-2">
         ${chats === null && SF.data.signedIn() ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
-        ${(chats || []).map(c => row({
-          onclick: `SF.actions.openChat('${SF.js(c.slug)}')`,
-          kind: 'si',
-          photoUrl: c.photoUrl,
-          title: c.name,
-          preview: stripPrefix(c.lastMessage),
-          unread: SF.data.isUnread(state, c)
-        })).join('')}
-        ${chats && !chats.length ? `
+        ${items.map(i => i.html()).join('')}
+        ${chats && !items.length ? `
           <div class="glass-card-3d p-4 space-y-2 text-center">
             <div class="text-sm font-bold text-ink">Пока нет переписок</div>
-            <div class="text-xs text-muted leading-relaxed">Откройте ссылку, которую дал эксперт, или найдите SI-продавца в Маркетплейсе.</div>
+            <div class="text-xs text-muted leading-relaxed">Найдите человека по имени в поиске выше — и напишите ему. Или найдите SI-продавца в Маркетплейсе.</div>
             <button onclick="SF.go('marketplace')" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs">Открыть Маркетплейс</button>
           </div>` : ''}
         ${row({
@@ -60,6 +141,142 @@
       </div>
     `;
   }
+
+  // ---------------- Conversation with a person ----------------
+  const msgTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
+
+  function renderPerson(state, userId) {
+    if (!SF.data.signedIn()) {
+      return SF.emptyState('assistant', 'Откройте приложение в Telegram', 'Переписка доступна после входа через Telegram.');
+    }
+    if (SF.data.isMissing(state, `person:${userId}`)) return SF.emptyState('assistant', 'Человек не найден', 'Возможно, ссылка устарела.');
+    const data = state.remote.personThreads[userId];
+    if (!data) return '<div class="text-xs text-muted">Загружаю…</div>';
+    const p = data.person;
+    const t = data.thread;
+    const name = SF.esc(p.displayName);
+    return `
+      <div class="glass-card-3d p-3 flex items-center justify-between gap-2">
+        <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="flex items-center gap-2.5 min-w-0 text-left">
+          ${SF.avatar(p.photoUrl, { size: 40, kind: 'human' })}
+          <span class="min-w-0">
+            <span class="block text-xs font-bold text-ink truncate">${name}</span>
+            <span class="block text-[10px] text-faint truncate">${SF.esc(p.headline || 'Открыть профиль')}</span>
+          </span>
+        </button>
+        ${t ? `
+          <details class="relative flex-shrink-0">
+            <summary class="list-none p-2 rounded-xl btn-3d-dark cursor-pointer" aria-label="Ещё"><i data-lucide="more-horizontal" class="w-4 h-4"></i></summary>
+            <div class="absolute right-0 mt-1 z-20 w-48 p-1.5 rounded-xl bg-card border border-line shadow-lg space-y-1">
+              ${t.blockedByMe
+                ? `<button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'unblock')" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-ink-2 hover:bg-sunken">Разблокировать</button>`
+                : `<button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'block')" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-ink-2 hover:bg-sunken">Заблокировать</button>`}
+              <button onclick="SF.actions.reportPerson('${SF.js(p.id)}')" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-rose-500 hover:bg-sunken">Пожаловаться</button>
+            </div>
+          </details>` : ''}
+      </div>
+
+      <div class="glass-card-3d p-3 flex flex-col space-y-2 min-h-[300px] max-h-[460px] overflow-y-auto" id="chat-scroll">
+        ${!data.messages.length ? `<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите ${name} первым — например, поздоровайтесь и расскажите, чем вы занимаетесь 🙂</div>` : ''}
+        ${data.messages.map(m => `
+          <div class="flex ${m.mine ? 'justify-end' : 'justify-start'}">
+            <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.formatChatMarkdown(m.text)}<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div></div>
+          </div>`).join('')}
+      </div>
+
+      ${t && t.needsMyAnswer ? `
+        <div class="p-3 rounded-2xl bg-card border border-[#81D8D0] space-y-2">
+          <div class="text-xs text-ink-2"><b>${name}</b> хочет с вами пообщаться.</div>
+          <div class="flex gap-2">
+            <button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'accept')" class="flex-1 py-2 rounded-xl btn-3d-tiffany text-xs">Принять</button>
+            <button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'block')" class="flex-1 py-2 rounded-xl bg-sunken border border-line text-xs text-ink-2">Заблокировать</button>
+          </div>
+        </div>` : ''}
+      ${t && t.waitingForAnswer ? `<div class="text-[10px] text-faint px-1">${name} увидит сообщение и решит, принять ли переписку. До ответа можно отправить до ${data.pendingLimit || 3} сообщений.</div>` : ''}
+
+      ${t && t.blockedByMe ? `
+        <div class="p-3 rounded-2xl bg-sunken border border-line text-xs text-ink-2 flex items-center justify-between gap-2">
+          <span>Вы заблокировали ${name}.</span>
+          <button onclick="SF.actions.answerPerson('${SF.js(p.id)}', 'unblock')" class="px-3 py-1.5 rounded-xl btn-3d-dark text-[11px]">Разблокировать</button>
+        </div>` : data.canWrite ? `
+        <form onsubmit="SF.actions.sendPerson(event, '${SF.js(p.id)}')" class="flex items-center gap-2">
+          <input type="text" name="text" data-keep="person-input" maxlength="2000" autocomplete="off" placeholder="Напишите сообщение..." class="flex-1 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+          <button type="submit" class="p-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center" aria-label="Отправить">
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </form>` : ''}
+    `;
+  }
+
+  SF.actions.openPerson = (userId) => {
+    if (!SF.data.signedIn()) {
+      showToast('Откройте приложение в Telegram, чтобы писать людям');
+      return;
+    }
+    if (userId === store().data.me.id) {
+      SF.go('profile');
+      return;
+    }
+    SF.openIn('chats', 'person', { id: userId });
+  };
+
+  async function reloadPerson(userId) {
+    SF.data.invalidate(`person:${userId}`);
+    SF.data.invalidate('peopleChats');
+    await Promise.all([SF.data.personMessages(userId), SF.data.peopleChats()]);
+  }
+
+  SF.actions.sendPerson = async (e, userId) => {
+    e.preventDefault();
+    const input = e.target.text;
+    const text = input.value.trim();
+    if (!text || sending) return;
+    sending = true;
+    input.value = '';
+    const data = store().data.remote.personThreads[userId];
+    if (data) {
+      // Show it at once; the server's answer replaces it
+      store().setRemote(`personThreads.${userId}`, { ...data, messages: [...data.messages, { id: `tmp_${Date.now()}`, text, mine: true, createdAt: new Date().toISOString() }] });
+      SF.scrollToBottom('chat-scroll');
+    }
+    try {
+      await api().sendPersonMessage(userId, text);
+      SF.askWriteAccess(); // so the bot can tell about the answer
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
+    } finally {
+      sending = false;
+      await reloadPerson(userId);
+      SF.scrollToBottom('chat-scroll');
+    }
+  };
+
+  SF.actions.answerPerson = async (userId, action) => {
+    const name = store().data.remote.personThreads[userId]?.person?.displayName || 'этого человека';
+    if (action === 'block' && !window.confirm(`Заблокировать ${name}? Он(а) больше не сможет вам писать и не найдёт вас в поиске.`)) return;
+    try {
+      const res = await api().answerPerson(userId, action);
+      store().setRemote(`personThreads.${userId}`, res);
+      SF.data.invalidate('peopleChats');
+      SF.data.peopleChats();
+      showToast(action === 'accept' ? 'Переписка принята' : action === 'block' ? 'Заблокировано' : 'Разблокировано');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.reportPerson = async (userId) => {
+    const name = store().data.remote.personThreads[userId]?.person?.displayName || 'этого человека';
+    const reason = window.prompt(`Что случилось? Жалоба на ${name} уйдёт команде SmartFlow вместе с последними сообщениями этой переписки, а человек будет заблокирован.`);
+    if (reason === null) return;
+    try {
+      await api().reportPerson(userId, reason);
+      await reloadPerson(userId);
+      showToast('Жалоба отправлена команде. Спасибо!');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось', err));
+    }
+  };
 
   // ---------------- Chat with an SI-consultant ----------------
   function bubble(msg, consultant, slug) {
@@ -585,18 +802,31 @@
   // ---------------- Screen ----------------
   SF.screens.chats = {
     title(route, state) {
+      if (route.screen === 'person') return state.remote.personThreads[route.id]?.person?.displayName || 'Переписка';
       if (route.screen !== 'chat') return 'Чаты';
       if (route.slug === ASSISTANT) return 'Поддержка';
       const card = state.remote.cards[route.slug];
       return card ? card.name : 'Чат';
     },
     render(route, state) {
+      if (route.screen === 'person') return renderPerson(state, route.id);
       if (route.screen !== 'chat') return renderList(state);
       return route.slug === ASSISTANT ? renderAssistant(state) : renderChat(state, route.slug);
     },
     afterRender(route, state) {
+      if (route.screen === 'person') {
+        const userId = route.id;
+        SF.data.personMessages(userId);
+        SF.scrollToBottom('chat-scroll');
+        SF.data.poll(`person:${userId}`, () => {
+          SF.data.personMessages(userId, 4000);
+          SF.data.peopleChats(4000);
+        });
+        return;
+      }
       if (route.screen !== 'chat') {
         SF.data.myChats();
+        SF.data.peopleChats();
         SF.data.myFeedback(60000);
         return;
       }

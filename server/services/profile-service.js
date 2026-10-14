@@ -81,7 +81,8 @@ function toPublicUser(user) {
     hasUploadedPhoto: Boolean(user.photo_media_id),
     profile: sanitizeProfile(parseJson(user.profile, {})),
     roles: roles || ['expert'],
-    status: user.status
+    status: user.status,
+    hiddenFromSearch: Boolean(Number(user.hidden_from_search))
   };
 }
 
