@@ -95,7 +95,7 @@ const writesToClient = (then) => then === 'si_says' || then === 'send_text';
 /**
  * The scenario to run for this client now (one per minute), or null.
  */
-async function dueScenario(project, client, scenarios, now) {
+async function dueScenario(project, client, scenarios, now, steps = []) {
   const lastMessage = await db.get(
     'SELECT id, author_type, sender, text FROM conversations WHERE client_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
     [client.id]
@@ -118,6 +118,8 @@ async function dueScenario(project, client, scenarios, now) {
   for (const scenario of scenarios) {
     if (silentMinutes < scenario.minutes) break; // sorted by minutes
     if (fired.some(f => f.scenarioId === scenario.id)) continue;
+    // "Только на шаге …": the client is silent on that step of the funnel
+    if (!funnelService.scenarioOnStep(scenario, steps, client.step_id)) continue;
     if (writesToClient(scenario.then)) {
       if (chatService.isSiPaused(client) || siFired.length >= MAX_SI_PER_SILENCE) continue;
       const previous = siFired[siFired.length - 1];
@@ -134,12 +136,13 @@ async function act(project, client, scenario, scenarios) {
   await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then, minutes: scenario.minutes });
   const branch = (scenario.after === 'text' && `после «${scenario.afterText}»`) || funnelService.SILENT_AFTER[scenario.after]
     || `после сценария «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
-  const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}`;
+  const step = scenario.step && funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps).find(s => s.id === scenario.step);
+  const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}${step ? ` (шаг «${step.title}»)` : ''}`;
   if (writesToClient(scenario.then)) {
     const text = scenario.then === 'send_text'
       ? scenario.text
       : (await siEngine.generateFollowUp({
-        project,
+        project: { ...project, clientStepId: client.step_id },
         expertName: await chatService.expertNameOf(project),
         history: await chatService.history(project.id, client.id),
         instruction: scenario.text
@@ -178,7 +181,8 @@ async function runSilentScenarios(now = new Date()) {
   let checked = 0;
   let fired = 0;
   for (const project of projects) {
-    const all = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios);
+    const settings = parseJson(project.custom_ai_settings);
+    const all = funnelService.normalizeScenarios(settings.scenarios);
     const scenarios = all.filter(s => s.when === 'silent').sort((a, b) => a.minutes - b.minutes);
     if (!scenarios.length) continue;
     // After a follow-up last_activity moves on; the next one may come after the pause between two scenarios
@@ -195,7 +199,7 @@ async function runSilentScenarios(now = new Date()) {
       if (fired >= MAX_ACTIONS_PER_RUN) return { checked, fired, more: true };
       checked++;
       try {
-        const scenario = await dueScenario(project, client, scenarios, now);
+        const scenario = await dueScenario(project, client, scenarios, now, settings.steps);
         if (!scenario) continue;
         await act(project, client, scenario, all);
         fired++;

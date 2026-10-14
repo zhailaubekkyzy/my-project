@@ -84,6 +84,30 @@ router.get('/funnel', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/business/funnel/steps?projectId=&days=&step=&offset=
+ * "По шагам": how many clients of one SI-seller reached each step, are on it now, refused on it,
+ * and where most of them stop; with step — the clients on that step, 30 at a time.
+ * Owner and assistant of the business (step titles only, no settings).
+ */
+router.get('/funnel/steps', async (req, res, next) => {
+  try {
+    // The business of this SI-seller: I must be its owner or assistant
+    const project = await db.get('SELECT * FROM projects WHERE id = ?', [String(req.query.projectId || '')]);
+    if (!project || !project.business_id || !(await businessService.roleIn(project.business_id, req.user.userId))) {
+      return res.status(404).json({ error: 'not_found', message: 'SI-продавец не найден' });
+    }
+    const result = { businessId: project.business_id, projectId: project.id, ...(await funnelService.stepsReport(project, { days: req.query.days })) };
+    if (req.query.step) {
+      result.clients = await funnelService.clientsOnStep(project, String(req.query.step), { days: req.query.days, offset: req.query.offset });
+      result.pageSize = funnelService.PAGE_SIZE;
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ---------- Calendar ----------
 // The owner sets the rules and the free windows (for himself and for the assistant);
 // the owner and the assistant see the meetings, cancel them and mark the outcome.

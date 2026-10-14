@@ -37,8 +37,11 @@
     receipt_sent: 'Клиент прислал чек',
     refused: 'Клиент отказался',
     silent: 'Клиент замолчал (догоняющее сообщение)',
-    custom: 'Своё условие (напишу словами)'
+    custom: 'Своё условие (напишу словами)',
+    step_reached: 'Клиент перешёл на шаг'
   };
+  // Steps of the funnel: the client's path the expert builds (the server keeps up to 8)
+  const MAX_STEPS = 8;
   // The funnel is a tree: after what the client went silent
   const SILENT_AFTER = {
     any: 'в любой момент разговора',
@@ -226,11 +229,19 @@
       return SF.emptyState('consultant', 'Воронка появится с первым SI-продавцом', 'Создайте и включите SI-продавца — здесь будет видно, на каком шаге каждый клиент.');
     }
     const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
+    const view = route.fview === 'steps' ? 'steps' : 'status';
+    const viewToggle = `
+      <div class="grid grid-cols-2 gap-1 bg-raised p-1 rounded-2xl border border-line">
+        ${[['status', 'По статусам'], ['steps', 'По шагам']].map(([id, label]) => `
+          <button onclick="SF.patch({ fview: '${id}' })" class="py-2 rounded-xl text-[11px] font-semibold ${view === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">${label}</button>`).join('')}
+      </div>`;
+    if (view === 'steps') return viewToggle + renderFunnelSteps(route, state, days);
     const funnel = state.remote.funnel[`${businessId}|${days}`];
     const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
     const list = state.remote.funnelLists[`${businessId}|${days}|${status}`];
     const counts = (funnel && funnel.counts) || {};
     return `
+      ${viewToggle}
       <div class="flex gap-1.5">
         ${FUNNEL_DAYS.map(d => `
           <button onclick="SF.patch({ days: '${d.id}' })" class="flex-1 py-1.5 rounded-xl text-[11px] font-semibold border ${days === d.id ? 'bg-card border-[#81D8D0] text-ink' : 'bg-sunken border-line text-muted'}">${d.label}</button>`).join('')}
@@ -258,6 +269,73 @@
           </button>`).join('')}
       </div>
       ${list && !list.done ? `<button onclick="SF.actions.moreFunnel('${SF.js(businessId)}', '${days}', '${status}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}
+    `;
+  }
+
+  // «По шагам»: one SI-seller — how many reached each step, are on it now, refused on it; where they stop
+  function funnelStepsProject(route) {
+    const list = store().data.office.consultants;
+    // By default — the first SI-seller that already has steps
+    return list.find(c => c.id === route.fproject) || list.find(c => (c.steps || []).length) || list[0] || null;
+  }
+
+  function renderFunnelSteps(route, state, days) {
+    const consultants = store().data.office.consultants;
+    const c = funnelStepsProject(route);
+    if (!c) return SF.emptyState('consultant', 'Пока нет SI-продавцов', 'Создайте SI-продавца — здесь будет видно, на каком шаге каждый клиент.');
+    const report = state.remote.funnelSteps[`${c.id}|${days}`];
+    const steps = report ? report.steps : [];
+    const stepId = steps.some(s => s.id === route.fstep) ? route.fstep : (steps[0] && steps[0].id);
+    const list = stepId && state.remote.funnelStepLists[`${c.id}|${days}|${stepId}`];
+    const top = Math.max(1, ...steps.map(s => s.reached));
+    return `
+      ${consultants.length > 1 ? `
+        <select onchange="SF.patch({ fproject: this.value, fstep: '' })" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs">
+          ${consultants.map(o => `<option value="${SF.esc(o.id)}" ${o.id === c.id ? 'selected' : ''}>${SF.esc(o.name)}</option>`).join('')}
+        </select>` : ''}
+      <div class="flex gap-1.5">
+        ${FUNNEL_DAYS.map(d => `
+          <button onclick="SF.patch({ days: '${d.id}' })" class="flex-1 py-1.5 rounded-xl text-[11px] font-semibold border ${days === d.id ? 'bg-card border-[#81D8D0] text-ink' : 'bg-sunken border-line text-muted'}">${d.label}</button>`).join('')}
+      </div>
+      ${!report ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
+      ${report && !steps.length ? `
+        <div class="glass-card-3d p-4 space-y-2 text-xs">
+          <div class="font-bold text-ink">У «${SF.esc(c.name)}» пока нет шагов воронки</div>
+          <p class="text-muted leading-relaxed">Шаги — это путь клиента к покупке: например, знакомство → материал → вопросы → встреча или оффер → оплата. SI ведёт каждого клиента от шага к шагу, а здесь видно, где люди останавливаются.</p>
+          ${c.assisting ? '<p class="text-faint">Шаги добавляет владелец бизнеса.</p>' : `<button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить шаги</button>`}
+        </div>` : ''}
+      ${steps.length ? `
+        <div class="space-y-1.5">
+          ${steps.map((s, i) => `
+            <button onclick="SF.patch({ fstep: '${SF.js(s.id)}' })" class="w-full p-2.5 rounded-xl bg-card border text-left space-y-1.5 ${s.id === stepId ? 'border-[#81D8D0] ring-1 ring-[#81D8D0]' : 'border-line'}">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold text-ink truncate">${i + 1}. ${SF.esc(s.title)}</span>
+                ${s.id === report.stopStepId ? '<span class="text-[10px] font-semibold text-amber-500 whitespace-nowrap">здесь чаще останавливаются</span>' : ''}
+              </div>
+              <div class="h-1.5 rounded-full bg-sunken overflow-hidden"><div class="h-full rounded-full bg-[#81D8D0]" style="width:${Math.round(s.reached / top * 100)}%"></div></div>
+              <div class="flex gap-3 text-[10px] text-muted">
+                <span>Дошли: <b class="text-ink">${s.reached}</b>${i > 0 && steps[i - 1].reached ? ` (${Math.round(s.reached / steps[i - 1].reached * 100)}%)` : ''}</span>
+                <span>Сейчас здесь: <b class="text-ink">${s.here}</b></span>
+                ${s.refused ? `<span>Отказ: <b class="text-ink">${s.refused}</b></span>` : ''}
+              </div>
+            </button>`).join('')}
+        </div>
+        <div class="text-[10px] text-faint px-1 leading-snug">Всего клиентов: ${report.total}, купили: ${report.bought}. «Дошли» — дошли до шага или дальше; процент — от предыдущего шага. SI переводит клиента дальше, когда шаг пройден; вы или помощник можете перевести вручную в карточке клиента.</div>
+        ${SF.sectionTitle('', `Сейчас на шаге «${SF.esc((steps.find(s => s.id === stepId) || {}).title || '')}»`)}
+        ${!list ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
+        ${list && !list.clients.length ? '<div class="text-xs text-muted px-1">Здесь сейчас никого нет.</div>' : ''}
+        <div class="space-y-1.5">
+          ${(list ? list.clients : []).map(cl => `
+            <button onclick="SF.push('office-client', { id: '${SF.js(cl.id)}', projectId: '${SF.js(cl.project_id)}' })" class="w-full p-2.5 rounded-xl bg-card border border-line flex items-center gap-2.5 text-left">
+              ${SF.avatar(cl.avatar_url, { size: 32 })}
+              <span class="flex-1 min-w-0">
+                <span class="block text-xs font-bold text-ink truncate">${SF.esc(cl.name)}</span>
+                <span class="block text-[10px] text-muted truncate">${SF.esc(funnelOf(cl.funnel_status).label)}${cl.last_objection ? ` · «${SF.esc(cl.last_objection)}»` : ''}</span>
+              </span>
+              <span class="text-[10px] text-faint whitespace-nowrap">${timeLabel(cl.last_activity)}</span>
+            </button>`).join('')}
+        </div>
+        ${list && !list.done ? `<button onclick="SF.actions.moreFunnelStep('${SF.js(c.id)}', '${days}', '${SF.js(stepId)}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}` : ''}
     `;
   }
 
@@ -669,7 +747,7 @@
     if (c.assisting) return renderAssistedConsultant(c, state);
     const tab = route.tab || 'methodology';
     let body = '';
-    if (tab === 'methodology') body = renderMethodology(c) + renderConsultantBrain(c, state);
+    if (tab === 'methodology') body = renderMethodology(c, route) + renderConsultantBrain(c, state);
     if (tab === 'analytics') body = renderAnalytics(c, state);
     if (tab === 'income') body = renderClients(c, state);
     if (tab === 'broadcasts') body = renderBroadcasts();
@@ -726,7 +804,7 @@
     `;
   }
 
-  function renderMethodology(c) {
+  function renderMethodology(c, route = {}) {
     return `
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
         <div class="glass-card-3d p-4 space-y-3">
@@ -761,8 +839,54 @@
 
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Сохранить</button>
       </form>
+      ${renderSteps(c, route)}
       ${renderScenarios(c)}
     `;
+  }
+
+  // Steps of the funnel: the client's path. A step: what the SI does, when it is done, a material
+  function stepForm(c, step, i) {
+    const editing = Boolean(step);
+    step = step || {};
+    return `
+      <form onsubmit="SF.actions.saveStep(event, '${SF.js(c.id)}', '${editing ? SF.js(step.id) : ''}')" class="space-y-2 ${editing ? 'p-2.5 rounded-xl bg-sunken border border-[#81D8D0]' : 'pt-2 border-t border-line'}">
+        ${editing ? `<div class="font-bold text-ink">Шаг ${i + 1}</div>` : ''}
+        ${field('title', 'Название шага', step.title || '', { placeholder: 'Например: Знакомство', max: 60 })}
+        ${field('goal', 'Что SI делает на этом шаге', step.goal || '', { placeholder: 'Например: узнать ситуацию клиента и что для него сейчас важнее всего', rows: 2, max: 300 })}
+        ${field('doneWhen', 'Шаг пройден, когда… (необязательно)', step.doneWhen || '', { placeholder: 'Например: клиент рассказал о своей ситуации', max: 200, hint: 'Тогда SI переведёт клиента на следующий шаг. Слово в кавычках, например «готов», сработает, даже если SI не уверен.' })}
+        ${field('material', 'Материал шага (необязательно)', step.material || '', { placeholder: 'Например: Вот бесплатный урок: https://...', rows: 2, max: 500, hint: 'Текст или ссылка. Клиент получит их от SI, когда дойдёт до этого шага (один раз).' })}
+        <div class="flex gap-2">
+          ${editing ? `<button type="button" onclick="SF.patch({ editStep: '' })" class="flex-1 py-2.5 rounded-xl btn-3d-dark">Отмена</button>` : ''}
+          <button type="submit" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany">${editing ? 'Сохранить шаг' : 'Добавить шаг'}</button>
+        </div>
+      </form>`;
+  }
+
+  function renderSteps(c, route) {
+    const steps = c.steps || [];
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        ${SF.sectionTitle('footprints', 'Шаги воронки')}
+        <div class="text-[11px] text-muted leading-snug">Путь клиента к покупке, по порядку: например, знакомство → материал или вебинар → вопросы и возражения → встреча или оффер → оплата. SI видит, на каком шаге каждый клиент, и мягко ведёт к следующему. В «Воронке» видно, где люди останавливаются. По умолчанию шагов нет — до ${MAX_STEPS}.</div>
+        ${steps.map((st, i) => route.editStep === st.id ? stepForm(c, st, i) : `
+          <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
+            <span class="w-6 h-6 rounded-full bg-[#81D8D0] text-[#08302c] text-[11px] font-extrabold flex items-center justify-center flex-shrink-0">${i + 1}</span>
+            <div class="flex-1 min-w-0 space-y-0.5">
+              <div class="font-bold text-ink">${SF.esc(st.title)}</div>
+              ${st.goal ? `<div class="text-ink-2">${SF.esc(st.goal)}</div>` : ''}
+              ${st.doneWhen ? `<div><span class="text-faint">Пройден, когда</span> <span class="text-ink-2">${SF.esc(st.doneWhen)}</span></div>` : ''}
+              ${st.material ? `<div class="text-brand truncate">📎 ${SF.esc(st.material)}</div>` : ''}
+            </div>
+            <div class="flex flex-col gap-1">
+              <button onclick="SF.patch({ editStep: '${SF.js(st.id)}' })" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Изменить шаг"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+              ${i > 0 ? `<button onclick="SF.actions.moveStep('${SF.js(c.id)}', ${i}, -1)" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Выше"><i data-lucide="arrow-up" class="w-3.5 h-3.5"></i></button>` : ''}
+              ${i < steps.length - 1 ? `<button onclick="SF.actions.moveStep('${SF.js(c.id)}', ${i}, 1)" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Ниже"><i data-lucide="arrow-down" class="w-3.5 h-3.5"></i></button>` : ''}
+              <button onclick="SF.actions.removeStep('${SF.js(c.id)}', '${SF.js(st.id)}')" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Удалить шаг"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>`).join('')}
+        ${!steps.length ? '<div class="text-faint">Шагов пока нет.</div>' : ''}
+        ${steps.length >= MAX_STEPS ? `<div class="text-faint">Добавлено ${MAX_STEPS} шагов — это максимум.</div>` : stepForm(c, null, steps.length)}
+      </div>`;
   }
 
   // Methodology: "если…, то…" — SI answers by them, hands the client over or tells the owner
@@ -785,7 +909,10 @@
   // Methodology: the funnel is a tree of branches "если…, то…" the expert (or marketer) builds
   function renderScenarios(c) {
     const list = c.scenarios || [];
+    const steps = c.steps || [];
+    const stepTitle = (id) => SF.esc((steps.find(st => st.id === id) || {}).title || '');
     const whenText = (sc) => {
+      if (sc.when === 'step_reached') return `Клиент перешёл на шаг «${stepTitle(sc.step)}»`;
       if (sc.when === 'custom') return SF.esc(sc.condition);
       if (sc.when === 'silent') {
         const after = (sc.after === 'text' && `после «${SF.esc(sc.afterText)}»`) || SILENT_AFTER[sc.after]
@@ -806,6 +933,7 @@
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
               ${sc.title ? `<div class="font-bold text-brand">${SF.esc(sc.title)}</div>` : ''}
+              ${sc.step && sc.when !== 'step_reached' ? `<div class="text-[10px] text-faint">Только на шаге «${stepTitle(sc.step)}»</div>` : ''}
               <div><span class="text-faint">Если</span> <span class="font-semibold text-ink">${whenText(sc)}</span></div>
               <div><span class="text-faint">то</span> <span class="font-semibold text-ink">${SCENARIO_THEN[sc.then] || ''}</span>${sc.text ? `<span class="text-ink-2">: ${SF.esc(sc.text)}</span>` : ''}</div>
             </div>
@@ -817,11 +945,21 @@
           ${field('title', 'Название сценария (необязательно)', '', { placeholder: 'Например: Хочет рассрочку', max: 60 })}
           <label class="block space-y-1">
             <span class="font-semibold text-ink-2">Когда срабатывает</span>
-            <select name="when" onchange="this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <select name="when" onchange="this.form.condition.closest('[data-custom]').style.display = this.value === 'custom' ? '' : 'none'; this.form.minutes.closest('[data-silent]').style.display = this.value === 'silent' ? '' : 'none'; if (this.form.step) this.form.step.firstElementChild.textContent = this.value === 'step_reached' ? 'выберите шаг' : 'на любом шаге'" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
               <option value="custom">Клиент написал или сделал то, что я опишу</option>
               <option value="silent">Клиент молчит</option>
+              ${steps.length ? '<option value="step_reached">Клиент перешёл на шаг воронки</option>' : ''}
             </select>
           </label>
+          ${steps.length ? `
+          <label class="block space-y-1">
+            <span class="font-semibold text-ink-2">Шаг воронки</span>
+            <select name="step" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+              <option value="">на любом шаге</option>
+              ${steps.map((st, i) => `<option value="${SF.esc(st.id)}">${i + 1}. ${SF.esc(st.title)}</option>`).join('')}
+            </select>
+            <span class="block text-[10px] text-faint">Сценарий сработает, только пока клиент на этом шаге.</span>
+          </label>` : ''}
           <div data-custom class="space-y-1">
             ${field('condition', 'Если… (опишите словами)', '', { placeholder: 'Опишите, что клиент написал или сделал', rows: 2, max: 200 })}
             <div class="p-2 rounded-lg bg-sunken border border-line text-[10px] text-muted leading-snug">
@@ -982,6 +1120,8 @@
     const receipts = (card && card.receipts) || [];
     const phone = (card && card.contact_phone) || client.contact_phone;
     const done = status === 'bought' || status === 'refused';
+    const steps = (card && card.steps) || [];
+    const stepId = card && card.current_step_id;
     const RECEIPT_STATUS = { new: ['Ждёт проверки', 'text-amber-500'], confirmed: ['Оплата подтверждена', 'text-emerald-500'], rejected: ['Не подтверждён', 'text-faint'] };
     const button = (outcome, label) => `<button onclick="SF.actions.markOutcome('${SF.js(route.projectId)}', '${SF.js(client.id)}', '${outcome}')" class="flex-1 py-2 rounded-xl btn-3d-dark text-[11px] font-bold">${label}</button>`;
     return `
@@ -990,6 +1130,13 @@
           <span class="px-2 py-1 rounded-lg border text-[11px] font-bold ${f.cls}">${f.label}</span>
           ${objection ? `<span class="text-[10px] text-muted truncate">Возражение: «${SF.esc(objection)}»</span>` : ''}
         </div>
+        ${steps.length ? `
+          <label class="flex items-center gap-2 text-[11px]">
+            <span class="text-muted whitespace-nowrap">Шаг воронки:</span>
+            <select onchange="SF.actions.moveClientStep('${SF.js(route.projectId)}', '${SF.js(client.id)}', this.value)" class="flex-1 min-w-0 p-1.5 rounded-lg bg-sunken border border-line-2 text-ink text-[11px] font-semibold">
+              ${steps.map((st, i) => `<option value="${SF.esc(st.id)}" ${st.id === stepId ? 'selected' : ''}>${i + 1}. ${SF.esc(st.title)}</option>`).join('')}
+            </select>
+          </label>` : ''}
         ${phone ? `<a href="tel:${SF.esc(phone)}" class="block text-[11px] text-brand font-semibold">📱 ${SF.esc(phone)} <span class="text-faint font-normal">· клиент поделился контактом</span></a>` : ''}
         ${receipts.map(r => `
           <div class="p-2 rounded-xl bg-sunken border border-line space-y-1.5">
@@ -1228,6 +1375,37 @@
     }
   };
 
+  SF.actions.moveClientStep = async (projectId, clientId, stepId) => {
+    if (needServer()) return;
+    try {
+      const res = await api().moveClientStep(projectId, clientId, stepId);
+      const card = store().data.remote.clientCards[clientId] || {};
+      store().setRemote(`clientCards.${clientId}`, { ...card, current_step_id: res.currentStepId, events: res.events });
+      SF.data.invalidate('funnelStep');
+      showToast('Клиент переведён на этот шаг. Материал шага при ручном переводе не отправляется');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.moreFunnelStep = async (projectId, days, stepId) => {
+    if (needServer()) return;
+    const key = `${projectId}|${days}|${stepId}`;
+    const list = store().data.remote.funnelStepLists[key];
+    if (!list) return;
+    try {
+      const res = await api().getFunnelSteps({ projectId, days: days === 'all' ? '' : days, step: stepId, offset: list.clients.length });
+      const more = res.clients || [];
+      const seen = new Set(list.clients.map(c => c.id));
+      store().setRemote(`funnelStepLists.${key}`, {
+        clients: list.clients.concat(more.filter(c => !seen.has(c.id))),
+        done: more.length < (res.pageSize || 30)
+      });
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не загрузилось', err));
+    }
+  };
+
   SF.actions.viewReceipt = async (projectId, clientId, receiptId, mimeType) => {
     if (needServer()) return;
     try {
@@ -1309,6 +1487,75 @@
     store().updateOfficeConsultant(id, { scenarios: (res.custom_ai_settings || {}).scenarios || scenarios });
   }
 
+  // Steps are saved inside custom_ai_settings too; scenarios of a deleted step go with it (the server drops them)
+  async function saveSteps(id, steps) {
+    const project = await api().getProject(id);
+    const res = await api().updateProject(id, {
+      custom_ai_settings: { ...(project.custom_ai_settings || {}), steps }
+    });
+    const settings = res.custom_ai_settings || {};
+    store().updateOfficeConsultant(id, { steps: settings.steps || steps, scenarios: settings.scenarios || [] });
+    SF.data.invalidate('funnelStep');
+  }
+
+  SF.actions.saveStep = async (e, id, stepId) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const f = e.target;
+    const c = store().findOfficeConsultant(id);
+    if (!c) return;
+    const step = {
+      title: f.title.value.trim(),
+      goal: f.goal.value.trim(),
+      doneWhen: f.doneWhen.value.trim(),
+      material: f.material.value.trim()
+    };
+    if (!step.title) {
+      showToast('Напишите название шага');
+      return;
+    }
+    const list = c.steps || [];
+    const steps = stepId ? list.map(st => (st.id === stepId ? { ...st, ...step } : st)) : [...list, step];
+    try {
+      await saveSteps(id, steps);
+      if (stepId) SF.patch({ editStep: '' });
+      showToast(stepId ? 'Шаг сохранён' : 'Шаг добавлен. SI будет вести клиентов по шагам');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
+    }
+  };
+
+  SF.actions.moveStep = async (id, index, delta) => {
+    if (needServer()) return;
+    const c = store().findOfficeConsultant(id);
+    const steps = [...((c && c.steps) || [])];
+    const other = index + delta;
+    if (!steps[index] || !steps[other]) return;
+    [steps[index], steps[other]] = [steps[other], steps[index]];
+    try {
+      await saveSteps(id, steps);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось сохранить', err));
+    }
+  };
+
+  SF.actions.removeStep = async (id, stepId) => {
+    if (needServer()) return;
+    const c = store().findOfficeConsultant(id);
+    const steps = (c && c.steps) || [];
+    const step = steps.find(st => st.id === stepId);
+    if (!step) return;
+    const tied = ((c && c.scenarios) || []).filter(sc => sc.step === stepId).length;
+    const question = `Удалить шаг «${step.title}»? Клиенты с этого шага окажутся на первом шаге.${tied ? ` Сценарии этого шага тоже удалятся: ${tied}.` : ''}`;
+    if (!confirm(question)) return;
+    try {
+      await saveSteps(id, steps.filter(st => st.id !== stepId));
+      showToast('Шаг удалён');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось удалить', err));
+    }
+  };
+
   SF.actions.addScenario = async (e, id) => {
     e.preventDefault();
     if (needServer()) return;
@@ -1323,8 +1570,13 @@
       after: f.when.value === 'silent' ? f.after.value : undefined,
       afterText: f.when.value === 'silent' && f.after.value === 'text' ? f.afterText.value.trim() : undefined,
       then: f.then.value,
-      text: f.text.value.trim()
+      text: f.text.value.trim(),
+      step: f.step ? f.step.value || undefined : undefined
     };
+    if (scenario.when === 'step_reached' && !scenario.step) {
+      showToast('Выберите шаг воронки');
+      return;
+    }
     if (scenario.after === 'text' && !scenario.afterText) {
       showToast('Опишите, после чего клиент замолчал');
       return;
@@ -1339,6 +1591,10 @@
     }
     if (scenario.then === 'send_text' && !scenario.text) {
       showToast('Вставьте текст или ссылку для клиента');
+      return;
+    }
+    if (scenario.when === 'step_reached' && scenario.then === 'si_says') {
+      showToast('Когда клиент переходит на шаг, выберите другое действие. Что SI говорит на шаге — в описании шага');
       return;
     }
     if (scenario.then === 'si_says' && !scenario.text && scenario.when !== 'silent') {
@@ -1540,8 +1796,17 @@
           if (businessId) {
             const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
             const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
-            SF.data.funnel(businessId, days);
-            SF.data.funnelList(businessId, days, status);
+            if (route.fview === 'steps') {
+              const c = funnelStepsProject(route);
+              const report = c && state.remote.funnelSteps[`${c.id}|${days}`];
+              if (c) SF.data.funnelSteps(c.id, days);
+              const steps = (report && report.steps) || [];
+              const stepId = steps.some(st => st.id === route.fstep) ? route.fstep : (steps[0] && steps[0].id);
+              if (c && stepId) SF.data.funnelStepList(c.id, days, stepId);
+            } else {
+              SF.data.funnel(businessId, days);
+              SF.data.funnelList(businessId, days, status);
+            }
           }
         }
       } else if (route.screen === 'office-consultant') {

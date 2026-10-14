@@ -243,6 +243,15 @@
       return await apiFetch(`/api/business/funnel?${q.toString()}`);
     },
 
+    // Funnel of one SI-seller by steps: reached / here now / refused per step; with step — 30 clients on it
+    async getFunnelSteps({ projectId, step = '', days = '', offset = 0 } = {}) {
+      const q = new URLSearchParams({ projectId });
+      if (step) q.set('step', step);
+      if (days) q.set('days', String(days));
+      if (offset) q.set('offset', String(offset));
+      return await apiFetch(`/api/business/funnel/steps?${q.toString()}`);
+    },
+
     // Calendar of a business: rules, free windows of the owner and the assistant, meetings
     async getCalendar(businessId = '') {
       return await apiFetch(`/api/business/calendar${businessId ? `?businessId=${encodeURIComponent(businessId)}` : ''}`);
@@ -270,6 +279,14 @@
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/funnel`, {
         method: 'POST',
         body: JSON.stringify({ outcome })
+      });
+    },
+
+    // Move a client to a step of the funnel by hand
+    async moveClientStep(projectId, clientId, stepId) {
+      return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/step`, {
+        method: 'POST',
+        body: JSON.stringify({ stepId })
       });
     },
 

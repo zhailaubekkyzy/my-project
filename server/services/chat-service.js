@@ -171,7 +171,7 @@ async function handleClientMessage(project, lead, text, voice = null) {
 
   // A person of the business answers: the SI stays silent ("Мне написали")
   if (isSiPaused(lead)) {
-    await applyAnalysis(project, lead, await analyze(project, past, text), text);
+    await applyAnalysis(project, lead, await analyze(project, lead, past, text), text);
     return { message, reply: null, paused: true };
   }
 
@@ -195,13 +195,13 @@ async function handleClientMessage(project, lead, text, voice = null) {
   const calendarEnabled = await calendarService.isEnabled(lead.business_id);
   const [result, analysis] = await Promise.all([
     siEngine.generateReply({
-      project: { ...project, calendarEnabled },
+      project: { ...project, calendarEnabled, clientStepId: lead.step_id },
       expertName: await expertNameOf(project),
       history: past,
       userText: text,
       knowledge
     }),
-    analyze(project, past, text)
+    analyze(project, lead, past, text)
   ]);
   const reply = await saveMessage(lead, SI, result.text);
   await applyAnalysis(project, lead, analysis, text);
@@ -210,11 +210,14 @@ async function handleClientMessage(project, lead, text, voice = null) {
 
 // Funnel events of this turn (offer, answer to it, objection, refusal), asked from OpenAI next to
 // the SI reply. A failure never breaks the chat: the journal just gets fewer events.
-async function analyze(project, past, text) {
+async function analyze(project, lead, past, text) {
   try {
     const lastOther = [...past].reverse().find(m => m.sender !== 'client');
-    const conditions = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
-    return await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: text, conditions });
+    const settings = parseJson(project.custom_ai_settings);
+    // Only the conditions of the client's step; the steps to see whether the client moved forward
+    const conditions = funnelService.customConditions(settings.scenarios, settings.steps, lead.step_id);
+    const steps = activeFunnel(lead) ? funnelService.stepsForAnalysis(settings.steps, lead) : null;
+    return await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: text, conditions, steps });
   } catch (err) {
     console.warn('[SmartFlow funnel] analysis failed:', err.message);
     return null;
@@ -241,6 +244,13 @@ async function applyAnalysis(project, lead, analysis, text) {
       const texts = own.filter(c => analysis.matched.includes(c.id)).map(c => c.text);
       if (texts.length) await clientEvent(project, lead, 'condition', CLIENT, { matched: analysis.matched, condition: texts.join('; ') });
     }
+    // Last: the message was said on the client's step; after it the client goes on to the next one
+    if (Number.isInteger(analysis.stepIndex) && activeFunnel(lead)) {
+      const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+      if (steps[analysis.stepIndex] && analysis.stepIndex > funnelService.stepIndexOf(steps, lead.step_id)) {
+        await moveToStep(project, lead, steps[analysis.stepIndex].id, SI, { sendMaterial: true });
+      }
+    }
   } catch (err) {
     console.warn('[SmartFlow funnel] events not saved:', err.message);
   }
@@ -262,15 +272,21 @@ async function clientEvent(project, client, type, actor, data = null) {
   let saved = null;
   if (data && data.objection) saved = { objection: data.objection };
   if (data && data.condition) saved = { condition: data.condition };
+  if (data && data.stepId) saved = { stepId: data.stepId, title: data.title || '', ...(data.materialOf ? { materialOf: data.materialOf } : {}) };
+  const stepBefore = client.step_id;
   const status = await funnelService.recordEvent(client, type, actor, saved);
   if (ACTION_WORDS[type]) await matchActionConditions(project, client, ACTION_WORDS[type]);
-  const scenarios = funnelService.normalizeScenarios(parseJson(project.custom_ai_settings).scenarios)
-    .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {}));
+  const settings = parseJson(project.custom_ai_settings);
+  // A scenario "только на шаге …" works on the step where the client was when it happened
+  const scenarios = funnelService.normalizeScenarios(settings.scenarios)
+    .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {})
+      && funnelService.scenarioOnStep(sc, settings.steps, stepBefore));
   for (const scenario of scenarios) {
     if (await funnelService.scenarioFired(client.id, scenario.id)) continue;
     await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then });
     let what = `${funnelService.SCENARIO_WHEN[scenario.when]}${data && data.objection ? ` («${data.objection}»)` : ''}`;
     if (scenario.when === 'custom') what = `Условие «${scenario.condition}»`;
+    if (scenario.when === 'step_reached') what = `Перешёл на шаг «${(data && data.title) || ''}»`;
     if (scenario.title) what = `Сценарий «${scenario.title}»: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
     if (scenario.then === 'handover') {
       if (!isSiPaused(client)) {
@@ -326,20 +342,53 @@ async function chatTools(project, lead, messages) {
   return { contact, receipt, booking };
 }
 
-// The expert's own conditions may be about buttons too: the press is checked like a message
+// The expert's own conditions (and "шаг пройден, когда…") may be about buttons too:
+// the press is checked like a message
 async function matchActionConditions(project, client, words) {
-  const conditions = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
-  if (!conditions.length) return;
+  const settings = parseJson(project.custom_ai_settings);
+  const conditions = funnelService.customConditions(settings.scenarios, settings.steps, client.step_id);
+  const steps = activeFunnel(client) ? funnelService.stepsForAnalysis(settings.steps, client) : null;
+  if (!conditions.length && !steps) return;
   try {
     const past = await history(project.id, client.id);
     const lastOther = [...past].reverse().find(m => m.sender !== 'client');
-    const analysis = await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: words, conditions });
-    const matched = (analysis && analysis.matched) || [];
+    const analysis = await siEngine.analyzeTurn({ project, lastSiText: lastOther && lastOther.text, clientText: words, conditions, steps });
+    if (!analysis) return;
+    const matched = analysis.matched || [];
     const texts = conditions.filter(c => matched.includes(c.id)).map(c => c.text);
     if (texts.length) await clientEvent(project, client, 'condition', { type: 'client' }, { matched, condition: texts.join('; ') });
+    if (steps && Number.isInteger(analysis.stepIndex) && analysis.stepIndex > steps.index && activeFunnel(client)) {
+      await moveToStep(project, client, steps.steps[analysis.stepIndex].id, SI, { sendMaterial: true });
+    }
   } catch (err) {
     console.warn('[SmartFlow funnel] action conditions:', err.message);
   }
+}
+
+// Steps move only while the client is still in the funnel (not bought, not refused)
+function activeFunnel(client) {
+  return client.funnel_status !== 'bought' && client.funnel_status !== 'refused';
+}
+
+/**
+ * The client comes to a step of the funnel: the journal, the "Клиент перешёл на шаг" scenarios
+ * and — when the SI moved them (sendMaterial) — the step's material as a message from the SI,
+ * once per step for this client. A person moving a client by hand sends no material.
+ */
+async function moveToStep(project, client, stepId, actor, { sendMaterial = false } = {}) {
+  const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+  const step = steps.find(s => s.id === stepId);
+  if (!step || (client.step_id || (steps[0] && steps[0].id)) === stepId) return null;
+  const material = sendMaterial && step.material && !(await materialSent(client, step.id));
+  await clientEvent(project, client, 'step_reached', actor, { stepId, title: step.title, materialOf: material ? step.id : null });
+  if (material) await saveMessage(client, SI, step.material);
+  return step;
+}
+
+// The material of a step goes to a client once (the step_reached event remembers it)
+async function materialSent(client, stepId) {
+  const rows = await db.all(`SELECT data FROM client_events WHERE client_id = ? AND type = 'step_reached'`, [client.id]);
+  return rows.some(r => parseJson(r.data).materialOf === stepId);
 }
 
 /**
@@ -359,10 +408,17 @@ async function markOutcome(project, client, outcome, member) {
 async function startConversation(project, lead) {
   const past = await history(project.id, lead.id);
   if (past.length) return null;
-  const result = await siEngine.generateOpener({ project, expertName: await expertNameOf(project) });
+  const result = await siEngine.generateOpener({ project: { ...project, clientStepId: lead.step_id }, expertName: await expertNameOf(project) });
   // Another request may have started the chat meanwhile: keep a single opener
   if ((await history(project.id, lead.id)).length) return null;
-  return saveMessage(lead, SI, result.text);
+  const opener = await saveMessage(lead, SI, result.text);
+  // The material of the first step of the funnel, right after the hello
+  const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+  if (steps[0] && steps[0].material && !(await materialSent(lead, steps[0].id))) {
+    await funnelService.recordEvent(lead, 'step_reached', SI, { stepId: steps[0].id, title: steps[0].title, materialOf: steps[0].id });
+    await saveMessage(lead, SI, steps[0].material);
+  }
+  return opener;
 }
 
 /**
@@ -451,6 +507,7 @@ module.exports = {
   setResponsible,
   handleClientMessage,
   clientEvent,
+  moveToStep,
   markOutcome,
   chatTools,
   startConversation,

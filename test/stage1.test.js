@@ -1902,6 +1902,126 @@ async function runAllTests() {
     assert.strictEqual((await api('POST', '/api/people/usr_spam_x/messages', tokenOther, { text: 'Реклама' })).status, 429);
   });
 
+  await test('54. Шаги воронки: SI видит шаг клиента и ведёт дальше, материал шага, сценарии шага, «По шагам»', async () => {
+    const settings = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    const put = await api('PUT', `/api/projects/${projectA.id}`, tokenA, {
+      custom_ai_settings: {
+        ...settings,
+        steps: [
+          { id: 'stp_hello', title: 'Знакомство', goal: 'узнать ситуацию клиента', doneWhen: 'клиент рассказал о себе или написал «готов»' },
+          { id: 'stp_lesson', title: 'Материал', goal: 'дать бесплатный урок', doneWhen: 'клиент посмотрел урок', material: 'Вот бесплатный урок: https://example.com/lesson' },
+          { title: '' },
+          { id: 'stp_offer', title: 'Оффер', goal: 'предложить разбор' },
+          ...Array.from({ length: 10 }, (_, i) => ({ title: `Лишний ${i}` }))
+        ],
+        scenarios: [
+          { id: 'scn_onlesson', when: 'step_reached', step: 'stp_lesson', then: 'notify', text: 'Клиент получил урок' },
+          { id: 'scn_lessonq', when: 'custom', step: 'stp_lesson', condition: 'клиент спрашивает про сертификат', then: 'notify' },
+          { when: 'step_reached', step: 'stp_missing', then: 'notify' },
+          { when: 'step_reached', then: 'notify' }
+        ]
+      }
+    });
+    assert.strictEqual(put.status, 200);
+    const saved = put.body.custom_ai_settings;
+    assert.strictEqual(saved.steps.length, 8, 'Up to 8 steps, a step without a title is dropped');
+    assert.deepStrictEqual(saved.steps.slice(0, 3).map(s => s.id), ['stp_hello', 'stp_lesson', 'stp_offer']);
+    assert.deepStrictEqual(saved.scenarios.map(s => s.id), ['scn_onlesson', 'scn_lessonq'], 'Scenarios of a missing step are dropped');
+    await api('PUT', `/api/projects/${projectA.id}`, tokenA, { custom_ai_settings: { ...saved, steps: saved.steps.slice(0, 3) } });
+
+    const tg = { id: 700054, first_name: 'Шаги' };
+    const token = await tokenFor(tg);
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let stepsDone = 1;
+    let conditions = [];
+    let system = '';
+    let analysisPrompt = '';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        if (body.response_format) {
+          analysisPrompt = body.messages[0].content;
+          return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ offer_made: false, offer_answered: false, objection: '', refused: false, conditions, steps_done: stepsDone }) } }] }), { status: 200 });
+        }
+        system = body.messages[0].content;
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'Понимаю!' } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    let lead;
+    try {
+      telegramBot.testOutbox.length = 0;
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Я веду блог, хочу продавать' });
+      assert(system.includes('Сейчас клиент на шаге 1 «Знакомство»'), 'The SI sees the client\'s step');
+      assert(system.includes('мягко переходи к шагу 2 «Материал»'));
+      assert(!system.includes('https://example.com/lesson'), 'The material of a later step is not in the prompt');
+      assert(analysisPrompt.includes('Клиент сейчас на шаге 1') && analysisPrompt.includes('пройден, когда клиент посмотрел урок'));
+      assert(!analysisPrompt.includes('сертификат'), 'A condition of another step is not looked for');
+      lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg, 'expert')).id]);
+      assert.strictEqual(lead.step_id, 'stp_lesson', 'The client moved to the next step');
+      let history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+      assert.deepStrictEqual(history.slice(-2).map(m => m.text), ['Понимаю!', 'Вот бесплатный урок: https://example.com/lesson'], 'The material comes after the SI reply');
+      assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('Перешёл на шаг «Материал»') && m.text.includes('Клиент получил урок')));
+
+      // On step 2: its condition is looked for; "steps_done" below the client's step never moves back
+      stepsDone = 1;
+      conditions = [1];
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'А сертификат будет?' });
+      assert(system.includes('Сейчас клиент на шаге 2 «Материал»') && system.includes('уже получил отдельным сообщением'));
+      assert(analysisPrompt.includes('1. клиент спрашивает про сертификат'));
+      lead = await db.get('SELECT * FROM clients WHERE id = ?', [lead.id]);
+      assert.strictEqual(lead.step_id, 'stp_lesson', 'The SI never moves a client back');
+      assert(telegramBot.testOutbox.some(m => m.text.includes('клиент спрашивает про сертификат')));
+      history = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body.messages;
+      assert.strictEqual(history.filter(m => m.text.includes('бесплатный урок')).length, 1);
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // Without OpenAI: a word in quotes from "пройден, когда"
+    const tg2 = { id: 700055, first_name: 'Готов' };
+    const token2 = await tokenFor(tg2);
+    await api('POST', `/api/chat/${projectA.slug}/messages`, token2, { text: 'Я готов!' });
+    const lead2 = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg2, 'expert')).id]);
+    assert.strictEqual(lead2.step_id, 'stp_lesson', 'Quoted words move the client without OpenAI');
+
+    // A person moves a client by hand (the assistant too); no material is sent
+    const card = await api('GET', `/api/projects/${projectA.id}/clients/${lead.id}`, tokenAssistant);
+    assert.deepStrictEqual(card.body.steps.map(s => s.title), ['Знакомство', 'Материал', 'Оффер']);
+    assert.strictEqual(card.body.current_step_id, 'stp_lesson');
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/step`, tokenA, { stepId: 'stp_nope' })).status, 400);
+    const moved = await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/step`, tokenAssistant, { stepId: 'stp_offer' });
+    assert.strictEqual(moved.status, 200);
+    assert(moved.body.events.some(e => e.type === 'step_reached' && e.detail === '«Оффер»' && e.actorType === 'assistant'));
+    assert.strictEqual((await db.get('SELECT step_id FROM clients WHERE id = ?', [lead.id])).step_id, 'stp_offer');
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/step`, tokenOther, { stepId: 'stp_hello' })).status, 403, 'Strangers cannot move clients');
+
+    // "По шагам": reached / here now / where they stop; the list of one step
+    const report = await api('GET', `/api/business/funnel/steps?projectId=${projectA.id}`, tokenAssistant);
+    assert.strictEqual(report.status, 200);
+    const [s1, s2, s3] = report.body.steps;
+    assert.strictEqual(s3.reached, 1);
+    assert.strictEqual(s2.reached, 2);
+    assert(s1.reached >= s2.reached + 1, 'Everyone reached the first step');
+    assert.strictEqual(s2.here, 1);
+    assert.strictEqual(report.body.stopStepId, s1.here > 1 ? 'stp_hello' : report.body.stopStepId);
+    const onStep = await api('GET', `/api/business/funnel/steps?projectId=${projectA.id}&step=stp_lesson`, tokenA);
+    assert.deepStrictEqual(onStep.body.clients.map(c => c.id), [lead2.id]);
+    const first = await api('GET', `/api/business/funnel/steps?projectId=${projectA.id}&step=stp_hello`, tokenA);
+    assert.strictEqual(first.body.clients.length, s1.here, 'The first step lists clients without a step too');
+    assert.strictEqual((await api('GET', `/api/business/funnel/steps?projectId=${projectA.id}`, tokenOther)).status, 404);
+
+    // A step is deleted: its scenarios go with it
+    const fresh = projectService.safeJsonParse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [projectA.id])).custom_ai_settings);
+    const cut = await api('PUT', `/api/projects/${projectA.id}`, tokenA, { custom_ai_settings: { ...fresh, steps: fresh.steps.filter(s => s.id !== 'stp_lesson') } });
+    assert.deepStrictEqual(cut.body.custom_ai_settings.scenarios, []);
+
+    await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);
