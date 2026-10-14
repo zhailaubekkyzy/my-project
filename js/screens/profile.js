@@ -99,6 +99,15 @@
             : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>'}
         </div>` : ''}
 
+      ${me.id ? `
+        <label class="glass-card-3d p-3 flex items-center justify-between gap-3 text-xs cursor-pointer">
+          <span>
+            <span class="block text-ink-2 font-semibold">Показывать меня в поиске</span>
+            <span class="block text-[10px] text-faint leading-snug">Люди в SmartFlow найдут вас по имени и смогут написать.</span>
+          </span>
+          <input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
+        </label>` : ''}
+
       <div class="glass-card-3d p-3 flex items-center justify-between text-xs">
         <span class="text-muted">Язык интерфейса</span>
         <span class="text-ink-2 font-semibold">Русский ${SF.soonBadge('EN скоро')}</span>
@@ -122,6 +131,18 @@
         </button>` : ''}
     `;
   }
+
+  SF.actions.setSearchVisibility = async (visible) => {
+    try {
+      await window.smartFlowApi.setSearchVisibility(!visible);
+      window.funnelStore.data.me.hiddenFromSearch = !visible;
+      window.funnelStore.saveData();
+      SF.showToast(visible ? 'Вас снова можно найти в поиске' : 'Вы скрыты из поиска');
+    } catch (err) {
+      SF.showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+    window.funnelStore.notify();
+  };
 
   // ---------------- Edit ----------------
   function renderEdit(state) {

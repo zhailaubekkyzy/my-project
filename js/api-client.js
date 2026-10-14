@@ -313,6 +313,44 @@
     },
 
     // My chats with SI-consultants (as a client)
+    // People: search and conversations between people inside SmartFlow
+    async searchPeople(q) {
+      return await apiFetch(`/api/people/search?q=${encodeURIComponent(q)}`);
+    },
+
+    async setSearchVisibility(hidden) {
+      return await apiFetch('/api/people/visibility', { method: 'PUT', body: JSON.stringify({ hidden }) });
+    },
+
+    async getPeopleChats() {
+      return await apiFetch('/api/people/chats');
+    },
+
+    async getPersonMessages(userId) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/messages`);
+    },
+
+    async sendPersonMessage(userId, text) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/messages`, { method: 'POST', body: JSON.stringify({ text }) });
+    },
+
+    // A voice (1.5 min), a photo or a round video (30 s) in a conversation with a person
+    async sendPersonFile(userId, kind, blob, seconds = '') {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/files?kind=${encodeURIComponent(kind)}&seconds=${encodeURIComponent(seconds)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob
+      });
+    },
+
+    async answerPerson(userId, action) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/answer`, { method: 'POST', body: JSON.stringify({ action }) });
+    },
+
+    async reportPerson(userId, reason) {
+      return await apiFetch(`/api/people/${encodeURIComponent(userId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+    },
+
     async getMyChats() {
       return await apiFetch('/api/chat');
     },

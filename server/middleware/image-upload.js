@@ -45,4 +45,19 @@ function readVoiceBody(req, res, next) {
   });
 }
 
-module.exports = { readImageBody, readReceiptBody, readVoiceBody };
+// Files of private conversations: a voice (1.5 min), a photo or a round video (30 s) — up to 8 MB
+// (people-service decides by the bytes what it is)
+const rawDmFile = express.raw({ type: () => true, limit: 8 * 1024 * 1024 });
+function readDmFileBody(req, res, next) {
+  rawDmFile(req, res, (err) => {
+    if (!err) return next();
+    const tooLarge = err.status === 413;
+    res.status(tooLarge ? 413 : 400).json({
+      error: 'bad_request',
+      code: tooLarge ? 'FILE_TOO_LARGE' : 'INVALID_FILE',
+      message: tooLarge ? 'Файл слишком большой.' : 'Не получилось прочитать файл. Попробуйте ещё раз.'
+    });
+  });
+}
+
+module.exports = { readImageBody, readReceiptBody, readVoiceBody, readDmFileBody };

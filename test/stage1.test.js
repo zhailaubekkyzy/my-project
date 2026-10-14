@@ -1795,6 +1795,113 @@ async function runAllTests() {
     await db.run('DELETE FROM calendar_hosts WHERE business_id = ?', [business.id]);
   });
 
+  const profileService = require('../server/services/profile-service');
+  await test('53. Люди: поиск, переписка «Принять / Заблокировать», лимиты от спама, жалоба команде', async () => {
+    const otherUserId = () => otherIdForSpam;
+    const otherIdForSpam = (await authService.findOrCreateTelegramUser(otherTg, 'expert')).id;
+    const meA = await db.get('SELECT * FROM users WHERE id = ?', [expertA_InternalId]);
+    const nameA = profileService.toPublicUser(meA).displayName;
+    // Search by name (any case), @username; not myself; hidden people are not found
+    const q = nameA.slice(0, 4).toLowerCase();
+    let found = await api('GET', `/api/people/search?q=${encodeURIComponent(q)}`, tokenClient);
+    assert.strictEqual(found.status, 200);
+    assert(found.body.people.some(p => p.id === expertA_InternalId), 'Found by the start of the name, lower case');
+    assert(!JSON.stringify(found.body).includes('SF-'), 'No support numbers in search');
+    assert.strictEqual((await api('GET', `/api/people/search?q=${encodeURIComponent(q)}`, tokenA)).body.people.some(p => p.id === expertA_InternalId), false, 'Not myself');
+    assert((await api('GET', '/api/people/search?q=@client_ser', tokenA)).body.people.some(p => p.id === clientUser.id), 'Found by @username');
+    assert.strictEqual((await api('GET', '/api/people/search?q=a', tokenA)).body.people.length, 0, 'At least 2 letters');
+    assert.strictEqual((await api('GET', '/api/people/search?q=client', null)).status, 401, 'Only after signing in');
+    // Keywords from the line under the name and «О себе», several words at once
+    await profileService.updateProfile(clientUser.id, { headline: 'Коуч по продажам', bio: 'Помогаю экспертам запускать марафоны' });
+    assert((await api('GET', '/api/people/search?q=' + encodeURIComponent('марафон коуч'), tokenA)).body.people.some(p => p.id === clientUser.id), 'Found by keywords');
+    assert.strictEqual((await api('GET', '/api/people/search?q=' + encodeURIComponent('марафон дизайн'), tokenA)).body.people.some(p => p.id === clientUser.id), false, 'Every word must match');
+    await api('PUT', '/api/people/visibility', tokenClient, { hidden: true });
+    assert.strictEqual((await api('GET', '/api/people/search?q=@client_ser', tokenA)).body.people.length, 0, 'Hidden from search');
+    assert.strictEqual((await api('GET', '/api/auth/me', tokenClient)).body.user.hiddenFromSearch, true);
+    await api('PUT', '/api/people/visibility', tokenClient, { hidden: false });
+
+    // The first message arrives with «Принять / Заблокировать»; Buddy + Telegram once per unread run
+    telegramBot.testOutbox.length = 0;
+    const url = `/api/people/${expertA_InternalId}`;
+    assert.strictEqual((await api('POST', `/api/people/${clientUser.id}/messages`, tokenClient, { text: 'себе' })).status, 400, 'Not to myself');
+    assert.strictEqual((await api('POST', `${url}/messages`, tokenClient, { text: 'Здравствуйте! Хочу познакомиться' })).status, 201);
+    await api('POST', `${url}/messages`, tokenClient, { text: 'Я тоже из продаж' });
+    assert.strictEqual(telegramBot.testOutbox.filter(m => m.userId === expertA_InternalId).length, 1, 'One notification while unread');
+    assert(telegramBot.testOutbox[0].text.includes('хочет с вами пообщаться'));
+    assert(telegramBot.testOutbox[0].reply_markup.inline_keyboard[0][0].url.includes(`U_${clientUser.id}`));
+    await api('POST', `${url}/messages`, tokenClient, { text: 'Третье' });
+    const fourth = await api('POST', `${url}/messages`, tokenClient, { text: 'Четвёртое' });
+    assert.strictEqual(fourth.status, 429, 'Until accepted — at most 3 messages');
+
+    let chatsA = (await api('GET', '/api/people/chats', tokenA)).body.chats;
+    const forA = chatsA.find(c => c.person.id === clientUser.id);
+    assert.strictEqual(forA.needsMyAnswer, true);
+    assert.strictEqual(forA.unread, true);
+    const convA = await api('GET', `/api/people/${clientUser.id}/messages`, tokenA);
+    assert.deepStrictEqual(convA.body.messages.map(m => m.text), ['Здравствуйте! Хочу познакомиться', 'Я тоже из продаж', 'Третье'], 'In order');
+    assert.strictEqual((await api('GET', '/api/people/chats', tokenA)).body.chats.find(c => c.person.id === clientUser.id).unread, false, 'Opened = read');
+    assert.strictEqual((await api('GET', `/api/people/${clientUser.id}/messages`, tokenOther)).body.messages.length, 0, 'Others do not see it');
+
+    // Answering accepts; then both write freely
+    assert.strictEqual((await api('POST', `/api/people/${clientUser.id}/messages`, tokenA, { text: 'Привет! Рада знакомству' })).status, 201);
+    assert.strictEqual((await api('GET', `${url}/messages`, tokenClient)).body.thread.status, 'accepted');
+    assert.strictEqual((await api('POST', `${url}/messages`, tokenClient, { text: 'Отлично!' })).status, 201);
+
+    // Voice (1.5 min), photo and a round video (30 s); files go only to the two people
+    const sendFile = (kind, body, seconds = '') => fetch(`${baseUrl}${url}/files?kind=${kind}&seconds=${seconds}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tokenClient}`, 'Content-Type': 'application/octet-stream' }, body
+    }).then(async r => ({ status: r.status, body: await r.json() }));
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(500, 1)]);
+    const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(800, 2)]);
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypmp42'), Buffer.alloc(800, 3)]);
+    assert.strictEqual((await sendFile('photo', Buffer.from('<svg onload=alert(1)>  not a photo'))).status, 400, 'Only real photos');
+    assert.strictEqual((await sendFile('gif', jpeg)).status, 400);
+    const photo = await sendFile('photo', jpeg);
+    assert.strictEqual(photo.status, 201);
+    assert.strictEqual(photo.body.message.kind, 'photo');
+    const voice = await sendFile('voice', webm, 500);
+    assert.strictEqual(voice.body.message.seconds, 90, 'Voice up to 1.5 minutes');
+    const circle = await sendFile('video', mp4, 45);
+    assert.strictEqual(circle.body.message.kind, 'video');
+    assert.strictEqual(circle.body.message.seconds, 30, 'A round video up to 30 seconds');
+    const fileUrl = `/api/people/${clientUser.id}/files/${circle.body.message.fileId}`;
+    const got = await fetch(baseUrl + fileUrl, { headers: { Authorization: `Bearer ${tokenA}` } });
+    assert.strictEqual(got.status, 200, 'The other person gets the file');
+    assert.strictEqual(got.headers.get('content-type'), 'video/mp4');
+    assert.strictEqual((await fetch(`${baseUrl}/api/people/${clientUser.id}/files/${circle.body.message.fileId}`, { headers: { Authorization: `Bearer ${tokenOther}` } })).status, 404, 'Others do not');
+    const listA = (await api('GET', '/api/people/chats', tokenA)).body.chats.find(c => c.person.id === clientUser.id);
+    assert.strictEqual(listA.lastMessage, '🎥 Видео');
+
+    // Block: the other side cannot write and does not find the blocker; unblock works
+    const blocked = await api('POST', `/api/people/${clientUser.id}/answer`, tokenA, { action: 'block' });
+    assert.strictEqual(blocked.body.thread.blockedByMe, true);
+    const refused = await api('POST', `${url}/messages`, tokenClient, { text: 'Ещё' });
+    assert.strictEqual(refused.status, 403);
+    assert(!refused.body.message.includes('заблок'), 'The blocked person is not told about the block');
+    assert.strictEqual((await api('GET', `/api/people/search?q=${encodeURIComponent(q)}`, tokenClient)).body.people.some(p => p.id === expertA_InternalId), false);
+    await api('POST', `/api/people/${clientUser.id}/answer`, tokenA, { action: 'unblock' });
+    assert.strictEqual((await api('POST', `${url}/messages`, tokenClient, { text: 'Снова на связи' })).status, 201);
+
+    // The complaint goes to the team with the last messages; the person is blocked
+    telegramBot.testOutbox.length = 0;
+    const report = await api('POST', `/api/people/${expertA_InternalId}/report`, tokenOther, { reason: 'спам' });
+    assert.strictEqual(report.status, 404, 'Only about a real conversation');
+    assert.strictEqual((await api('POST', `${url}/report`, tokenClient, { reason: 'грубит' })).status, 200);
+    const fb = await db.get('SELECT * FROM feedback WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1', [clientUser.id]);
+    assert(fb.text.includes('грубит') && fb.text.includes('Снова на связи'), 'The team sees the reason and the last messages');
+    assert.strictEqual((await api('POST', `/api/people/${clientUser.id}/messages`, tokenA, { text: 'Почему?' })).status, 403, 'After a complaint the person is blocked');
+
+    // At most 20 new conversations a day
+    const peopleService = require('../server/services/people-service');
+    for (let i = 0; i < peopleService.NEW_PER_DAY; i++) {
+      await db.run(`INSERT INTO users (id, display_name) VALUES (?, ?)`, [`usr_spam_${i}`, `Цель ${i}`]);
+      if (i < peopleService.NEW_PER_DAY - 1) await peopleService.send(otherUserId(), `usr_spam_${i}`, 'Реклама');
+    }
+    assert.strictEqual((await api('POST', `/api/people/usr_spam_${peopleService.NEW_PER_DAY - 1}/messages`, tokenOther, { text: 'Реклама' })).status, 201);
+    await db.run(`INSERT INTO users (id, display_name) VALUES ('usr_spam_x', 'Ещё')`);
+    assert.strictEqual((await api('POST', '/api/people/usr_spam_x/messages', tokenOther, { text: 'Реклама' })).status, 429);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);
