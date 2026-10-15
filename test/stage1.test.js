@@ -1887,8 +1887,9 @@ async function runAllTests() {
     const report = await api('POST', `/api/people/${expertA_InternalId}/report`, tokenOther, { reason: 'спам' });
     assert.strictEqual(report.status, 404, 'Only about a real conversation');
     assert.strictEqual((await api('POST', `${url}/report`, tokenClient, { reason: 'грубит' })).status, 200);
-    const fb = await db.get('SELECT * FROM feedback WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1', [clientUser.id]);
-    assert(fb.text.includes('грубит') && fb.text.includes('Снова на связи'), 'The team sees the reason and the last messages');
+    // By its text: two complaints within one second have no fixed order
+    const fb = await db.get(`SELECT * FROM feedback WHERE user_id = ? AND text LIKE ? ORDER BY created_at DESC LIMIT 1`, [clientUser.id, '%грубит%']);
+    assert(fb && fb.text.includes('грубит') && fb.text.includes('Снова на связи'), 'The team sees the reason and the last messages');
     assert.strictEqual((await api('POST', `/api/people/${clientUser.id}/messages`, tokenA, { text: 'Почему?' })).status, 403, 'After a complaint the person is blocked');
 
     // At most 20 new conversations a day
@@ -2020,6 +2021,90 @@ async function runAllTests() {
     assert.deepStrictEqual(cut.body.custom_ai_settings.scenarios, []);
 
     await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
+  });
+
+  await test('55. Календарь Бадди: планы словами, напоминание только по просьбе, встречи с экспертами, голосовые', async () => {
+    const buddyService = require('../server/services/buddy-service');
+    const tg = { id: 700056, first_name: 'Календарь' };
+    const token = await tokenFor(tg);
+    const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+    const local = new Date(Date.now() + 300 * 60000);
+    local.setUTCDate(local.getUTCDate() + 1);
+    const day = local.toISOString().slice(0, 10);
+
+    // A meeting with an expert: the person is the client of projectA
+    const project = await db.get('SELECT * FROM projects WHERE id = ?', [projectA.id]);
+    const lead = await chatService.leadForUser(project, user.id);
+    await db.run(
+      `INSERT INTO meetings (id, business_id, project_id, client_id, host_user_id, starts_at, ends_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'booked')`,
+      ['mtg_buddycal', lead.business_id, project.id, lead.id, expertA_InternalId, `${day} 04:00:00`, `${day} 04:30:00`]
+    );
+
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let answer = {};
+    let prompt = '';
+    global.fetch = async (url, options) => {
+      if (String(url) === 'https://api.openai.com/v1/audio/transcriptions') {
+        return new Response(JSON.stringify({ text: 'Завтра в 18:00 ужин с Айнур' }), { status: 200 });
+      }
+      if (String(url).startsWith('https://api.openai.com/')) {
+        prompt = JSON.parse(options.body).messages[0].content;
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(answer) } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      answer = { reply: 'Добавил!', plans: [
+        { text: 'Созвон с коучем по нутрициологии', at: `${day} 13:00`, remind_before: null },
+        { text: 'Позвонить маме', at: `${day} 20:00`, remind_before: 30 }
+      ], cancel: [], open: 'none' };
+      const res = await api('POST', '/api/buddy/messages', token, { text: 'Завтра в 13 созвон с коучем, и напомни за полчаса позвонить маме в 20', tzOffset: 300 });
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.calendarChanged, true);
+      assert(prompt.includes('Встречи с экспертами') && prompt.includes(`Встреча: «${project.name}»`), 'Buddy knows the meetings');
+
+      // Voice: transcribed and answered like text; the recording is not kept
+      answer = { reply: 'Записал ужин.', plans: [{ text: 'Ужин с Айнур', at: `${day} 18:00`, remind_before: null }], cancel: [], open: 'none' };
+      const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(2000, 7)]);
+      const voice = await fetch(`${baseUrl}/api/buddy/voice?seconds=4&tzOffset=300`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'audio/webm' }, body: webm
+      }).then(async r => ({ status: r.status, body: await r.json() }));
+      assert.strictEqual(voice.status, 201);
+      assert.strictEqual(voice.body.messages[0].kind, 'voice');
+      assert.strictEqual(voice.body.messages[0].text, 'Завтра в 18:00 ужин с Айнур');
+      const bad = await fetch(`${baseUrl}/api/buddy/voice`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: Buffer.from('not audio, just text') });
+      assert.strictEqual(bad.status, 400);
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+
+    // The calendar of tomorrow (Almaty day): meeting 09:00, call 13:00, dinner 18:00, mama 20:00
+    const from = new Date(Date.parse(`${day}T00:00:00Z`) - 300 * 60000).toISOString();
+    const to = new Date(Date.parse(`${day}T00:00:00Z`) - 300 * 60000 + 86400000).toISOString();
+    const cal = await api('GET', `/api/buddy/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token);
+    assert.strictEqual(cal.status, 200);
+    assert.deepStrictEqual(cal.body.items.map(i => i.title), [`Встреча: «${project.name}»`, 'Созвон с коучем по нутрициологии', 'Ужин с Айнур', 'Позвонить маме']);
+    const [meeting, coach, , mama] = cal.body.items;
+    assert.strictEqual(meeting.kind, 'meeting');
+    assert.strictEqual(coach.remindAt, null, 'No reminder unless asked');
+    assert.strictEqual(new Date(mama.startsAt) - new Date(mama.remindAt), 30 * 60000, 'Reminded 30 minutes before');
+    assert.strictEqual((await api('GET', `/api/buddy/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, tokenB)).body.items.length, 0, 'Nobody else sees it');
+
+    // The alarm clock sends only what was asked, with the time of the plan
+    telegramBot.testOutbox.length = 0;
+    await buddyService.runReminders(new Date(Date.parse(mama.remindAt) + 1000));
+    assert(telegramBot.testOutbox.some(m => m.text === '⏰ Скоро, в 20:00: Позвонить маме'));
+    assert(!telegramBot.testOutbox.some(m => m.text.includes('коучем') || m.text.includes('Айнур')), 'Plans without a reminder stay quiet');
+
+    // Remove a plan: only my own
+    assert.strictEqual((await api('DELETE', `/api/buddy/plans/${coach.id}`, tokenB)).status, 404);
+    assert.strictEqual((await api('DELETE', `/api/buddy/plans/${coach.id}`, token)).status, 200);
+    const after = await api('GET', `/api/buddy/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, token);
+    assert(!after.body.items.some(i => i.id === coach.id));
+    await db.run('DELETE FROM meetings WHERE id = ?', ['mtg_buddycal']);
   });
 
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {

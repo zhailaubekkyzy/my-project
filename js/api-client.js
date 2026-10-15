@@ -534,6 +534,24 @@
       return await apiFetch('/api/buddy/messages', { method: 'POST', body: JSON.stringify({ text, tzOffset }) });
     },
 
+    // A voice message to Buddy: transcribed on the server and answered like text
+    async uploadBuddyVoice(blob, seconds, tzOffset) {
+      return await apiFetch(`/api/buddy/voice?seconds=${encodeURIComponent(seconds)}&tzOffset=${encodeURIComponent(tzOffset)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob
+      });
+    },
+
+    // Buddy's calendar: plans, reminders and meetings with experts in [from, to)
+    async getBuddyCalendar(from, to) {
+      return await apiFetch(`/api/buddy/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    },
+
+    async cancelBuddyPlan(id) {
+      return await apiFetch(`/api/buddy/plans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
     async markBuddyRead() {
       return await apiFetch('/api/buddy/read', { method: 'POST' });
     },
