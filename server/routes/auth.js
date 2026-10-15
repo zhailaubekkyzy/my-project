@@ -1,5 +1,6 @@
 // server/routes/auth.js - Authentication Routes
 const express = require('express');
+const analytics = require('../services/analytics-service');
 const router = express.Router();
 const authService = require('../services/auth-service');
 const projectService = require('../services/project-service');
@@ -57,6 +58,7 @@ router.post('/telegram', async (req, res, next) => {
       'UPDATE users SET last_seen_at = CURRENT_TIMESTAMP, telegram_write_allowed = COALESCE(?, telegram_write_allowed) WHERE id = ?',
       [typeof writeAllowed === 'boolean' ? (writeAllowed ? 1 : 0) : null, user.id]
     );
+    analytics.capture('app_opened', user.id);
     const token = authService.generateSessionToken(user);
 
     // Fetch user projects and subscription

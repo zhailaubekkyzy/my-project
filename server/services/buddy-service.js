@@ -17,6 +17,7 @@ const config = require('../config');
 const siEngine = require('./si-engine');
 const telegramBot = require('./telegram-bot');
 const profileService = require('./profile-service');
+const analytics = require('./analytics-service');
 
 const DAILY_LIMIT = 30;
 const MAX_TEXT = 1000;
@@ -251,6 +252,7 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
 
   const before = await usage(user.id, offset, now);
   const mine = await saveMessage(user.id, 'user', text, { kind: voice ? 'voice' : 'chat' });
+  analytics.capture('buddy_message', user.id, { voice, limit_reached: before.used >= DAILY_LIMIT });
   const created = [mine];
 
   if (before.used >= DAILY_LIMIT) {
@@ -290,6 +292,7 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
   if (parsed && Array.isArray(parsed.plans)) asked.push(...parsed.plans);
   if (parsed && Array.isArray(parsed.reminders)) asked.push(...parsed.reminders.map(r => ({ ...r, remind_before: 0, reminder: true })));
   if (asked.length) {
+    analytics.capture('buddy_plans_added', user.id, { count: asked.length, with_reminder: asked.some(r => r && r.remind_before !== null && r.remind_before !== undefined) });
     let active = (await upcomingPlans(user.id, now)).length;
     for (const r of asked.slice(0, 5)) {
       const at = parseLocal(r && r.at, offset);

@@ -13,6 +13,7 @@
 // Besides text: voice (1.5 min), photo and a round video (30 s); the files are given to the two people only.
 const crypto = require('crypto');
 const db = require('../db');
+const analytics = require('./analytics-service');
 const telegramBot = require('./telegram-bot');
 const profileService = require('./profile-service');
 const supportService = require('./support-service');
@@ -240,6 +241,7 @@ async function conversation(meId, otherId) {
  */
 async function send(meId, otherId, rawText, file = null) {
   const kind = file ? file.kind : 'text';
+  analytics.capture('people_message', meId, { kind });
   const text = file ? FILES[kind] && FILES[kind].label : String(rawText || '').trim().slice(0, MAX_TEXT);
   if (file && !FILES[kind]) throw new PeopleError('Неизвестный тип файла', 400, 'BAD_KIND');
   if (!text) throw new PeopleError('Сообщение не может быть пустым', 400, 'EMPTY');
