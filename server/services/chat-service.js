@@ -71,12 +71,15 @@ async function leadForUser(project, userId, { create = true } = {}) {
   );
   if (existing || !create) return existing;
   const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
-  return findOrCreateLead(project, {
+  const lead = await findOrCreateLead(project, {
     clientId: userId,
     name: user ? displayNameOf(user) : 'Клиент Telegram',
     username: user ? user.username : null,
     avatarUrl: user ? (mediaUrl(user.photo_media_id) || user.avatar_url) : null
   });
+  // The link with a source this person opened for THIS SI-seller (first one) gets the client
+  await require('./partner-service').attributeClient(project, lead, userId);
+  return lead;
 }
 
 async function activeProjectBySlug(slug) {

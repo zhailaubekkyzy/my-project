@@ -4,13 +4,18 @@
 const db = require('../db');
 const { mediaUrl } = require('./media-service');
 const profileService = require('./profile-service');
+const partnerService = require('./partner-service');
+
+// How many people came by the owner's links (partner-service): partners' SI-sellers go first
+const BROUGHT_SQL = `(SELECT COUNT(*) FROM users bu JOIN tracked_links bl ON bl.id = bu.referred_by_link WHERE bl.owner_user_id = p.owner_id)`;
 
 const CARD_SQL = `
   SELECT p.*, u.id AS author_id, u.display_name AS author_tg_name, u.profile AS author_profile,
          u.photo_media_id AS author_photo_media_id, u.avatar_url AS author_avatar_url,
          (SELECT COUNT(*) FROM clients c WHERE c.project_id = p.id) AS dialogs,
          (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_count,
-         (SELECT AVG(r.rating) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_average
+         (SELECT AVG(r.rating) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_average,
+         ${BROUGHT_SQL} AS owner_brought
   FROM projects p
   JOIN users u ON u.id = p.owner_id`;
 
@@ -57,7 +62,7 @@ async function listConsultants({ category } = {}) {
     where += ' AND p.category = ?';
     params.push(category);
   }
-  const rows = await db.all(`${CARD_SQL} ${where} ORDER BY dialogs DESC, p.created_at DESC LIMIT 100`, params);
+  const rows = await db.all(`${CARD_SQL} ${where} ORDER BY CASE WHEN ${BROUGHT_SQL} >= ${partnerService.PARTNER_MIN} THEN 1 ELSE 0 END DESC, dialogs DESC, p.created_at DESC LIMIT 100`, params);
   return rows.map(toCard);
 }
 
@@ -84,6 +89,8 @@ async function getPublicProfile(userId) {
     photoUrl: pub.photoUrl,
     profile: pub.profile,
     trust: profileService.trustScore(user),
+    // "SMARTFLOW PARTNER": the medal and how many people came from this person (only for the most active)
+    partner: await require('./partner-service').partnerOf(user.id),
     consultants: consultants.map(toCard)
   };
 }

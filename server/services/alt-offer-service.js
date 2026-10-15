@@ -9,8 +9,11 @@
 const db = require('../db');
 const siEngine = require('./si-engine');
 const funnelService = require('./funnel-service');
+const partnerService = require('./partner-service');
 const analytics = require('./analytics-service');
 const { mediaUrl } = require('./media-service');
+
+const PARTNER_BONUS = 15;
 
 const MAX_SHOWN = 3;
 const CANDIDATES = 15;
@@ -52,7 +55,8 @@ const CANDIDATE_SQL = `
   SELECT p.*,
     (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_count,
     (SELECT AVG(r.rating) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_average,
-    (SELECT COUNT(*) FROM consultant_materials cm WHERE cm.project_id = p.id) AS materials
+    (SELECT COUNT(*) FROM consultant_materials cm WHERE cm.project_id = p.id) AS materials,
+    (SELECT COUNT(*) FROM users bu JOIN tracked_links bl ON bl.id = bu.referred_by_link WHERE bl.owner_user_id = p.owner_id) AS owner_brought
   FROM projects p
   WHERE p.is_listed = 1 AND p.status = 'active' AND p.is_demo = 0 AND COALESCE(p.offer, '') <> ''
     AND p.owner_id <> ? AND p.id <> ?`;
@@ -78,7 +82,8 @@ const wordsOf = (text) => new Set((String(text || '').toLowerCase().match(WORD) 
 async function refresh(project, client, objection, clientText = '') {
   const rows = await db.all(CANDIDATE_SQL, [project.owner_id, project.id]);
   if (!rows.length) return [];
-  const ranked = rows.map(r => ({ row: r, quality: qualityScore(r) }))
+  // SMARTFLOW PARTNER owners get a lift (owner's decision 15 Oct.), the methodology still matters most
+  const ranked = rows.map(r => ({ row: r, quality: qualityScore(r) + (Number(r.owner_brought) >= partnerService.PARTNER_MIN ? PARTNER_BONUS : 0) }))
     .sort((a, b) => b.quality - a.quality)
     .slice(0, CANDIDATES);
   const context = `${objection || ''} ${clientText || ''}`.trim();

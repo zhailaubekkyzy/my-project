@@ -128,7 +128,21 @@
     'Не присылать рассылки': 'Do not send me announcements', 'Снова присылать рассылки': 'Send announcements again',
     'Больше не будем присылать рассылки. Переписка остаётся как была': 'No more announcements. The conversation stays as it was',
     'Рассылки снова включены': 'Announcements are on again',
-    'Может подойти и это': 'This may suit you too', 'Скрыть': 'Hide', '· скрыт командой': '· hidden by the team',
+    'Может подойти и это': 'This may suit you too', 'Скрыть': 'Hide',
+    'Пригласить в SmartFlow': 'Invite to SmartFlow', 'Копировать': 'Copy',
+    'Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам.': 'Your personal link. Everyone who comes to SmartFlow for the first time by it or by your SI-sellers\u2019 links counts for you.',
+    'Что вы получаете': 'What you get', '• Счётчик в профиле: сколько людей пришло от вас': '• A counter on your profile: how many people came from you',
+    'Отправить приглашение': 'Send an invitation', 'Приглашение скопировано — вставьте его в чат': 'Invitation copied — paste it into a chat',
+    'Текст приглашения — можно изменить': 'Invitation text — you can change it', 'Сохранить текст': 'Save the text',
+    'Вернуть исходный': 'Restore the original', 'Ссылка добавится в конце сама.': 'The link is added at the end by itself.',
+    'Текст приглашения сохранён': 'Invitation text saved',
+    'Отправьте в любое приложение: WhatsApp, Instagram, Telegram и другие. Друг попадёт сразу к своему Бадди.': 'Send it to any app: WhatsApp, Instagram, Telegram and others. Your friend lands right at their own Buddy.',
+    'Скопировать': 'Copy', 'Приглашение со ссылкой скопировано': 'Invitation with the link copied',
+    'Приглашение скопировано — вставьте его в любое приложение': 'Invitation copied — paste it into any app',
+    '• Ваши SI-продавцы — в верхних строках Маркетплейса, а знак повышает доверие клиентов': '• Your SI-sellers are in the top rows of the Marketplace, and the badge builds clients\u2019 trust',
+    '• +10 сообщений Бадди в день за каждого пришедшего': '• +10 Buddy messages a day for everyone who came',
+    'Откроется Telegram: выберите, кому отправить, — текст с приглашением и ссылкой уже готов. Друг попадёт сразу к своему Бадди.': 'Telegram will open: choose whom to send it to — the invitation text and link are ready. Your friend lands right at their own Buddy.',
+    'Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам. Самые активные получают знак «SMARTFLOW PARTNER» в профиле.': 'Your personal link. Everyone who comes to SmartFlow for the first time by it or by your SI-sellers’ links counts for you. The most active get the «SMARTFLOW PARTNER» badge on their profile.', '· скрыт командой': '· hidden by the team',
 
     // Buddy
     'Напишите Бадди: план, дело, напоминание…': 'Write to Buddy: a plan, a task, a reminder…',
@@ -219,6 +233,11 @@
     [/^Ведёт в чат с моим SI: (.+)$/, (m) => `Leads to the chat with my SI: ${m[1]}`],
     [/^Ссылка «(.+)» должна начинаться с https:\/\/$/, (m) => `The link «${m[1]}» must start with https://`],
     [/^• (.+)$/, (m) => `• ${translate(m[1])}`],
+    [/^• С (\d+) человек — знак «SMARTFLOW PARTNER» с медалью и вашим фото: его видят все в вашем профиле$/, (m) => `• From ${m[1]} people — the «SMARTFLOW PARTNER» badge with a medal and your photo, visible to everyone on your profile`],
+    [/^• (\d+) человек перешли по ссылке — вы получаете знак «SMARTFLOW PARTNER»: он виден рядом с вашим фото и именем везде в SmartFlow$/, (m) => `• ${m[1]} people came by your link — you get the «SMARTFLOW PARTNER» badge: it is shown next to your photo and name everywhere in SmartFlow`],
+    [/^Сообщений Бадди в день: (\d+)$/, (m) => `Buddy messages a day: ${m[1]}`],
+    [/^Пришло по вашим ссылкам: (\d+)$/, (m) => `People who came by your links: ${m[1]}`],
+    [/^· знак партнёра — с (\d+)$/, (m) => `· partner badge from ${m[1]}`],
     [/^(Январь|Февраль|Март|Апрель|Май|Июнь|Июль|Август|Сентябрь|Октябрь|Ноябрь|Декабрь) (\d{4})$/, (m) => `${EN[m[1]]} ${m[2]}`]
   ];
 

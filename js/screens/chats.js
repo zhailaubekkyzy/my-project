@@ -17,12 +17,12 @@
   }
 
   // ---------------- List: one list of conversations, newest first ----------------
-  function row({ onclick, kind, photoUrl, title, preview, unread }) {
+  function row({ onclick, kind, photoUrl, title, preview, unread, userId }) {
     return `
       <button onclick="${onclick}" class="w-full p-3 rounded-2xl flex items-center gap-3 text-left bg-card border border-line">
-        ${SF.avatar(photoUrl, { size: 44, kind })}
+        ${SF.avatar(photoUrl, { size: 44, kind, userId })}
         <span class="flex-1 min-w-0">
-          <span class="block text-sm font-bold text-ink truncate">${SF.esc(title)}</span>
+          <span class="flex items-center gap-1 text-sm font-bold text-ink min-w-0"><span class="truncate">${SF.esc(title)}</span>${SF.partnerBadge(userId)}</span>
           <span class="block text-[11px] text-muted truncate">${SF.esc(preview)}</span>
         </span>
         ${unread ? '<span class="w-2.5 h-2.5 rounded-full bg-[#81D8D0]"></span>' : ''}
@@ -62,6 +62,7 @@
     return row({
       onclick: `SF.actions.openPerson('${SF.js(c.person.id)}')`,
       kind: 'human',
+      userId: c.person.id,
       photoUrl: c.person.photoUrl,
       title: c.person.displayName,
       preview,
@@ -108,9 +109,9 @@
             ${searchResults.people === null ? '<div class="text-xs text-muted px-1">Ищу…</div>' : ''}
             ${found.map(p => `
               <div class="w-full p-3 rounded-2xl flex items-center gap-3 bg-card border border-line">
-                ${SF.avatar(p.photoUrl, { size: 44, kind: 'human' })}
+                ${SF.avatar(p.photoUrl, { size: 44, kind: 'human', userId: p.id })}
                 <span class="flex-1 min-w-0">
-                  <span class="block text-sm font-bold text-ink truncate">${SF.esc(p.displayName)}</span>
+                  <span class="flex items-center gap-1 text-sm font-bold text-ink min-w-0"><span class="truncate">${SF.esc(p.displayName)}</span>${SF.partnerBadge(p.id)}</span>
                   <span class="block text-[11px] text-muted truncate">${SF.esc(p.headline || (p.username ? `@${p.username}` : ''))}</span>
                 </span>
                 <span class="flex flex-col gap-1 flex-shrink-0">
@@ -313,9 +314,9 @@
     return `
       <div class="glass-card-3d p-3 flex items-center justify-between gap-2">
         <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="flex items-center gap-2.5 min-w-0 text-left">
-          ${SF.avatar(p.photoUrl, { size: 40, kind: 'human' })}
+          ${SF.avatar(p.photoUrl, { size: 40, kind: 'human', userId: p.id })}
           <span class="min-w-0">
-            <span class="block text-xs font-bold text-ink truncate">${name}</span>
+            <span class="flex items-center gap-1 text-xs font-bold text-ink min-w-0"><span class="truncate">${name}</span>${SF.partnerBadge(p.id, 14)}</span>
             <span class="block text-[10px] text-faint truncate">${SF.esc(p.headline || 'Открыть профиль')}</span>
           </span>
         </button>

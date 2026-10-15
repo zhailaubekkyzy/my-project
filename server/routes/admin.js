@@ -357,6 +357,17 @@ router.post('/users/:id/message', async (req, res, next) => {
 // ---------------------------------------------------------------
 // Ready-made fixes for one person
 // ---------------------------------------------------------------
+/**
+ * GET /api/admin/partners — who shares links, where, and how many people came (best first)
+ */
+router.get('/partners', async (req, res, next) => {
+  try {
+    res.json(await require('../services/partner-service').leaderboard());
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/fixes', (req, res) => {
   res.json({ fixes: supportFixes.listFixes(req.staff.role) });
 });

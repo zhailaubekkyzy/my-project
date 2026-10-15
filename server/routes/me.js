@@ -63,6 +63,29 @@ router.get('/profile', async (req, res, next) => {
 });
 
 /**
+ * GET /api/me/referral — my invitation link to SmartFlow and how many people came from me
+ */
+router.get('/referral', async (req, res, next) => {
+  try {
+    res.json(await require('../services/partner-service').myReferral(req.user.userId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/me/invite-text  { text } — my own text of the invitation (empty — back to the standard one)
+ */
+router.put('/invite-text', async (req, res, next) => {
+  try {
+    const text = await require('../services/partner-service').setInviteText(req.user.userId, req.body?.text);
+    res.json({ inviteText: text });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * PUT /api/me/lang  { lang: 'ru' | 'en' | 'auto' } — the language of the client screens and messages
  */
 router.put('/lang', async (req, res, next) => {

@@ -57,6 +57,7 @@ const defaultData = {
   // Data loaded from the server (js/data.js). null = not loaded yet.
   remote: {
     marketplace: null,       // listed consultant cards
+    partners: null,          // [{ id, count }] people with the «SMARTFLOW PARTNER» badge
     cards: {},               // consultant cards by slug (also unlisted, opened by link)
     profiles: {},            // public profiles by user id
     chats: null,             // my chats with SI-consultants (as a client)
@@ -78,6 +79,8 @@ const defaultData = {
     projectReviews: {},      // { [projectId]: [reviews] } Офис → Аналитика
     buddyCalendar: {},       // { days | 'YYYY-MM': { from, to, items } } Бадди → календарь
     broadcasts: {},          // { [projectId]: { broadcasts, limits } } Офис → «Рассылки»
+    projectLinks: {},        // { [projectId]: { links, max, withoutLink, plainUrl } } ссылки с меткой
+    referral: null,          // { url, brought, partner } моё приглашение в SmartFlow
     funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
     funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }

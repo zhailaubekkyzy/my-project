@@ -50,7 +50,7 @@
   /**
    * Round photo. kind: 'si' adds the red SI dot, 'human' a Tiffany ring.
    */
-  function avatar(url, { size = 40, kind = 'human', fallback } = {}) {
+  function avatar(url, { size = 40, kind = 'human', fallback, userId } = {}) {
     const fb = fallback || (kind === 'si' ? MASCOTS.consultant : PERSON_PLACEHOLDER);
     const ring = kind === 'si' ? 'border-[var(--si-bubble-line)]' : 'border-[#81D8D0]';
     return `
@@ -59,6 +59,7 @@
           onerror="this.onerror=null;this.src='${fb}'"
           class="w-full h-full rounded-full object-cover border-2 ${ring} bg-card" />
         ${kind === 'si' ? '<span class="si-dot absolute -bottom-0.5 -right-0.5 border-2 border-card" style="width:12px;height:12px"></span>' : ''}
+        ${kind !== 'si' && isPartner(userId) ? `<img src="${PARTNER_BADGE}" alt="SMARTFLOW PARTNER" class="absolute" style="width:${Math.max(14, Math.round(size * 0.42))}px;height:${Math.max(14, Math.round(size * 0.42))}px;right:-${Math.round(size * 0.08)}px;bottom:-${Math.round(size * 0.06)}px" />` : ''}
       </span>`;
   }
 
@@ -128,6 +129,35 @@
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2800);
   }
+
+  // "SMARTFLOW PARTNER" (owner's medal image): next to the person's photo and name everywhere.
+  // Who has it comes from the server once in a while (SF.data.ensure.partners).
+  const PARTNER_BADGE = 'images/badges/smartflow-partner.webp';
+  function partnerCount(userId) {
+    const list = window.funnelStore && window.funnelStore.data.remote.partners;
+    const found = userId && Array.isArray(list) ? list.find(p => p.id === userId) : null;
+    return found ? found.count : 0;
+  }
+  const isPartner = (userId) => partnerCount(userId) > 0;
+
+  // A small medal next to a name (nothing if the person is not a partner)
+  function partnerBadge(userId, size = 16) {
+    if (!isPartner(userId)) return '';
+    return `<img src="${PARTNER_BADGE}" alt="SMARTFLOW PARTNER" title="SMARTFLOW PARTNER" width="${size}" height="${size}" class="inline-block align-[-0.2em] flex-shrink-0" style="width:${size}px;height:${size}px" />`;
+  }
+
+  // On the profile: the medal, the words and how many people came
+  function partnerMedal(count, { size = 72 } = {}) {
+    return `
+      <div class="flex items-center justify-center gap-2.5" data-no-tr>
+        <img src="${PARTNER_BADGE}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px" />
+        <div class="text-left">
+          <div class="text-[11px] font-extrabold tracking-[0.14em] text-ink">SMARTFLOW PARTNER</div>
+          ${count ? `<div class="text-[11px] text-muted">${lang() === 'en' ? 'People came: ' : 'Пришло людей: '}<b class="text-ink">${count}</b></div>` : ''}
+        </div>
+      </div>`;
+  }
+  const lang = () => (SF.lang ? SF.lang() : 'ru');
 
   // Stars of a review: ★★★★☆ (Tiffany — it is about people)
   function stars(rating, cls = 'text-[11px]') {
@@ -243,6 +273,10 @@
     showToast,
     openModal,
     stars,
+    partnerMedal,
+    partnerBadge,
+    partnerCount,
+    isPartner,
     closeModal,
     openLink,
     copyText,

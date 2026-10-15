@@ -1,6 +1,7 @@
 // server/routes/auth.js - Authentication Routes
 const express = require('express');
 const analytics = require('../services/analytics-service');
+const partnerService = require('../services/partner-service');
 const router = express.Router();
 const authService = require('../services/auth-service');
 const projectService = require('../services/project-service');
@@ -46,7 +47,10 @@ router.post('/telegram', async (req, res, next) => {
       });
     }
 
-    // Find or create permanent internal user
+    // Find or create permanent internal user (new = first sign-in ever: the link they came by gets them)
+    const knownBefore = await db.get(
+      `SELECT user_id FROM auth_identities WHERE provider = 'telegram' AND provider_user_id = ?`, [String(verification.user.id)]
+    );
     const user = await authService.findOrCreateTelegramUser(verification.user, role || 'expert');
     if (user.status === 'blocked') {
       supportService.setBlocked(user.id, true);
@@ -60,6 +64,10 @@ router.post('/telegram', async (req, res, next) => {
     );
     user.tg_lang = String(verification.user.language_code || '').slice(0, 8) || user.tg_lang;
     analytics.capture('app_opened', user.id);
+    // A link with a source or an invitation: counted from the signed start parameter only
+    if (verification.startParam) {
+      await partnerService.recordVisit(user, verification.startParam, !knownBefore).catch(err => console.warn('[SmartFlow links]', err.message));
+    }
     const token = authService.generateSessionToken(user);
 
     // Fetch user projects and subscription
