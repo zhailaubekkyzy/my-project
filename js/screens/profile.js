@@ -176,11 +176,11 @@
       </div>`;
   }
 
-  // The standard invitation text (owner's text; SI instead of "ИИ" as everywhere). The person can change it.
+  // The standard invitation text (owner's text; "ИИ" here on purpose — owner's decision 15 Oct., friends outside SmartFlow know this word). The person can change it.
   function inviteText() {
     return SF.lang() === 'en'
-      ? 'Hi! I use SmartFlow — try it too 😉\n\nYou will have your own SI-Buddy: plan your day and get reminders; and SI-sellers: they will sell your online products for you.\n\nEverything is free for now and there is nothing to install — don\u2019t miss the best terms, only for beta members 🤩'
-      : 'Привет! Я пользуюсь SmartFlow — попробуй и ты 😉\n\nУ тебя будет свой SI-Бадди: сможешь планировать день и получать напоминания; SI-продавцы: будут за тебя продавать твои онлайн-продукты.\n\nПока всё бесплатно и ничего не нужно устанавливать — советую не пропустить самые выгодные условия только для участников бета-версии 🤩';
+      ? 'Hi! I use SmartFlow — try it too 😉\n\nYou will have your own AI-Buddy: plan your day and get reminders; and AI-sellers: they will sell your online products for you.\n\nEverything is free for now and there is nothing to install — don\u2019t miss the best terms, only for beta members 🤩'
+      : 'Привет! Я пользуюсь SmartFlow — попробуй и ты 😉\n\nУ тебя будет свой ИИ-Бадди: сможешь планировать день и получать напоминания; ИИ-продавцы: будут за тебя продавать твои онлайн-продукты.\n\nПока всё бесплатно и ничего не нужно устанавливать — советую не пропустить самые выгодные условия только для участников бета-версии 🤩';
   }
   // What goes out: the text in the field (even if not saved yet), then the link
   const inviteMessage = (r) => {
