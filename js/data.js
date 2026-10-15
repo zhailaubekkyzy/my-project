@@ -185,6 +185,21 @@
       store().setRemote('notifications', { list: [], unread: Number(res.unread) || 0 });
     }, maxAge),
 
+    // Reviews: on a card (public), mine in a chat, all of my SI-seller in the Office
+    cardReviews: (projectId) => ensure(`cardReviews:${projectId}`, async () => {
+      store().setRemote(`cardReviews.${projectId}`, await api().getCardReviews(projectId));
+    }, 60000),
+
+    myReview: (slug) => ensure(`myReview:${slug}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`myReviews.${slug}`, await api().getMyReview(slug));
+    }, 30000),
+
+    projectReviews: (projectId) => ensure(`projectReviews:${projectId}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getProjectReviews(projectId);
+      store().setRemote(`projectReviews.${projectId}`, res.reviews || []);
+    }, 30000),
     // Buddy's calendar for a period. key: 'days' (today + 2 days) or 'YYYY-MM' (a month); from/to: ISO
     buddyCalendar: (key, from, to, maxAge = 30000) => ensure(`buddyCalendar:${key}`, async () => {
       if (!signedIn()) return false;

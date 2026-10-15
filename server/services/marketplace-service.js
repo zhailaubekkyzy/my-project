@@ -8,7 +8,9 @@ const profileService = require('./profile-service');
 const CARD_SQL = `
   SELECT p.*, u.id AS author_id, u.display_name AS author_tg_name, u.profile AS author_profile,
          u.photo_media_id AS author_photo_media_id, u.avatar_url AS author_avatar_url,
-         (SELECT COUNT(*) FROM clients c WHERE c.project_id = p.id) AS dialogs
+         (SELECT COUNT(*) FROM clients c WHERE c.project_id = p.id) AS dialogs,
+         (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_count,
+         (SELECT AVG(r.rating) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_average
   FROM projects p
   JOIN users u ON u.id = p.owner_id`;
 
@@ -34,6 +36,11 @@ function toCard(row) {
     trialDays: Number(row.trial_days) || 0,
     isListed: Boolean(row.is_listed),
     stats: { dialogs: Number(row.dialogs) || 0 },
+    // Reviews of real clients: how many and the average rating (none — null)
+    reviews: {
+      count: Number(row.review_count) || 0,
+      average: Number(row.review_count) ? Math.round(Number(row.review_average) * 10) / 10 : null
+    },
     author: {
       id: row.author_id,
       name: author.displayName,

@@ -183,6 +183,26 @@ const FIXES = {
     }
   },
 
+  review_visibility: {
+    title: 'Скрыть / показать отзыв',
+    help: 'Жалоба на отзыв (оскорбления, обман, чужие личные данные) — скрыть. Отзыв остаётся в базе, автор его видит; в Маркетплейсе и в средней оценке его нет. Отзывы удаляет только сам автор (изменением), эксперт — никогда.',
+    async plan(user, { reviewId, visible }) {
+      const review = await db.get('SELECT r.*, p.name AS project_name FROM reviews r JOIN projects p ON p.id = r.project_id WHERE r.id = ? AND r.author_user_id = ?', [String(reviewId || ''), user.id]);
+      if (!review) throw new FixError('Этот отзыв написал не этот человек.', 404, 'NOT_THIS_USER');
+      const want = Boolean(visible);
+      return {
+        count: !review.hidden_at === want ? 0 : 1,
+        changes: [{ label: `Отзыв о «${review.project_name}» (${review.rating} из 5)`, before: review.hidden_at ? 'скрыт' : 'виден', after: want ? 'виден' : 'скрыт' }]
+      };
+    },
+    async apply(user, { reviewId, visible }) {
+      await db.run(
+        `UPDATE reviews SET hidden_at = ${visible ? 'NULL' : 'CURRENT_TIMESTAMP'} WHERE id = ? AND author_user_id = ?`,
+        [String(reviewId || ''), user.id]
+      );
+    }
+  },
+
   block_user: {
     title: 'Заблокировать / разблокировать человека',
     help: 'Только для спама и злоупотреблений. Заблокированный не может войти и ничего делать в приложении; его данные сохраняются.',

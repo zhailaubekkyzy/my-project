@@ -489,6 +489,69 @@
       </div>`;
   }
 
+  // After "Купили" (marked by the expert): a quiet invitation to leave a review, or my review
+  function reviewLine(state, slug) {
+    const r = state.remote.myReviews[slug];
+    if (!r || !r.canReview) return '';
+    if (r.review) {
+      return `
+        <button onclick="SF.actions.openReview('${SF.js(slug)}')" class="w-full py-1.5 px-3 rounded-xl bg-card border border-line text-[11px] text-ink-2 flex items-center justify-between gap-2">
+          <span>Ваш отзыв: ${SF.stars(r.review.rating)}${r.review.hidden ? ' <span class="text-faint">· скрыт командой</span>' : ''}</span>
+          <span class="text-brand font-semibold">Изменить</span>
+        </button>`;
+    }
+    return `
+      <button onclick="SF.actions.openReview('${SF.js(slug)}')" class="w-full py-1.5 rounded-xl bg-card border border-[#81D8D0] text-[11px] text-ink-2 flex items-center justify-center gap-1">
+        <i data-lucide="star" class="w-3.5 h-3.5 text-brand"></i>Поделитесь впечатлением — оставьте отзыв
+      </button>`;
+  }
+
+  let reviewDraft = { rating: 0 };
+  SF.actions.openReview = (slug) => {
+    const r = store().data.remote.myReviews[slug] || {};
+    reviewDraft = { slug, rating: (r.review && r.review.rating) || 0, text: (r.review && r.review.text) || '' };
+    renderReviewModal();
+  };
+
+  SF.actions.pickReviewStar = (n) => {
+    const box = document.getElementById('review-text');
+    if (box) reviewDraft.text = box.value;
+    reviewDraft.rating = n;
+    renderReviewModal();
+  };
+
+  function renderReviewModal() {
+    const card = store().data.remote.cards[reviewDraft.slug];
+    SF.openModal(`
+      <h3 class="text-sm font-bold text-ink">Отзыв${card ? ` о «${SF.esc(card.name)}»` : ''}</h3>
+      <div class="flex justify-center gap-1.5">
+        ${[1, 2, 3, 4, 5].map(n => `<button onclick="SF.actions.pickReviewStar(${n})" class="text-3xl leading-none ${n <= reviewDraft.rating ? 'text-brand' : 'text-faint'}" aria-label="${n} из 5">★</button>`).join('')}
+      </div>
+      <textarea id="review-text" maxlength="1000" rows="4" placeholder="Что понравилось, что получилось? Пара предложений поможет другим." class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-xs text-ink">${SF.esc(reviewDraft.text || '')}</textarea>
+      <div class="text-[10px] text-faint">Все увидят только ваше имя и первую букву фамилии. Отзыв можно изменить позже.</div>
+      <div class="flex gap-2">
+        <button onclick="SF.closeModal()" class="flex-1 py-2.5 rounded-xl btn-3d-dark text-xs">Отмена</button>
+        <button onclick="SF.actions.sendReview()" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold">Отправить</button>
+      </div>`);
+  }
+
+  SF.actions.sendReview = async () => {
+    const text = (document.getElementById('review-text') || {}).value || '';
+    if (!reviewDraft.rating) {
+      showToast('Поставьте оценку — от 1 до 5 звёзд');
+      return;
+    }
+    try {
+      const res = await api().saveReview(reviewDraft.slug, reviewDraft.rating, text);
+      store().setRemote(`myReviews.${reviewDraft.slug}`, { canReview: res.canReview, review: res.review });
+      SF.data.invalidate('cardReviews');
+      SF.closeModal();
+      showToast(res.created ? 'Спасибо за отзыв!' : 'Отзыв обновлён');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
+    }
+  };
+
   function renderChat(state, slug) {
     if (!SF.data.signedIn()) {
       return SF.emptyState('assistant', 'Откройте приложение в Telegram', 'Переписка с SI-продавцом доступна после входа через Telegram.');
@@ -531,6 +594,7 @@
       </div>
 
       ${chatTools(slug, consultant, thread)}
+      ${reviewLine(state, slug)}
       ${bookingPanel(slug)}
 
       ${voice && voice.slug === slug ? `
@@ -996,6 +1060,7 @@
       if (SF.data.isMissing(state, slug)) return;
       SF.data.cardBySlug(slug);
       SF.data.chatMessages(slug);
+      SF.data.myReview(slug);
       const thread = state.remote.messages[slug];
       if (thread && !thread.messages.length) startChat(slug);
       const chat = (state.remote.chats || []).find(c => c.slug === slug);

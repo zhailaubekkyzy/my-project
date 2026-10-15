@@ -282,6 +282,31 @@
       });
     },
 
+    // Reviews of real clients: public list, my own review in the chat, the expert's answers
+    async getCardReviews(projectId, offset = 0) {
+      return await apiFetch(`/api/marketplace/consultants/${encodeURIComponent(projectId)}/reviews${offset ? `?offset=${offset}` : ''}`);
+    },
+
+    async reportReview(reviewId, reason) {
+      return await apiFetch(`/api/marketplace/reviews/${encodeURIComponent(reviewId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+    },
+
+    async getMyReview(slug) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/review`);
+    },
+
+    async saveReview(slug, rating, text) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/review`, { method: 'POST', body: JSON.stringify({ rating, text }) });
+    },
+
+    async getProjectReviews(projectId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/reviews`);
+    },
+
+    async replyReview(projectId, reviewId, text) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/reply`, { method: 'POST', body: JSON.stringify({ text }) });
+    },
+
     // Move a client to a step of the funnel by hand
     async moveClientStep(projectId, clientId, stepId) {
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/step`, {
