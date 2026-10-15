@@ -12,6 +12,8 @@ const { readReceiptBody, readVoiceBody } = require('../middleware/image-upload')
 const voiceService = require('../services/voice-service');
 const reviewService = require('../services/review-service');
 const broadcastService = require('../services/broadcast-service');
+const altOfferService = require('../services/alt-offer-service');
+const analytics = require('../services/analytics-service');
 const calendarService = require('../services/calendar-service');
 
 router.use(requireAuth);
@@ -99,7 +101,9 @@ router.get('/:slug/messages', async (req, res, next) => {
       // "Не присылать рассылки" was pressed in this chat
       broadcastsOff: Boolean(lead && lead.broadcasts_off_at),
       // Which buttons to show above the input (only when the conversation needs them)
-      tools: await chatService.chatTools(project, lead, messages)
+      tools: await chatService.chatTools(project, lead, messages),
+      // Other experts' SI-sellers for the client's doubt (shown above the chat)
+      altOffers: await altOfferService.forClient(lead)
     });
   } catch (err) {
     next(err);
@@ -224,6 +228,15 @@ router.post('/:slug/review', async (req, res, next) => {
     if (err instanceof reviewService.ReviewError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
     next(err);
   }
+});
+
+/**
+ * POST /api/chat/:slug/alt-opened  { projectId } — the client opened an alternative offer (numbers only;
+ * nothing goes to the first expert's journal)
+ */
+router.post('/:slug/alt-opened', async (req, res) => {
+  analytics.capture('alt_offer_opened', req.user.userId, { from_project_id: String(req.params.slug).slice(0, 64), project_id: String(req.body?.projectId || '').slice(0, 64) });
+  res.json({ ok: true });
 });
 
 /**

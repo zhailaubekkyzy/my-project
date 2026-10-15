@@ -491,6 +491,42 @@
       </div>`;
   }
 
+  // After a doubt: other experts' SI-sellers that may solve the client's problem (owner's decision:
+  // the platform helps the client find a solution sooner). Up to 3, can be closed for this visit.
+  const hiddenAlt = new Set();
+  function altOffers(slug, thread) {
+    const list = (thread && thread.altOffers) || [];
+    if (!list.length || hiddenAlt.has(slug)) return '';
+    return `
+      <div class="p-2.5 rounded-2xl bg-card border border-line space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-semibold text-ink-2">Может подойти и это</span>
+          <button onclick="SF.actions.hideAltOffers('${SF.js(slug)}')" class="px-1 text-faint text-lg leading-none" aria-label="Скрыть">&times;</button>
+        </div>
+        <div class="flex gap-2 overflow-x-auto snap-x pb-0.5">
+          ${list.map(o => `
+            <button onclick="SF.actions.openAltOffer('${SF.js(slug)}', '${SF.js(o.id)}')" class="snap-start flex-shrink-0 w-[78%] max-w-[260px] p-2 rounded-xl bg-sunken border border-line text-left flex items-center gap-2">
+              ${SF.avatar(o.photoUrl, { size: 36, kind: 'si' })}
+              <span class="flex-1 min-w-0" data-no-tr>
+                <span class="block text-[11px] font-bold text-ink truncate">${SF.esc(o.name)}</span>
+                <span class="block text-[10px] text-ink-2 line-clamp-2 leading-snug">${SF.esc(o.offer)}</span>
+                <span class="block text-[10px] text-brand font-semibold truncate">${SF.esc(o.priceLabel)}${o.reviews && o.reviews.count ? ` · ★ ${String(o.reviews.average).replace('.', ',')}` : ''}</span>
+              </span>
+            </button>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  SF.actions.hideAltOffers = (slug) => {
+    hiddenAlt.add(slug);
+    store().notify();
+  };
+
+  SF.actions.openAltOffer = (slug, projectId) => {
+    api().altOfferOpened(slug, projectId).catch(() => {});
+    SF.openIn('marketplace', 'consultant', { id: projectId });
+  };
+
   // Small buttons above the input: share the contact (Telegram's own dialog) and send a receipt.
   // Hidden by default; the server says when the conversation needs them (thread.tools).
   const canShareContact = () => typeof window.Telegram?.WebApp?.requestContact === 'function' &&
@@ -586,6 +622,7 @@
 
     return `
       ${buyBanner(state, slug, consultant, messages)}
+      ${altOffers(slug, thread)}
 
       <div class="glass-card-3d p-3 border-[var(--si-bubble-line)] flex items-center justify-between gap-2">
         <button onclick="${consultant?.isListed ? `SF.openIn('marketplace', 'consultant', { id: '${SF.js(consultant.id)}' })` : ''}" class="flex items-center gap-2.5 min-w-0 text-left">

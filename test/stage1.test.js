@@ -2317,6 +2317,79 @@ async function runAllTests() {
     assert.strictEqual(i18n.langOf({}), 'ru');
   });
 
+  await test('60. Альтернативный оффер: при возражении — до 3 SI-продавцов других экспертов, выше проработанные', async () => {
+    const altService = require('../server/services/alt-offer-service');
+    const chatService = require('../server/services/chat-service');
+    const mkProject = async (ownerId, name, fields, settings = {}) => {
+      const p = await projectService.createProject(ownerId, { name });
+      const id = (p.project || p).id;
+      await db.run(
+        `UPDATE projects SET status = 'active', is_listed = ?, offer = ?, description = ?, price_label = ?, payment_url = ?, custom_ai_settings = ? WHERE id = ?`,
+        [fields.listed === false ? 0 : 1, fields.offer, fields.description || '', fields.price || '', fields.pay || null, JSON.stringify(settings), id]
+      );
+      return id;
+    };
+    const otherOwner = await authService.findOrCreateTelegramUser({ id: 700060, first_name: 'Другой' }, 'expert');
+    const strong = await mkProject(expertB_InternalId, 'Продажи в рассрочку', {
+      offer: 'Курс продаж с оплатой частями', description: 'Подробно: модули, формат, поддержка, рассрочка без переплаты на 6 месяцев. '.repeat(5), price: '6 × 5 000 ₸', pay: 'https://pay.example.com/a'
+    }, { methodology: 'Сначала узнаём бюджет, потом предлагаем рассрочку. '.repeat(20), scenarios: [
+      { when: 'objection', words: 'дорого', then: 'si_says', text: 'Рассказать про оплату частями' },
+      { when: 'custom', condition: 'клиент говорит, что нет денег', then: 'si_says', text: 'Предложить мини-курс' }
+    ], steps: [{ title: 'Знакомство' }, { title: 'Оффер' }] });
+    const weak = await mkProject(otherOwner.id, 'Мини-курс продаж', { offer: 'Мини-курс продаж за 3 дня', price: '9 000 ₸' });
+    const own = await mkProject(expertA_InternalId, 'Ещё мой', { offer: 'Мой второй продукт про продажи' });
+    const hidden = await mkProject(otherOwner.id, 'Скрытый', { offer: 'Скрытый курс продаж', listed: false });
+    const rows = await db.all(`SELECT p.*, 0 AS review_count, 0 AS review_average, 0 AS materials FROM projects p WHERE p.id IN (?, ?)`, [strong, weak]);
+    const score = (id) => altService.qualityScore(rows.find(r => r.id === id));
+    assert(score(strong) > score(weak), 'A worked-out methodology scores higher');
+
+    const tg = { id: 700061, first_name: 'Сомнение' };
+    const token = await tokenFor(tg);
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    config.openaiApiKey = 'sk-test-not-real';
+    let pickPrompt = '';
+    global.fetch = async (url, options) => {
+      if (String(url).startsWith('https://api.openai.com/')) {
+        const body = JSON.parse(options.body);
+        const system = body.messages[0].content;
+        if (system.includes('Клиент засомневался')) {
+          pickPrompt = system;
+          return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ids: [weak, 'proj_bogus', strong, own] }) } }] }), { status: 200 });
+        }
+        const content = body.response_format
+          ? JSON.stringify({ offer_made: false, offer_answered: true, objection: 'дорого', refused: false, conditions: [] })
+          : 'Понимаю вас.';
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }
+      return realFetch(url, options);
+    };
+    try {
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Слишком дорого для меня сейчас' });
+      await chatService.altOffersSettled();
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+    assert(pickPrompt.indexOf(strong) < pickPrompt.indexOf(weak), 'Better worked-out ones come first in the list');
+    assert(!pickPrompt.includes(own) && !pickPrompt.includes(hidden), 'Not the same expert, not unlisted');
+    let chat = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body;
+    assert.deepStrictEqual(chat.altOffers.map(o => o.id), [weak, strong], 'SI’s choice, unknown ids dropped');
+    assert.strictEqual(chat.altOffers[0].offer, 'Мини-курс продаж за 3 дня');
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, (await authService.findOrCreateTelegramUser(tg, 'expert')).id]);
+    const events = (await api('GET', `/api/projects/${projectA.id}/clients/${lead.id}`, tokenA)).body.events;
+    assert(!events.some(e => /alt|альтернатив/i.test(e.type + e.label)), 'Nothing about it in the first expert’s journal');
+
+    // Without OpenAI: common words decide, then the quality
+    const ids = await altService.refresh(await db.get('SELECT * FROM projects WHERE id = ?', [projectA.id]), lead, 'нет денег, нужна рассрочка', 'можно частями?');
+    assert.strictEqual(ids[0], strong);
+    // Bought here → no alternatives
+    await db.run(`UPDATE clients SET funnel_status = 'bought' WHERE id = ?`, [lead.id]);
+    chat = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body;
+    assert.deepStrictEqual(chat.altOffers, []);
+    await db.run(`UPDATE projects SET is_listed = 0 WHERE id IN (?, ?, ?, ?)`, [strong, weak, own, hidden]);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

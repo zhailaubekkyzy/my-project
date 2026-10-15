@@ -166,7 +166,8 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-+|-+$)/g, '') || 'si';
-  const cleanSlug = `${slugBase}-${Date.now().toString(36)}`;
+  // Time + a few random letters: two SI-sellers created in the same millisecond never share a link
+  const cleanSlug = `${slugBase}-${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex').slice(0, 3)}`;
 
   let templateCloneSettings = customAiSettings || {};
   if (templateId) {
