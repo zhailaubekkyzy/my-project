@@ -108,9 +108,12 @@
           <input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
         </label>` : ''}
 
-      <div class="glass-card-3d p-3 flex items-center justify-between text-xs">
+      <div class="glass-card-3d p-3 flex items-center justify-between gap-2 text-xs">
         <span class="text-muted">Язык интерфейса</span>
-        <span class="text-ink-2 font-semibold">Русский ${SF.soonBadge('EN скоро')}</span>
+        <span class="flex gap-1" data-no-tr>
+          ${[['ru', 'Русский'], ['en', 'English']].map(([code, label]) => `
+            <button onclick="SF.actions.setLanguage('${code}')" class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${SF.lang() === code ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-sunken text-muted border-line'}">${label}</button>`).join('')}
+        </span>
       </div>
 
       ${me.id ? `
@@ -131,6 +134,19 @@
         </button>` : ''}
     `;
   }
+
+  // Russian / English for the client screens; the server keeps it for notifications too
+  SF.actions.setLanguage = async (lang) => {
+    if (lang === SF.lang()) return;
+    SF.setLang(lang);
+    window.funnelStore.notify();
+    if (!SF.data.signedIn()) return;
+    try {
+      await window.smartFlowApi.setLanguage(lang);
+    } catch (err) {
+      SF.showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
 
   SF.actions.setSearchVisibility = async (visible) => {
     try {

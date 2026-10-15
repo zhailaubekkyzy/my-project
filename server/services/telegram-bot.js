@@ -4,6 +4,7 @@
 // messages when the Mini App asked: Telegram.WebApp.requestWriteAccess). Otherwise Telegram
 // answers 403 and we just skip: a notification must never break the main action.
 const crypto = require('crypto');
+const { langOf, pick } = require('./i18n');
 const db = require('../db');
 const config = require('../config');
 
@@ -46,7 +47,16 @@ async function saveInApp(userId, text, startParam) {
  * Sends a notification: to Buddy in the app, then a Telegram message with one button that opens
  * the Mini App on startParam. Returns true if Telegram accepted it. Never throws.
  */
-async function notifyUser(userId, text, { buttonText = 'Открыть в SmartFlow', startParam } = {}) {
+async function notifyUser(userId, rawText, { buttonText = 'Открыть в SmartFlow', startParam } = {}) {
+  // Texts for clients may come as { ru, en }: the person's language decides (Russian by default)
+  let text = rawText;
+  let button = buttonText;
+  if ((rawText && typeof rawText === 'object') || (buttonText && typeof buttonText === 'object')) {
+    const lang = langOf(userId ? await db.get('SELECT lang, tg_lang FROM users WHERE id = ?', [userId]) : null);
+    text = pick(rawText, lang);
+    button = pick(buttonText, lang);
+  }
+  buttonText = button;
   await saveInApp(userId, text, startParam);
   try {
     const chatId = await telegramIdOfUser(userId);

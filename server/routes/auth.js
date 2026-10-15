@@ -55,9 +55,10 @@ router.post('/telegram', async (req, res, next) => {
     // For the support panel: when the person was last here and whether the bot may write to them
     const writeAllowed = verification.user.allows_write_to_pm;
     await db.run(
-      'UPDATE users SET last_seen_at = CURRENT_TIMESTAMP, telegram_write_allowed = COALESCE(?, telegram_write_allowed) WHERE id = ?',
-      [typeof writeAllowed === 'boolean' ? (writeAllowed ? 1 : 0) : null, user.id]
+      'UPDATE users SET last_seen_at = CURRENT_TIMESTAMP, telegram_write_allowed = COALESCE(?, telegram_write_allowed), tg_lang = COALESCE(?, tg_lang) WHERE id = ?',
+      [typeof writeAllowed === 'boolean' ? (writeAllowed ? 1 : 0) : null, String(verification.user.language_code || '').slice(0, 8) || null, user.id]
     );
+    user.tg_lang = String(verification.user.language_code || '').slice(0, 8) || user.tg_lang;
     analytics.capture('app_opened', user.id);
     const token = authService.generateSessionToken(user);
 

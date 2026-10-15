@@ -147,7 +147,7 @@
   }
 
   // ---------------- Conversation with a person ----------------
-  const msgTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
+  const msgTime = (iso) => (iso ? new Date(iso).toLocaleTimeString(SF.locale(), { hour: '2-digit', minute: '2-digit' }) : '');
 
   // Files of a conversation (photo, round video, voice) come with the session, so they are
   // fetched as blobs; the object URLs are kept while the app is open (re-renders reuse them).
@@ -671,7 +671,7 @@
                 <div class="chat-bubble-expert">${SF.formatChatMarkdown(m.text)}</div>
               </div>`;
           }
-          return `<div class="flex items-end gap-1.5"><img src="${SF.MASCOTS.assistant}" alt="SI" class="mascot-avatar" /><div class="chat-bubble-si">${SF.formatChatMarkdown(m.text)}</div></div>`;
+          return `<div class="flex items-end gap-1.5"><img src="${SF.MASCOTS.assistant}" alt="SI" class="mascot-avatar" /><div class="chat-bubble-si">${SF.formatChatMarkdown(SF.t(m.text))}</div></div>`;
         }).join('')}
       </div>
       <form onsubmit="SF.actions.sendFeedback(event)" class="flex items-center gap-2">
@@ -792,8 +792,8 @@
     const d = new Date(iso);
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   };
-  const dayLabel = (iso) => new Date(iso).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
-  const timeLabel = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const dayLabel = (iso) => new Date(iso).toLocaleDateString(SF.locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  const timeLabel = (iso) => new Date(iso).toLocaleTimeString(SF.locale(), { hour: '2-digit', minute: '2-digit' });
   const whenLabel = (iso) => `${dayLabel(iso)}, ${timeLabel(iso)}`;
 
   function rulesText(rules) {

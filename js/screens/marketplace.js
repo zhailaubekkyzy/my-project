@@ -175,7 +175,7 @@
 
   const dateLabel = (v) => {
     const d = new Date(String(v).replace(' ', 'T') + (/[Z+]/.test(String(v)) ? '' : 'Z'));
-    return isNaN(d) ? '' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    return isNaN(d) ? '' : d.toLocaleDateString(SF.locale(), { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
   function renderReviews(c, state) {

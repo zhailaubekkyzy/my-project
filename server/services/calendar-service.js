@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const telegramBot = require('./telegram-bot');
+const { langOfClient } = require('./i18n');
 const businessService = require('./business-service');
 const profileService = require('./profile-service');
 
@@ -42,8 +43,12 @@ const MONTHS = ['янв.', 'фев.', 'мар.', 'апр.', 'мая', 'июн.',
 const pad = (n) => String(n).padStart(2, '0');
 
 // "вт, 14 окт., 10:00" in the given time zone
-function whenLabel(date, offset) {
+const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function whenLabel(date, offset, lang = 'ru') {
   const d = new Date(toDate(date).getTime() + (offset || 0) * 60000);
+  if (lang === 'en') return `${WEEKDAYS_EN[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS_EN[d.getUTCMonth()]}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
   return `${WEEKDAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
@@ -279,10 +284,16 @@ async function book(chatService, project, client, atIso, { tzOffset = null, repl
   }
 
   const clientTz = await clientTzOf(client, settings.tzOffset);
-  const when = whenLabel(at, clientTz);
-  const text = replaceMeeting
+  const lang = await langOfClient(client);
+  const when = whenLabel(at, clientTz, lang);
+  let text = replaceMeeting
     ? `Готово, встреча перенесена на ${when}.${host.zoomUrl ? ` Ссылка: ${host.zoomUrl}` : ''}`
     : `Готово! Вы записаны на ${when} (${settings.durationMinutes} мин).${host.zoomUrl ? ` Ссылка на встречу: ${host.zoomUrl}` : ' Ссылку на встречу пришлём здесь.'} За час до начала напомню.`;
+  if (lang === 'en') {
+    text = replaceMeeting
+      ? `Done, the meeting is moved to ${when}.${host.zoomUrl ? ` Link: ${host.zoomUrl}` : ''}`
+      : `Done! You are booked for ${when} (${settings.durationMinutes} min).${host.zoomUrl ? ` Meeting link: ${host.zoomUrl}` : ' We will send the meeting link here.'} I will remind you an hour before.`;
+  }
   await chatService.saveMessage(client, { type: 'si' }, text);
   if (!replaceMeeting) await chatService.clientEvent(project, client, 'booked', { type: 'client' });
   else await chatService.clientEvent(project, client, 'meeting_moved', { type: 'client' });
@@ -314,7 +325,10 @@ async function cancel(chatService, project, client, meeting, by, now = new Date(
     [by.type, meeting.id]
   );
   const clientTz = await clientTzOf(client, settings.tzOffset);
-  await chatService.saveMessage(client, { type: 'si' }, `Встреча ${whenLabel(meeting.startsAt, clientTz)} отменена.${by.type === 'client' ? ' Если захотите — можно записаться снова.' : ' Можно выбрать другое время — кнопка «Записаться» в этом чате.'}`);
+  const clientLang = await langOfClient(client);
+  await chatService.saveMessage(client, { type: 'si' }, clientLang === 'en'
+    ? `The meeting on ${whenLabel(meeting.startsAt, clientTz, 'en')} is cancelled.${by.type === 'client' ? ' You can book again any time.' : ' You can choose another time — the «Book a call» button in this chat.'}`
+    : `Встреча ${whenLabel(meeting.startsAt, clientTz)} отменена.${by.type === 'client' ? ' Если захотите — можно записаться снова.' : ' Можно выбрать другое время — кнопка «Записаться» в этом чате.'}`);
   await chatService.clientEvent(project, client, 'meeting_cancelled', { type: by.type, userId: by.userId });
   const tell = by.type === 'client' ? await peopleToTell(client, meeting.hostUserId) : (String(client.external_client_id).startsWith('usr_') ? [client.external_client_id] : []);
   for (const userId of tell) {
@@ -322,8 +336,8 @@ async function cancel(chatService, project, client, meeting, by, now = new Date(
       userId,
       by.type === 'client'
         ? `📅 ${client.name || 'Клиент'} отменил(а) встречу ${whenLabel(meeting.startsAt, settings.tzOffset)}.`
-        : `📅 Встреча ${whenLabel(meeting.startsAt, clientTz)} с «${project.name}» отменена.`,
-      { buttonText: 'Открыть', startParam: by.type === 'client' ? 'CAL' : project.slug }
+        : { ru: `📅 Встреча ${whenLabel(meeting.startsAt, clientTz)} с «${project.name}» отменена.`, en: `📅 The meeting on ${whenLabel(meeting.startsAt, clientTz, 'en')} with «${project.name}» is cancelled.` },
+      { buttonText: by.type === 'client' ? 'Открыть' : { ru: 'Открыть', en: 'Open' }, startParam: by.type === 'client' ? 'CAL' : project.slug }
     );
   }
 }
@@ -385,7 +399,10 @@ async function runMeetingReminders(now = new Date()) {
     const link = m.zoom_url ? `\nСсылка: ${m.zoom_url}` : '';
     if (String(m.external_client_id || '').startsWith('usr_')) {
       const tz = cleanOffset((await db.get('SELECT tz_offset_minutes FROM users WHERE id = ?', [m.external_client_id]) || {}).tz_offset_minutes) ?? settings.tzOffset;
-      await telegramBot.notifyUser(m.external_client_id, `⏰ Через час встреча с «${m.project_name || 'экспертом'}»: ${whenLabel(m.starts_at, tz)}.${link}`, { buttonText: 'Открыть чат', startParam: m.slug });
+      await telegramBot.notifyUser(m.external_client_id, {
+        ru: `⏰ Через час встреча с «${m.project_name || 'экспертом'}»: ${whenLabel(m.starts_at, tz)}.${link}`,
+        en: `⏰ In an hour: a meeting with «${m.project_name || 'the expert'}», ${whenLabel(m.starts_at, tz, 'en')}.${link.replace('Ссылка:', 'Link:')}`
+      }, { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: m.slug });
     }
     await telegramBot.notifyUser(m.host_user_id, `⏰ Через час встреча: ${m.client_name || 'клиент'} — ${whenLabel(m.starts_at, settings.tzOffset)}.${link}`, { buttonText: 'Открыть календарь', startParam: 'CAL' });
     sent++;

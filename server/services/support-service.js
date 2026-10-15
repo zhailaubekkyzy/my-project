@@ -194,7 +194,10 @@ async function sessionUser(user) {
     ...profileService.toPublicUser(user),
     supportCode: await ensureSupportCode(user.id),
     staffRole: await staffRoleOf(user.id),
-    clientResetAt: user.client_reset_at || null
+    clientResetAt: user.client_reset_at || null,
+    // RU/EN of the client screens: chosen in Профиль, otherwise Telegram's language
+    lang: require('./i18n').langOf(user),
+    langChosen: user.lang === 'ru' || user.lang === 'en'
   };
 }
 

@@ -128,21 +128,26 @@ async function reviewReceipt(project, client, receiptId, action, member) {
 
   const author = { type: member.role === 'assistant' ? 'assistant' : 'owner', userId: member.userId };
   let text;
+  const en = (await require('./i18n').langOfClient(client)) === 'en';
   if (confirm) {
     await chatService.markOutcome(project, client, 'paid', member);
     text = project.access_url
-      ? `Оплата подтверждена, спасибо! 🎉 Ваш доступ: ${project.access_url}`
-      : 'Оплата подтверждена, спасибо! 🎉 Скоро напишем, как получить доступ.';
+      ? (en ? `Payment confirmed, thank you! 🎉 Your access: ${project.access_url}` : `Оплата подтверждена, спасибо! 🎉 Ваш доступ: ${project.access_url}`)
+      : (en ? 'Payment confirmed, thank you! 🎉 We will soon write how to get access.' : 'Оплата подтверждена, спасибо! 🎉 Скоро напишем, как получить доступ.');
   } else {
     await funnelService.recordEvent(client, 'receipt_rejected', author);
-    text = 'Пока не получилось подтвердить оплату по этому чеку. Мы напишем вам здесь, что нужно уточнить.';
+    text = en
+      ? 'We could not confirm the payment by this receipt yet. We will write here what needs clarifying.'
+      : 'Пока не получилось подтвердить оплату по этому чеку. Мы напишем вам здесь, что нужно уточнить.';
   }
   const message = await chatService.saveMessage(client, author, text);
   if (String(client.external_client_id || '').startsWith('usr_')) {
     await telegramBot.notifyUser(
       client.external_client_id,
-      confirm ? `✅ Оплата подтверждена: «${project.name}».` : `🧾 По вашему чеку для «${project.name}» есть вопрос.`,
-      { buttonText: 'Открыть чат', startParam: project.slug }
+      confirm
+        ? { ru: `✅ Оплата подтверждена: «${project.name}».`, en: `✅ Payment confirmed: «${project.name}».` }
+        : { ru: `🧾 По вашему чеку для «${project.name}» есть вопрос.`, en: `🧾 There is a question about your receipt for «${project.name}».` },
+      { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
     );
   }
   return { receipt: toReceipt(await db.get('SELECT * FROM payment_receipts WHERE id = ?', [receipt.id])), message, funnelStatus: client.funnel_status };
