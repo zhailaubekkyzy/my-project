@@ -57,7 +57,7 @@
   function timeLabel(value) {
     if (!value) return '';
     const d = new Date(String(value).replace(' ', 'T') + (/[Z+]/.test(String(value)) ? '' : 'Z'));
-    return isNaN(d) ? '' : d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return isNaN(d) ? '' : d.toLocaleString(SF.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
   // Where a Buddy message's button leads (the same params as the bot's buttons)
@@ -88,9 +88,9 @@
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
   const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  const hhmm = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  const dayShort = (d) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
-  const dayLong = (d) => d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  const hhmm = (iso) => new Date(iso).toLocaleTimeString(SF.locale(), { hour: '2-digit', minute: '2-digit' });
+  const dayShort = (d) => d.toLocaleDateString(SF.locale(), { day: 'numeric', month: 'short' }).replace('.', '');
+  const dayLong = (d) => d.toLocaleDateString(SF.locale(), { weekday: 'long', day: 'numeric', month: 'long' });
   const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const itemsOn = (items, day) => items.filter(i => sameDay(new Date(i.startsAt), day));
 
@@ -339,7 +339,7 @@
       ${signedIn ? calendarStrip(route, state) : ''}
 
       <div class="glass-card-3d p-3 flex flex-col space-y-2.5 flex-1 min-h-[220px] overflow-y-auto" id="buddy-scroll">
-        ${buddyBubble(`Привет, ${firstName}! Я Бадди — ваш помощник на каждый день. Напишите, что запланировать или о чём напомнить, — я запомню. Все уведомления тоже приходят сюда.`)}
+        ${buddyBubble(SF.t(`Привет, ${firstName}! Я Бадди — ваш помощник на каждый день. Напишите, что запланировать или о чём напомнить, — я запомню. Все уведомления тоже приходят сюда.`))}
         ${list.map(m => m.sender === 'user'
           ? `<div class="flex flex-col items-end gap-0.5"><div class="chat-bubble-human">${m.kind === 'voice' ? '<i data-lucide="mic" class="w-3 h-3 inline -mt-0.5 mr-1 opacity-70"></i>' : ''}${SF.esc(m.text)}</div><div class="text-[9px] text-faint px-1">${timeLabel(m.createdAt)}</div></div>`
           : buddyBubble(SF.esc(m.text).replace(/\n/g, '<br>'), {
@@ -347,7 +347,7 @@
             unread: !m.read,
             buttons: m.startParam ? `<button onclick="SF.openStartParam('${SF.js(m.startParam)}')" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-[11px] font-bold">${BUTTONS[m.startParam] || 'Открыть'}</button>` : ''
           })).join('')}
-        ${step ? buddyBubble(SF.esc(step.text), {
+        ${step ? buddyBubble(SF.esc(SF.t(step.text)), {
           buttons: step.primary ? `
             <div class="flex flex-wrap gap-2">
               <button onclick="${step.primary.action}" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-[11px] font-bold">${step.primary.label}</button>

@@ -18,6 +18,7 @@ const siEngine = require('./si-engine');
 const telegramBot = require('./telegram-bot');
 const profileService = require('./profile-service');
 const analytics = require('./analytics-service');
+const { langOf } = require('./i18n');
 
 const DAILY_LIMIT = 30;
 const MAX_TEXT = 1000;
@@ -35,6 +36,12 @@ const PLACES = {
 };
 const LIMIT_TEXT = 'На сегодня я ответил на все 30 сообщений — давайте продолжим завтра 🙂 Напоминания и уведомления будут приходить как обычно.';
 const NO_AI_TEXT = 'Я пока не могу отвечать на сообщения — подключение ещё настраивается. Уведомления и напоминания будут приходить сюда как обычно.';
+const EN_TEXTS = {
+  [LIMIT_TEXT]: 'I have answered all 30 messages for today — let\u2019s continue tomorrow 🙂 Reminders and notifications will come as usual.',
+  [NO_AI_TEXT]: 'I cannot answer messages yet — the connection is still being set up. Notifications and reminders will come here as usual.',
+  'Извините, я не расслышал — напишите, пожалуйста, ещё раз 🙂': 'Sorry, I did not catch that — please write again 🙂'
+};
+const inLang = (text, lang) => (lang === 'en' && EN_TEXTS[text] ? EN_TEXTS[text] : text);
 
 const newId = (prefix) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
 const sqlTime = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
@@ -198,7 +205,7 @@ function planLine(r, offset) {
   return `${localLabel(at, offset)} — ${what}${remind}`;
 }
 
-function systemPrompt(user, offset, now, reminders, meetings = []) {
+function systemPrompt(user, offset, now, reminders, meetings = [], lang = 'ru') {
   const name = (profileService.toPublicUser(user).displayName || '').split(' ')[0];
   return [
     'Ты — Бадди, личный помощник человека в приложении SmartFlow на каждый день.',
@@ -218,6 +225,9 @@ function systemPrompt(user, offset, now, reminders, meetings = []) {
     'Чаты (переписки с SI-продавцами, с людьми и с поддержкой; поиск чатов и людей), Профиль. Инкубатор — скоро.',
     '',
     `Сейчас у человека: ${localLabel(now, offset)}.`,
+    lang === 'en'
+      ? 'Язык приложения у человека — английский: отвечай по-английски (если он сам пишет на другом языке — на его языке). Поле text в plans — тоже на его языке.'
+      : 'Отвечай на языке человека (обычно русский).',
     name ? `Имя: ${name}.` : '',
     'Его календарь — планы и напоминания (номер. когда — что):',
     ...(reminders.length
@@ -250,6 +260,7 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
     await db.run('UPDATE users SET tz_offset_minutes = ? WHERE id = ?', [offset, user.id]);
   }
 
+  const lang = langOf(user);
   const before = await usage(user.id, offset, now);
   const mine = await saveMessage(user.id, 'user', text, { kind: voice ? 'voice' : 'chat' });
   analytics.capture('buddy_message', user.id, { voice, limit_reached: before.used >= DAILY_LIMIT });
@@ -259,21 +270,21 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
     // Say it once a day; then stay quiet (no OpenAI)
     const told = await db.get(
       `SELECT id FROM notifications WHERE user_id = ? AND sender = 'buddy' AND text = ? AND created_at >= ? LIMIT 1`,
-      [user.id, LIMIT_TEXT, sqlTime(localMidnightUtc(now, offset))]
+      [user.id, inLang(LIMIT_TEXT, lang), sqlTime(localMidnightUtc(now, offset))]
     );
-    if (!told) created.push(await saveMessage(user.id, 'buddy', LIMIT_TEXT));
+    if (!told) created.push(await saveMessage(user.id, 'buddy', inLang(LIMIT_TEXT, lang)));
     return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT }, limitReached: true };
   }
 
   if (!siEngine.isConfigured()) {
-    created.push(await saveMessage(user.id, 'buddy', NO_AI_TEXT));
+    created.push(await saveMessage(user.id, 'buddy', inLang(NO_AI_TEXT, lang)));
     return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT } };
   }
 
   const reminders = await upcomingPlans(user.id, now, PROMPT_PLANS);
   const meetings = await meetingsOf(user.id, new Date(now.getTime() - 3600000), new Date(now.getTime() + 31 * 86400000));
   const history = (await messages(user.id, HISTORY + 1)).slice(0, -1); // without the message just saved
-  const chat = [{ role: 'system', content: systemPrompt(user, offset, now, reminders, meetings.slice(0, 20)) }];
+  const chat = [{ role: 'system', content: systemPrompt(user, offset, now, reminders, meetings.slice(0, 20), lang) }];
   for (const m of history) {
     chat.push({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text });
   }
@@ -284,7 +295,7 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
   try { parsed = answer ? JSON.parse(answer) : null; } catch (e) { parsed = null; }
   const reply = parsed && typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
-    : 'Извините, я не расслышал — напишите, пожалуйста, ещё раз 🙂';
+    : inLang('Извините, я не расслышал — напишите, пожалуйста, ещё раз 🙂', lang);
 
   // Plans and reminders (in the future, within a year, not too many). "reminders" is the older answer
   // format: a reminder at that very time.
@@ -334,7 +345,7 @@ async function runReminders(now = new Date()) {
     // Taken by this run only (another server copy may run at the same time)
     const taken = await db.run('UPDATE buddy_reminders SET sent_at = CURRENT_TIMESTAMP WHERE id = ? AND sent_at IS NULL', [r.id]);
     if (Number(taken.changes) !== 1) continue;
-    await telegramBot.notifyUser(r.user_id, await reminderText(r), { buttonText: 'Открыть Бадди' });
+    await telegramBot.notifyUser(r.user_id, await reminderText(r), { buttonText: { ru: 'Открыть Бадди', en: 'Open Buddy' } });
     sent++;
   }
   return { sent };
@@ -344,10 +355,11 @@ async function runReminders(now = new Date()) {
 async function reminderText(r) {
   const starts = r.starts_at ? toDate(r.starts_at) : null;
   const remind = toDate(r.remind_at);
-  if (r.kind !== 'plan' || !starts || starts - remind < 60000) return `⏰ Напоминаю: ${r.text}`;
-  const user = await db.get('SELECT tz_offset_minutes FROM users WHERE id = ?', [r.user_id]);
+  const user = await db.get('SELECT tz_offset_minutes, lang, tg_lang FROM users WHERE id = ?', [r.user_id]);
+  const en = langOf(user) === 'en';
+  if (r.kind !== 'plan' || !starts || starts - remind < 60000) return `⏰ ${en ? 'Reminder' : 'Напоминаю'}: ${r.text}`;
   const local = localClock(starts, cleanOffset(user && user.tz_offset_minutes) ?? 0);
-  return `⏰ Скоро, в ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}: ${r.text}`;
+  return `⏰ ${en ? 'Soon, at' : 'Скоро, в'} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}: ${r.text}`;
 }
 
 module.exports = {

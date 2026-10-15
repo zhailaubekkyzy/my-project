@@ -410,7 +410,8 @@ async function markOutcome(project, client, outcome, member) {
 async function startConversation(project, lead) {
   const past = await history(project.id, lead.id);
   if (past.length) return null;
-  const result = await siEngine.generateOpener({ project: { ...project, clientStepId: lead.step_id }, expertName: await expertNameOf(project) });
+  const clientLang = await require('./i18n').langOfClient(lead);
+  const result = await siEngine.generateOpener({ project: { ...project, clientStepId: lead.step_id, clientLang }, expertName: await expertNameOf(project) });
   // Another request may have started the chat meanwhile: keep a single opener
   if ((await history(project.id, lead.id)).length) return null;
   const opener = await saveMessage(lead, SI, result.text);
@@ -472,9 +473,9 @@ async function humanReply(project, client, text, member) {
     await telegramBot.notifyUser(
       client.external_client_id,
       author.type === 'assistant'
-        ? `💬 Помощник ${expertName} ответил(а) вам лично в SmartFlow.`
-        : `💬 ${expertName} ответил(а) вам лично в SmartFlow.`,
-      { buttonText: 'Открыть чат', startParam: project.slug }
+        ? { ru: `💬 Помощник ${expertName} ответил(а) вам лично в SmartFlow.`, en: `💬 ${expertName}’s assistant replied to you personally in SmartFlow.` }
+        : { ru: `💬 ${expertName} ответил(а) вам лично в SmartFlow.`, en: `💬 ${expertName} replied to you personally in SmartFlow.` },
+      { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
     );
   }
   return message;

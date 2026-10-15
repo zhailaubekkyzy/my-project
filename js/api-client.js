@@ -385,6 +385,11 @@
       return await apiFetch(`/api/people/search?q=${encodeURIComponent(q)}`);
     },
 
+    // RU/EN of the client screens and messages: 'ru' | 'en' | 'auto'
+    async setLanguage(lang) {
+      return await apiFetch('/api/me/lang', { method: 'PUT', body: JSON.stringify({ lang }) });
+    },
+
     async setSearchVisibility(hidden) {
       return await apiFetch('/api/people/visibility', { method: 'PUT', body: JSON.stringify({ hidden }) });
     },

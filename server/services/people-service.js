@@ -329,8 +329,10 @@ async function send(meId, otherId, rawText, file = null) {
     const firstTime = thread.status === 'pending' && thread.started_by === meId;
     await telegramBot.notifyUser(
       otherId,
-      firstTime ? `👋 ${name} хочет с вами пообщаться в SmartFlow.` : `💬 Новое сообщение от ${name} в SmartFlow.`,
-      { buttonText: 'Открыть', startParam: `U_${meId}` }
+      firstTime
+        ? { ru: `👋 ${name} хочет с вами пообщаться в SmartFlow.`, en: `👋 ${name} wants to talk with you in SmartFlow.` }
+        : { ru: `💬 Новое сообщение от ${name} в SmartFlow.`, en: `💬 New message from ${name} in SmartFlow.` },
+      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `U_${meId}` }
     );
   }
   return { message: toMessage({ id, text, kind, file_id: fileId, seconds, sender_id: meId, created_at: now }, meId) };

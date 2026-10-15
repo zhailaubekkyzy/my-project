@@ -63,6 +63,20 @@ router.get('/profile', async (req, res, next) => {
 });
 
 /**
+ * PUT /api/me/lang  { lang: 'ru' | 'en' | 'auto' } — the language of the client screens and messages
+ */
+router.put('/lang', async (req, res, next) => {
+  try {
+    const value = ['ru', 'en'].includes(req.body?.lang) ? req.body.lang : null;
+    await db.run('UPDATE users SET lang = ? WHERE id = ?', [value, req.user.userId]);
+    const user = await db.get('SELECT lang, tg_lang FROM users WHERE id = ?', [req.user.userId]);
+    res.json({ lang: require('../services/i18n').langOf(user), langChosen: Boolean(value) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * PUT /api/me/profile
  * Body: { displayName, headline, bio, regalia, results, links: [{label, url}], offerButton, language }
  */

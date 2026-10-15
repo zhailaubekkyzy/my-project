@@ -111,6 +111,10 @@ function fallbackReply(project, userText) {
 
 // First message when a person opens the consultant's link (without OpenAI)
 function fallbackOpener(project) {
+  if (project.clientLang === 'en') {
+    const what = project.offer ? ` ${String(project.offer).replace(/[.!]+$/, '')} — that\u2019s what I help with.` : '';
+    return `Hello! So glad you stopped by 🙂${what} What matters most to you right now?`;
+  }
   const offer = project.offer ? ` ${String(project.offer).replace(/[.!]+$/, '')} — с этим я помогаю.` : '';
   return `Здравствуйте! Как хорошо, что вы заглянули 🙂${offer} Расскажите, что для вас сейчас важнее всего?`;
 }
@@ -154,6 +158,7 @@ async function generateOpener({ project, expertName }) {
     {
       role: 'user',
       content: '(Служебно: человек только что открыл чат по вашей ссылке и ещё ничего не написал. ' +
+        (project.clientLang === 'en' ? 'Приложение у него на английском — напишите по-английски. ' : '') +
         'Начните разговор первым: тепло поздоровайтесь, в одном предложении скажите, чем можете помочь, ' +
         'и задайте один простой вопрос о его ситуации. Не упоминайте эту служебную пометку.)'
     }

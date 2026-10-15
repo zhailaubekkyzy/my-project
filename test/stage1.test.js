@@ -2276,6 +2276,47 @@ async function runAllTests() {
     await db.run(`UPDATE broadcasts SET started_at = '2020-01-01 00:00:00' WHERE project_id = ?`, [projectA.id]);
   });
 
+  await test('59. Языки RU/EN для клиентов: язык из Telegram или выбранный, уведомления и Бадди на языке человека', async () => {
+    const tg = { id: 700059, first_name: 'John', language_code: 'en' };
+    const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg), role: 'expert' });
+    assert.strictEqual(login.body.user.lang, 'en', 'English from Telegram');
+    assert.strictEqual(login.body.user.langChosen, false);
+    const token = login.body.token;
+    const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+
+    // The SI greets in English (without OpenAI — the English template)
+    const start = await api('POST', `/api/chat/${projectA.slug}/start`, token);
+    assert(/^Hello! So glad you stopped by/.test(start.body.opener.text), 'The opener is in English');
+    // Buddy's fixed texts are in English
+    const buddy = await api('POST', '/api/buddy/messages', token, { text: 'Hi', tzOffset: 0 });
+    assert(buddy.body.messages[1].text.startsWith('I cannot answer messages yet'));
+
+    // Notifications to this client: English; the expert's stay Russian
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, user.id]);
+    telegramBot.testOutbox.length = 0;
+    const chatService = require('../server/services/chat-service');
+    await chatService.humanReply(await db.get('SELECT * FROM projects WHERE id = ?', [projectA.id]), lead, 'Hello, John!', { userId: expertA_InternalId, role: 'owner' });
+    const toJohn = telegramBot.testOutbox.find(m => m.userId === user.id);
+    assert(toJohn && /replied to you personally/.test(toJohn.text), 'The client gets English');
+    assert.strictEqual(toJohn.reply_markup.inline_keyboard[0][0].text, 'Open chat');
+
+    // Chosen in Profile: Russian wins over Telegram; "auto" returns to Telegram's
+    assert.strictEqual((await api('PUT', '/api/me/lang', token, { lang: 'ru' })).body.lang, 'ru');
+    telegramBot.testOutbox.length = 0;
+    await telegramBot.notifyUser(user.id, { ru: 'Привет', en: 'Hi' });
+    assert.strictEqual(telegramBot.testOutbox[0].text, 'Привет');
+    const relog = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg), role: 'expert' });
+    assert.deepStrictEqual([relog.body.user.lang, relog.body.user.langChosen], ['ru', true], 'The choice is kept after a new sign-in');
+    assert.strictEqual((await api('PUT', '/api/me/lang', token, { lang: 'auto' })).body.lang, 'en');
+
+    // Russian-speaking Telegram languages stay Russian
+    const i18n = require('../server/services/i18n');
+    assert.strictEqual(i18n.langOf({ tg_lang: 'kk' }), 'ru');
+    assert.strictEqual(i18n.langOf({ tg_lang: 'uk' }), 'ru');
+    assert.strictEqual(i18n.langOf({ tg_lang: 'de' }), 'en');
+    assert.strictEqual(i18n.langOf({}), 'ru');
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

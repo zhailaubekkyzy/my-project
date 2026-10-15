@@ -124,7 +124,7 @@
     toast.id = 'app-toast';
     toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-[90vw] pl-1.5 pr-4 py-1.5 rounded-2xl bg-card border border-[#81D8D0]/60 text-ink text-xs font-semibold shadow-2xl flex items-center gap-2';
     toast.innerHTML = `<img src="${MASCOTS.buddy}" alt="" class="w-7 h-7 flex-shrink-0" /><span></span>`;
-    toast.querySelector('span').textContent = msg;
+    toast.querySelector('span').textContent = SF.clientScreen !== false && SF.t ? SF.t(msg) : msg;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2800);
   }
@@ -145,6 +145,7 @@
         </div>
       </div>`;
     if (window.lucide) window.lucide.createIcons();
+    if (SF.clientScreen !== false && SF.translateDom) SF.translateDom(modal);
   }
 
   function closeModal() {

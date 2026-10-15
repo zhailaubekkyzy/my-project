@@ -143,7 +143,7 @@ async function reply(project, reviewId, text) {
   const body = clean(text, MAX_REPLY);
   await db.run('UPDATE reviews SET reply_text = ?, reply_at = ? WHERE id = ?', [body || null, body ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null, review.id]);
   if (body && !review.reply_text) {
-    await telegramBot.notifyUser(review.author_user_id, `💬 Эксперт ответил на ваш отзыв о «${project.name}».`, { buttonText: 'Открыть', startParam: `C_${project.id}` });
+    await telegramBot.notifyUser(review.author_user_id, { ru: `💬 Эксперт ответил на ваш отзыв о «${project.name}».`, en: `💬 The expert replied to your review of «${project.name}».` }, { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `C_${project.id}` });
   }
   return { ...toPublic({ ...(await db.get(`${LIST_SQL} WHERE r.id = ?`, [review.id])) }) };
 }

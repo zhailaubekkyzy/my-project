@@ -34,6 +34,11 @@ async function initTelegramAuth() {
     try {
       const res = await api.loginWithTelegram(initData, 'expert');
       store.setAuth(res);
+      // The language the server knows (chosen in Профиль or Telegram's) wins over this device's guess
+      if (res.user && res.user.lang && SF.setLang && res.user.lang !== SF.lang()) {
+        SF.setLang(res.user.lang, { remember: Boolean(res.user.langChosen) });
+        store.notify();
+      }
     } catch (err) {
       if (err.data?.code === 'TELEGRAM_INITDATA_EXPIRED') {
         store.setSessionExpired(err.data);
@@ -325,6 +330,9 @@ function renderApp(state) {
     SF.reportAppError(err, `afterRender ${tab}/${route.screen}`);
   }
   if (window.lucide) window.lucide.createIcons();
+  // English for clients: the Office and the support panel stay Russian (owner's decision)
+  SF.clientScreen = !(tab === 'marketplace' && String(route.screen).startsWith('office')) && !(tab === 'profile' && String(route.screen).startsWith('admin'));
+  if (SF.clientScreen && SF.translateDom) SF.translateDom(container);
 }
 
 function renderBottomNav(state) {

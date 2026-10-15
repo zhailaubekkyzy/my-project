@@ -153,8 +153,8 @@ async function act(project, client, scenario, scenarios) {
       })).text;
     await chatService.saveMessage(client, { type: 'si' }, text);
     if (String(client.external_client_id || '').startsWith('usr_')) {
-      await telegramBot.notifyUser(client.external_client_id, `💬 «${project.name}» написал(а) вам в SmartFlow.`, {
-        buttonText: 'Открыть чат', startParam: project.slug
+      await telegramBot.notifyUser(client.external_client_id, { ru: `💬 «${project.name}» написал(а) вам в SmartFlow.`, en: `💬 «${project.name}» wrote to you in SmartFlow.` }, {
+        buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug
       });
     }
   } else if (scenario.then === 'handover') {

@@ -332,7 +332,7 @@ async function runBroadcasts(now = new Date()) {
     await db.run('UPDATE broadcasts SET sent = sent + 1 WHERE id = ?', [b.id]);
     if (String(client.external_client_id || '').startsWith('usr_')) {
       await telegramBot.notifyUser(client.external_client_id, `📣 «${b.project_name}»: ${b.text.slice(0, 200)}${b.text.length > 200 ? '…' : ''}`, {
-        buttonText: 'Открыть чат', startParam: b.slug
+        buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: b.slug
       });
     }
     sent++;
