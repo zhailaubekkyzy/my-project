@@ -129,6 +129,25 @@
     setTimeout(() => toast.remove(), 2800);
   }
 
+  // "SMARTFLOW PARTNER": a gold medal with rays, a turquoise ring and a red ribbon; the partner's own photo inside
+  function partnerMedal(photoUrl, count, { size = 96 } = {}) {
+    const inner = Math.round(size * 0.62);
+    return `
+      <div class="flex flex-col items-center gap-1.5" data-no-tr>
+        <div class="relative" style="width:${size}px;height:${size + Math.round(size * 0.28)}px">
+          <div class="absolute left-1/2 -translate-x-1/2 top-0" style="width:${Math.round(size * 0.36)}px;height:${Math.round(size * 0.34)}px;background:linear-gradient(90deg,#b5121b,#e0313b 50%,#b5121b);clip-path:polygon(0 0,100% 0,78% 100%,22% 100%)"></div>
+          <div class="absolute left-0 rounded-full shadow-lg flex items-center justify-center" style="top:${Math.round(size * 0.28)}px;width:${size}px;height:${size}px;background:repeating-conic-gradient(from 0deg,#f7d774 0deg 5deg,#c9962b 5deg 10deg);">
+            <div class="rounded-full flex items-center justify-center" style="width:${Math.round(size * 0.78)}px;height:${Math.round(size * 0.78)}px;background:radial-gradient(circle,#f3cf6a,#b8862a);box-shadow:inset 0 0 0 ${Math.max(2, Math.round(size * 0.03))}px #3fc1b5">
+              <img src="${photoSrc(photoUrl, PERSON_PLACEHOLDER)}" alt="" onerror="this.onerror=null;this.src='${PERSON_PLACEHOLDER}'" class="rounded-full object-cover bg-card" style="width:${inner}px;height:${inner}px;filter:sepia(.35) saturate(1.15)" />
+            </div>
+          </div>
+        </div>
+        <div class="text-[11px] font-extrabold tracking-[0.18em] text-amber-600">SMARTFLOW PARTNER</div>
+        ${count !== undefined && count !== null ? `<div class="text-[11px] text-muted">${lang() === 'en' ? 'People came: ' : 'Пришло людей: '}<b class="text-ink">${count}</b></div>` : ''}
+      </div>`;
+  }
+  const lang = () => (SF.lang ? SF.lang() : 'ru');
+
   // Stars of a review: ★★★★☆ (Tiffany — it is about people)
   function stars(rating, cls = 'text-[11px]') {
     const n = Math.max(0, Math.min(5, Math.round(Number(rating) || 0)));
@@ -243,6 +262,7 @@
     showToast,
     openModal,
     stars,
+    partnerMedal,
     closeModal,
     openLink,
     copyText,

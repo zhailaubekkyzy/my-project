@@ -116,6 +116,8 @@
         </span>
       </div>
 
+      ${renderInvite(state)}
+
       ${me.id ? `
         <button onclick="SF.copyText('https://t.me/smartflow_ai_support_bot/app?startapp=P_${SF.js(me.id)}', 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
           <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться профилем
@@ -133,6 +135,24 @@
           Ваш номер для поддержки: <span class="font-semibold text-muted">${SF.esc(me.supportCode)}</span>
         </button>` : ''}
     `;
+  }
+
+  // Invitation to SmartFlow and the partner programme: people who come by my links are counted
+  function renderInvite(state) {
+    if (!SF.data.signedIn()) return '';
+    const r = state.remote.referral;
+    return `
+      <div class="glass-card-3d p-3.5 space-y-2 text-xs">
+        ${r && r.partner ? SF.partnerMedal(state.me.photoUrl, r.brought, { size: 88 }) : ''}
+        <div class="font-bold text-ink">Пригласить в SmartFlow</div>
+        <div class="text-[11px] text-muted leading-snug">Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам. Самые активные получают знак «SMARTFLOW PARTNER» в профиле.</div>
+        ${r ? `
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-mono text-brand truncate flex-1">${SF.esc(r.url)}</span>
+            <button onclick="SF.copyText('${SF.js(r.url)}', 'Ссылка скопирована')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[11px] flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i>Копировать</button>
+          </div>
+          <div class="text-[11px] text-ink-2">Пришло по вашим ссылкам: <b>${r.brought}</b>${r.partner ? '' : ` · знак партнёра — с ${r.partnerMin}`}</div>` : '<div class="text-muted">Загружаю…</div>'}
+      </div>`;
   }
 
   // Russian / English for the client screens; the server keeps it for notifications too
@@ -326,6 +346,7 @@
     },
     afterRender(route, state) {
       if (isAdmin(route)) SF.admin.afterRender(route, state);
+      else if (route.screen !== 'edit') SF.data.referral();
     }
   };
 })(window);

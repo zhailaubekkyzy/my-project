@@ -35,13 +35,14 @@ const subscriptionService = require('../server/services/subscription-service');
 /**
  * Helper to generate cryptographically authentic Telegram initData strings
  */
-function createTelegramInitData(botToken, user, authDateOffsetSeconds = 0) {
+function createTelegramInitData(botToken, user, authDateOffsetSeconds = 0, startParam = null) {
   const authDate = Math.floor(Date.now() / 1000) + authDateOffsetSeconds;
   const params = {
     auth_date: String(authDate),
     query_id: 'AAHdF6IQAAAAAN0XohDhrOrc',
     user: JSON.stringify(user)
   };
+  if (startParam) params.start_param = startParam;
 
   const dataCheckString = Object.keys(params)
     .sort()
@@ -2388,6 +2389,79 @@ async function runAllTests() {
     chat = (await api('GET', `/api/chat/${projectA.slug}/messages`, token)).body;
     assert.deepStrictEqual(chat.altOffers, []);
     await db.run(`UPDATE projects SET is_listed = 0 WHERE id IN (?, ?, ?, ?)`, [strong, weak, own, hidden]);
+  });
+
+  await test('61. Ссылки с меткой источника, приглашения и партнёры: всё засчитывается своему SI-продавцу и человеку', async () => {
+    const partnerService = require('../server/services/partner-service');
+    const login = (tg, startParam) => api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg, 0, startParam), role: 'expert' });
+
+    // Up to 3 links per SI-seller, the owner only
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: '' })).status, 400);
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/links`, tokenAssistant, { label: 'Instagram' })).status, 403);
+    const insta = (await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: 'Instagram' })).body.link;
+    const channel = (await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: 'Канал' })).body.link;
+    await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: 'Блогер Айгерим' });
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: 'Четвёртая' })).status, 400, 'Not more than 3');
+    assert.strictEqual(insta.url, `https://t.me/smartflow_ai_support_bot/app?startapp=${projectA.slug}__${insta.code}`);
+
+    // A new person comes by the Instagram link and writes to the SI-seller
+    const newbieTg = { id: 700071, first_name: 'Новичок' };
+    const first = await login(newbieTg, `${projectA.slug}__${insta.code}`);
+    assert.strictEqual(first.status, 200);
+    await api('POST', `/api/chat/${projectA.slug}/messages`, first.body.token, { text: 'Привет из Instagram' });
+    const newbie = await authService.findOrCreateTelegramUser(newbieTg, 'expert');
+    assert.strictEqual((await db.get('SELECT referred_by_link FROM users WHERE id = ?', [newbie.id])).referred_by_link, insta.id);
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, newbie.id]);
+    assert.strictEqual(lead.source_link_id, insta.id, 'The client belongs to the Instagram link');
+
+    // A code glued to another SI-seller's name is not counted anywhere
+    const fake = await login({ id: 700072, first_name: 'Хитрый' }, `another-seller__${insta.code}`);
+    assert.strictEqual(fake.status, 200);
+    // A known person: the visit counts, not as a new person; the first link of this SI-seller wins
+    const knownTg = { id: 700073, first_name: 'Знакомый' };
+    await login(knownTg, null);
+    await login(knownTg, `${projectA.slug}__${channel.code}`);
+    await login(knownTg, `${projectA.slug}__${insta.code}`);
+    const known = await login(knownTg, `${projectA.slug}__${insta.code}`); // again within 12 hours: one visit
+    await api('POST', `/api/chat/${projectA.slug}/messages`, known.body.token, { text: 'Здравствуйте' });
+    const knownUser = await authService.findOrCreateTelegramUser(knownTg, 'expert');
+    assert.strictEqual((await db.get('SELECT source_link_id FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, knownUser.id])).source_link_id, channel.id);
+    assert.strictEqual((await db.get('SELECT referred_by_link FROM users WHERE id = ?', [knownUser.id])).referred_by_link, null, 'Not a new person');
+
+    const links = (await api('GET', `/api/projects/${projectA.id}/links`, tokenA)).body;
+    const instaStats = links.links.find(l => l.id === insta.id).stats;
+    assert.deepStrictEqual([instaStats.opens, instaStats.people, instaStats.newPeople, instaStats.clients, instaStats.wrote], [2, 2, 1, 1, 1]);
+    assert.strictEqual(links.links.find(l => l.id === channel.id).stats.clients, 1);
+
+    // Hiding a link keeps it working and counted
+    await api('DELETE', `/api/projects/${projectA.id}/links/${channel.id}`, tokenA);
+    assert.strictEqual((await api('GET', `/api/projects/${projectA.id}/links`, tokenA)).body.links.length, 2);
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/links`, tokenA, { label: 'TikTok' })).status, 201, 'A free place again');
+
+    // Invitation link: people who come by it belong to the inviter; 10 people → SMARTFLOW PARTNER
+    const ref = (await api('GET', '/api/me/referral', tokenB)).body;
+    assert(/startapp=R_[a-z0-9]{6}$/.test(ref.url));
+    assert.strictEqual(ref.partner, false);
+    const code = ref.url.split('R_')[1];
+    for (let i = 0; i < partnerService.PARTNER_MIN; i++) await login({ id: 700100 + i, first_name: `Друг${i}` }, `R_${code}`);
+    const again = (await api('GET', '/api/me/referral', tokenB)).body;
+    assert.deepStrictEqual([again.brought, again.partner], [partnerService.PARTNER_MIN, true]);
+    const pub = (await api('GET', `/api/marketplace/profiles/${expertB_InternalId}`)).body.profile;
+    assert.deepStrictEqual(pub.partner, { count: partnerService.PARTNER_MIN });
+    assert.strictEqual((await api('GET', `/api/marketplace/profiles/${expertA_InternalId}`)).body.profile.partner, null, 'Expert A brought 1 person: no medal yet');
+
+    // The team sees who brings people and by which links
+    assert.strictEqual((await api('GET', '/api/admin/partners', tokenB)).status, 403);
+    config.adminUsers = [ownerTg.id.toString()];
+    try {
+      const board = (await api('GET', '/api/admin/partners', tokenOwner)).body;
+      assert.strictEqual(board.people[0].userId, expertB_InternalId, 'Who brought most is first');
+      const a = board.people.find(p => p.userId === expertA_InternalId);
+      assert.deepStrictEqual([a.brought, a.clients], [1, 2]);
+      assert(a.linkList.some(l => l.label === 'Instagram' && l.consultantName === projectA.name && l.clients === 1));
+    } finally {
+      config.adminUsers = [];
+    }
   });
 
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {

@@ -5,6 +5,7 @@ const projectService = require('../services/project-service');
 const funnelService = require('../services/funnel-service');
 const reviewService = require('../services/review-service');
 const analytics = require('../services/analytics-service');
+const partnerService = require('../services/partner-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
@@ -194,6 +195,38 @@ router.get('/:projectId/analytics', requireProjectPermission('analytics:read'), 
     },
     live: { clients, talked, clientMessages, siReplies, humanRequests, waiting }
   });
+});
+
+/**
+ * GET /api/projects/:projectId/links — links with a traffic source (up to 3) and their numbers
+ * POST /api/projects/:projectId/links  { label } — a new link for this SI-seller
+ * DELETE /api/projects/:projectId/links/:linkId — hide it (it keeps working, its people stay counted)
+ */
+router.get('/:projectId/links', requireProjectPermission('funnel:write'), async (req, res, next) => {
+  try {
+    res.json(await partnerService.projectLinks(req.project));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:projectId/links', requireProjectPermission('funnel:write'), async (req, res, next) => {
+  try {
+    res.status(201).json({ link: await partnerService.createSourceLink(req.project, req.user.userId, req.body?.label) });
+  } catch (err) {
+    if (err instanceof partnerService.PartnerError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+});
+
+router.delete('/:projectId/links/:linkId', requireProjectPermission('funnel:write'), async (req, res, next) => {
+  try {
+    await partnerService.archiveSourceLink(req.project, req.params.linkId);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof partnerService.PartnerError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
 });
 
 /**

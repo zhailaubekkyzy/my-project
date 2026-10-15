@@ -78,6 +78,8 @@ const defaultData = {
     projectReviews: {},      // { [projectId]: [reviews] } Офис → Аналитика
     buddyCalendar: {},       // { days | 'YYYY-MM': { from, to, items } } Бадди → календарь
     broadcasts: {},          // { [projectId]: { broadcasts, limits } } Офис → «Рассылки»
+    projectLinks: {},        // { [projectId]: { links, max, withoutLink, plainUrl } } ссылки с меткой
+    referral: null,          // { url, brought, partner } моё приглашение в SmartFlow
     funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
     funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }

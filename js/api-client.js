@@ -337,6 +337,23 @@
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/broadcasts`, { method: 'POST', body: JSON.stringify({ off }) });
     },
 
+    // Links with a traffic source of an SI-seller (up to 3) and my invitation to SmartFlow
+    async getProjectLinks(projectId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/links`);
+    },
+
+    async createProjectLink(projectId, label) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/links`, { method: 'POST', body: JSON.stringify({ label }) });
+    },
+
+    async removeProjectLink(projectId, linkId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
+    },
+
+    async getReferral() {
+      return await apiFetch('/api/me/referral');
+    },
+
     // Move a client to a step of the funnel by hand
     async moveClientStep(projectId, clientId, stepId) {
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/step`, {
@@ -562,6 +579,7 @@
     // ---------- Support panel (team only) ----------
     admin: {
       overview: () => apiFetch('/api/admin/overview'),
+      partners: () => apiFetch('/api/admin/partners'),
       feedbackList: (status) => apiFetch(`/api/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ''}`),
       feedback: (id) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`),
       updateFeedback: (id, patch) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(patch) }),

@@ -236,6 +236,7 @@
           <div class="text-[11px] text-muted mb-1">Доверие ${p.trust}%</div>
           ${SF.progressBar(p.trust)}
         </div>
+        ${p.partner ? `<div class="pt-2">${SF.partnerMedal(p.photoUrl, p.partner.count, { size: 84 })}</div>` : ''}
         ${pr.offerButton ? `<button onclick="${pr.offerButton.consultantId ? `SF.actions.openChat('${SF.js(pr.offerButton.consultantId)}')` : `SF.openLink('${SF.js(pr.offerButton.url)}')`}" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-tiffany text-sm">${SF.esc(pr.offerButton.label)}</button>` : ''}
         ${p.id !== store().data.me.id ? `<button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i>Написать</button>` : ''}
       </div>

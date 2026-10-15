@@ -776,6 +776,7 @@
             <button onclick="SF.copyText('${SF.js(c.link)}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[11px] flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i>Копировать</button>
           </div>
         </div>
+        ${renderSourceLinks(c, state)}
       </div>
 
       <div class="grid grid-cols-4 gap-1 bg-raised p-1 rounded-2xl border border-line">
@@ -788,6 +789,66 @@
       ${body}
     `;
   }
+
+  // Links with a traffic source: up to 3 per SI-seller, each counted separately (owner's decision)
+  function renderSourceLinks(c, state) {
+    const data = state.remote.projectLinks[c.id];
+    const stat = (s) => `перешли ${s.opens} · новых людей ${s.newPeople} · клиентов ${s.clients} · написали ${s.wrote} · купили ${s.bought}`;
+    return `
+      <details class="p-2.5 rounded-xl bg-sunken border border-line text-xs" ${data && data.links.length ? 'open' : ''}>
+        <summary class="cursor-pointer font-semibold text-ink-2">Ссылки с меткой источника${data ? ` · ${data.links.length} из ${data.max}` : ''}</summary>
+        <div class="space-y-2 mt-2">
+          <div class="text-[10px] text-muted leading-snug">Напишите, где будете делиться ссылкой (Instagram, канал, блогер) — получите отдельную ссылку на этого SI-продавца. Видно, сколько людей пришло с каждой и сколько купили.</div>
+          ${!data ? '<div class="text-muted">Загружаю…</div>' : ''}
+          ${(data ? data.links : []).map(l => `
+            <div class="p-2 rounded-lg bg-card border border-line space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-ink flex-1 truncate">${SF.esc(l.label)}</span>
+                <button onclick="SF.copyText('${SF.js(l.url)}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[10px] flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i>Копировать</button>
+                <button onclick="SF.actions.removeSourceLink('${SF.js(c.id)}', '${SF.js(l.id)}', '${SF.js(l.label)}')" class="p-1 rounded-lg btn-3d-dark" aria-label="Убрать ссылку"><i data-lucide="x" class="w-3 h-3"></i></button>
+              </div>
+              <div class="text-[10px] font-mono text-brand truncate">${SF.esc(l.url)}</div>
+              <div class="text-[10px] text-muted">${stat(l.stats)}</div>
+            </div>`).join('')}
+          ${data && data.withoutLink ? `<div class="text-[10px] text-faint">Без метки (по обычной ссылке): клиентов ${data.withoutLink}</div>` : ''}
+          ${data && data.links.length < data.max ? `
+            <form onsubmit="SF.actions.addSourceLink(event, '${SF.js(c.id)}')" class="flex gap-2">
+              <input name="label" maxlength="40" placeholder="Источник: Instagram, канал, блогер…" class="flex-1 min-w-0 p-2 rounded-lg bg-card border border-line-2 text-ink" />
+              <button type="submit" class="px-3 rounded-lg btn-3d-tiffany text-[11px] font-bold">Создать</button>
+            </form>` : ''}
+        </div>
+      </details>`;
+  }
+
+  SF.actions.addSourceLink = async (e, projectId) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const label = e.target.label.value.trim();
+    if (!label) {
+      showToast('Напишите источник, например: Instagram');
+      return;
+    }
+    try {
+      const res = await api().createProjectLink(projectId, label);
+      SF.data.invalidate(`projectLinks:${projectId}`);
+      await SF.data.projectLinks(projectId);
+      SF.copyText(res.link.url, 'Ссылка создана и скопирована');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.removeSourceLink = async (projectId, linkId, label) => {
+    if (needServer()) return;
+    if (!confirm(`Убрать ссылку «${label}» из списка? Она продолжит работать, а пришедшие по ней клиенты останутся посчитанными.`)) return;
+    try {
+      await api().removeProjectLink(projectId, linkId);
+      SF.data.invalidate(`projectLinks:${projectId}`);
+      await SF.data.projectLinks(projectId);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
 
   // The assistant: the SI-seller's clients only
   function renderAssistedConsultant(c, state) {
@@ -2063,6 +2124,7 @@
           return;
         }
         if (route.tab === 'broadcasts') SF.data.broadcasts(route.id);
+        SF.data.projectLinks(route.id);
         if (!route.tab || route.tab === 'methodology') SF.data.brain();
         if (route.tab === 'analytics') {
           SF.data.analytics(route.id);

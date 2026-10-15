@@ -110,6 +110,7 @@
         ${o.me.role === 'owner' ? tile({ icon: 'shield-check', title: 'Команда', sub: 'добавить студента', onclick: "SF.push('admin-team')" }) : ''}
         ${tile({ icon: 'book-open', title: 'Как чинить', sub: 'пошаговая инструкция', onclick: "SF.push('admin-help')" })}
         ${tile({ icon: 'mic', title: 'Проверка микрофона', sub: 'перед голосовыми', onclick: "SF.push('admin-mic')" })}
+        ${tile({ icon: 'award', title: 'Партнёры', sub: 'кто приводит людей', onclick: "SF.push('admin-partners')" })}
       </div>
 
       ${card(`
@@ -757,6 +758,25 @@
   }
 
   // ---------------- Screen ----------------
+  // Who shares links, where, and how many people came (the best first)
+  function renderPartners() {
+    const d = cache.partners;
+    if (!d) return loading('partners');
+    if (!d.people.length) return card('<div class="text-xs text-muted">Ссылками пока никто не делился.</div>');
+    return `
+      <div class="text-[11px] text-muted px-1 leading-snug">«Пришло» — новые люди, впервые вошедшие в SmartFlow по ссылкам человека (приглашение и ссылки с меткой его SI-продавцов). Знак «SMARTFLOW PARTNER» — от ${d.partnerMin} человек.</div>
+      ${d.people.map((p, i) => card(`
+        <div class="flex items-center justify-between gap-2">
+          <button onclick="SF.push('admin-user', { id: '${SF.js(p.userId)}' })" class="text-xs font-bold text-brand text-left">${i + 1}. ${esc(p.name || p.userId)}${p.supportCode ? ` · ${esc(p.supportCode)}` : ''}</button>
+          ${p.partner ? '<span class="text-[10px] font-extrabold tracking-wider text-amber-600">PARTNER</span>' : ''}
+        </div>
+        <div class="text-[11px] text-ink-2">Пришло: <b>${p.brought}</b> · клиентов SI-продавцам: ${p.clients} · купили: ${p.bought} · переходов: ${p.opens} · ссылок: ${p.links}</div>
+        ${p.linkList.map(l => `
+          <div class="text-[10px] text-muted pl-2 border-l-2 border-line">${esc(l.label || '')}${l.consultantName ? ` → «${esc(l.consultantName)}»` : ''}${l.archived ? ' (убрана)' : ''}: перешли ${l.opens}, новых ${l.newPeople}, клиентов ${l.clients}, купили ${l.bought}</div>`).join('')}
+      `)).join('')}
+    `;
+  }
+
   const TITLES = {
     admin: 'Панель поддержки',
     'admin-feedback-list': 'Жалобы',
@@ -768,7 +788,8 @@
     'admin-actions': 'Журнал команды',
     'admin-team': 'Команда',
     'admin-help': 'Как чинить',
-    'admin-mic': 'Проверка микрофона'
+    'admin-mic': 'Проверка микрофона',
+    'admin-partners': 'Партнёры'
   };
 
   const RENDER = {
@@ -782,7 +803,8 @@
     'admin-actions': renderActions,
     'admin-team': renderTeam,
     'admin-help': renderHelp,
-    'admin-mic': renderMic
+    'admin-mic': renderMic,
+    'admin-partners': renderPartners
   };
 
   function afterRender(route, state) {
@@ -801,6 +823,7 @@
       case 'admin-errors': return load(`errors:${route.code || ''}`, async () => (await a.errors(route.code || '')).errors);
       case 'admin-actions': return load('actions', async () => (await a.actions()).actions);
       case 'admin-team': return load('staff', async () => (await a.staff()).staff);
+      case 'admin-partners': return load('partners', () => a.partners(), 60000);
       default: return null;
     }
   }

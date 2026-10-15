@@ -204,6 +204,8 @@ SF.openIn = (tab, screen, params = {}) => {
 //   S_support       → the "Поддержка" chat (bot message with the team's answer)
 //   ADMIN           → the support panel (link for the support team)
 //   <slug>          → chat with that SI-consultant (the consultant's own link)
+//   <slug>__<code>  → the same chat by a link with a traffic source (Офис → «Ссылки с меткой источника»)
+//   R_<code>        → an invitation to SmartFlow (Профиль → «Пригласить»): Buddy
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
@@ -234,6 +236,11 @@ SF.openStartParam = (param) => {
     else if (['marketplace', 'chats', 'profile'].includes(tab)) SF.go(tab);
   } else if (param.startsWith('S_')) {
     SF.openIn('chats', 'chat', { slug: 'assistant' });
+  } else if (param.startsWith('R_')) {
+    // An invitation to SmartFlow: the server counted it at sign-in; the person starts at Buddy
+  } else if (param.includes('__')) {
+    // A link with a traffic source: <slug>__<code> → that SI-seller's chat (the server counted the source)
+    SF.openIn('chats', 'chat', { slug: param.split('__')[0] });
   } else {
     SF.openIn('chats', 'chat', { slug: param });
   }

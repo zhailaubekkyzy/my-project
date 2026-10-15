@@ -84,6 +84,8 @@ async function getPublicProfile(userId) {
     photoUrl: pub.photoUrl,
     profile: pub.profile,
     trust: profileService.trustScore(user),
+    // "SMARTFLOW PARTNER": the medal and how many people came from this person (only for the most active)
+    partner: await require('./partner-service').partnerOf(user.id),
     consultants: consultants.map(toCard)
   };
 }

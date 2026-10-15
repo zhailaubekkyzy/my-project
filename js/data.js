@@ -215,6 +215,17 @@
       store().setRemote(`broadcasts.${projectId}`, await api().getBroadcasts(projectId));
     }, 15000),
 
+    // Links with a source of one SI-seller; my invitation link and how many people came from me
+    projectLinks: (projectId) => ensure(`projectLinks:${projectId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`projectLinks.${projectId}`, await api().getProjectLinks(projectId));
+    }, 30000),
+
+    referral: () => ensure('referral', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('referral', await api().getReferral());
+    }, 60000),
+
     // My business: owner + assistant
     business: () => ensure('business', async () => {
       if (!signedIn()) return false;

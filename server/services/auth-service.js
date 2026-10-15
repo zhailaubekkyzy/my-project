@@ -62,7 +62,9 @@ function verifyTelegramInitData(initDataString, maxAgeSeconds = config.telegramM
     valid: true,
     user,
     authDate,
-    queryId: urlParams.get('query_id')
+    queryId: urlParams.get('query_id'),
+    // The start parameter of the link the app was opened by (signed together with the user)
+    startParam: urlParams.get('start_param') || null
   };
 }
 

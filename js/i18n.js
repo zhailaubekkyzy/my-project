@@ -128,7 +128,9 @@
     'Не присылать рассылки': 'Do not send me announcements', 'Снова присылать рассылки': 'Send announcements again',
     'Больше не будем присылать рассылки. Переписка остаётся как была': 'No more announcements. The conversation stays as it was',
     'Рассылки снова включены': 'Announcements are on again',
-    'Может подойти и это': 'This may suit you too', 'Скрыть': 'Hide', '· скрыт командой': '· hidden by the team',
+    'Может подойти и это': 'This may suit you too', 'Скрыть': 'Hide',
+    'Пригласить в SmartFlow': 'Invite to SmartFlow', 'Копировать': 'Copy',
+    'Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам. Самые активные получают знак «SMARTFLOW PARTNER» в профиле.': 'Your personal link. Everyone who comes to SmartFlow for the first time by it or by your SI-sellers’ links counts for you. The most active get the «SMARTFLOW PARTNER» badge on their profile.', '· скрыт командой': '· hidden by the team',
 
     // Buddy
     'Напишите Бадди: план, дело, напоминание…': 'Write to Buddy: a plan, a task, a reminder…',
@@ -219,6 +221,8 @@
     [/^Ведёт в чат с моим SI: (.+)$/, (m) => `Leads to the chat with my SI: ${m[1]}`],
     [/^Ссылка «(.+)» должна начинаться с https:\/\/$/, (m) => `The link «${m[1]}» must start with https://`],
     [/^• (.+)$/, (m) => `• ${translate(m[1])}`],
+    [/^Пришло по вашим ссылкам: (\d+)$/, (m) => `People who came by your links: ${m[1]}`],
+    [/^· знак партнёра — с (\d+)$/, (m) => `· partner badge from ${m[1]}`],
     [/^(Январь|Февраль|Март|Апрель|Май|Июнь|Июль|Август|Сентябрь|Октябрь|Ноябрь|Декабрь) (\d{4})$/, (m) => `${EN[m[1]]} ${m[2]}`]
   ];
 
