@@ -2160,6 +2160,41 @@ async function runAllTests() {
     await db.run('DELETE FROM reviews WHERE id = ?', [reviewId]);
   });
 
+  await test('57. PostHog: события только с сервера, без личных данных; без ключа ничего не отправляется', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e) });
+    try {
+      const tg = { id: 700058, first_name: 'Айгуль', last_name: 'Секретова', username: 'aigul_secret' };
+      const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg), role: 'expert' });
+      assert.strictEqual(login.status, 200);
+      const token = login.body.token;
+      const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+      await api('POST', `/api/chat/${projectA.slug}/start`, token);
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Мой телефон +77011234567, хочу купить' });
+      await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
+      await api('POST', '/api/buddy/messages', token, { text: 'Привет', tzOffset: 300 });
+
+      const names = sent.map(e => e.event);
+      for (const e of ['app_opened', 'si_chat_started', 'funnel_client_message', 'funnel_buy_clicked', 'buddy_message']) {
+        assert(names.includes(e), `${e} is sent`);
+      }
+      const all = JSON.stringify(sent);
+      for (const secret of ['Айгуль', 'Секретова', 'aigul_secret', '700058', '+77011234567', 'хочу купить', user.id]) {
+        assert(!all.includes(secret), `No personal data: ${secret}`);
+      }
+      const mine = sent.filter(e => e.event === 'funnel_buy_clicked')[0];
+      assert.strictEqual(mine.distinctId, analytics.personId(user.id), 'The same pseudonymous id for the person');
+      assert.strictEqual(mine.properties.project_id, projectA.id);
+    } finally {
+      analytics._setClientForTests(null);
+    }
+    // Without POSTHOG_API_KEY (and in tests) nothing is sent and nothing breaks
+    assert.strictEqual(analytics.isConfigured(), false);
+    analytics.capture('anything', 'usr_x', { name: 'x' });
+    assert.strictEqual((await api('GET', '/api/health')).body.posthog.configured, false);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

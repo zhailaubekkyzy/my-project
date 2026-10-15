@@ -4,6 +4,7 @@ const cors = require('cors');
 const compression = require('compression');
 const path = require('path');
 const config = require('./config');
+const analytics = require('./services/analytics-service');
 const db = require('./db');
 const migrator = require('./db/migrator');
 const scheduler = require('./services/scheduler-service');
@@ -76,6 +77,8 @@ app.get('/api/health', async (req, res) => {
         configured: siEngine.isConfigured(),
         model: config.openaiModel
       },
+      // true = the server sends product numbers to PostHog (POSTHOG_API_KEY is set)
+      posthog: { configured: analytics.isConfigured(), host: config.posthogHost },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
@@ -169,6 +172,8 @@ async function startServer(port = config.port) {
   await supportService.refreshBlocked();
 
   scheduler.start();
+  // Railway stops the old copy on every deploy: the waiting PostHog events are sent first
+  process.once('SIGTERM', () => { analytics.flush().finally(() => process.exit(0)); });
 
   return new Promise((resolve) => {
     const server = app.listen(port, () => {

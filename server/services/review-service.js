@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const telegramBot = require('./telegram-bot');
 const supportService = require('./support-service');
+const analytics = require('./analytics-service');
 
 const MAX_TEXT = 1000;
 const MAX_REPLY = 1000;
@@ -94,6 +95,7 @@ async function saveReview(project, userId, { rating, text }) {
     'INSERT INTO reviews (id, project_id, business_id, client_id, author_user_id, rating, text) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [id, project.id, client.business_id || null, client.id, userId, stars, body]
   );
+  analytics.capture('review_created', userId, { project_id: project.id, rating: stars, with_text: Boolean(body) });
   const author = await db.get('SELECT display_name, profile FROM users WHERE id = ?', [userId]);
   await telegramBot.notifyUser(
     project.owner_id,

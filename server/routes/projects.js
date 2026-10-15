@@ -4,6 +4,7 @@ const router = express.Router();
 const projectService = require('../services/project-service');
 const funnelService = require('../services/funnel-service');
 const reviewService = require('../services/review-service');
+const analytics = require('../services/analytics-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
@@ -43,6 +44,7 @@ router.post('/', async (req, res, next) => {
       pricingOptions
     });
 
+    analytics.capture('si_seller_created', req.user.userId);
     res.status(201).json(project);
   } catch (err) {
     next(err);

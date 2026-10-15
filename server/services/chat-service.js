@@ -11,6 +11,7 @@ const businessService = require('./business-service');
 const funnelService = require('./funnel-service');
 const calendarService = require('./calendar-service');
 const { mediaUrl } = require('./media-service');
+const analytics = require('./analytics-service');
 
 const DEFAULT_CLIENT_LIMIT = 40;
 const LIMIT_TEXT = 'Я ответил на все вопросы, на которые могу. Чтобы продолжить, нажмите «Связаться с человеком» — эксперт ответит вам лично.';
@@ -412,6 +413,7 @@ async function startConversation(project, lead) {
   // Another request may have started the chat meanwhile: keep a single opener
   if ((await history(project.id, lead.id)).length) return null;
   const opener = await saveMessage(lead, SI, result.text);
+  analytics.capture('si_chat_started', lead.external_client_id, { project_id: project.id, business_id: lead.business_id || '' });
   // The material of the first step of the funnel, right after the hello
   const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
   if (steps[0] && steps[0].material && !(await materialSent(lead, steps[0].id))) {

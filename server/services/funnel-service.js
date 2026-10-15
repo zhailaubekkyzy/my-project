@@ -15,6 +15,7 @@
 // forward when the step's "пройден, когда…" is met. Scenarios may belong to a step.
 const crypto = require('crypto');
 const db = require('../db');
+const analytics = require('./analytics-service');
 
 const STATUSES = {
   not_finished: 'Не дошли до конца воронки',
@@ -309,6 +310,9 @@ async function recordEvent(client, type, actor, data = null) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [newEventId(), client.business_id || null, client.project_id, client.id, type, actorType, (actor && actor.userId) || null, data ? JSON.stringify(data) : null]
   );
+
+  // The same event as a number in PostHog (no personal data; never breaks the journal)
+  analytics.funnelEvent(client, type, actorType, data);
 
   const status = nextStatus(client, type);
   const sets = [];
