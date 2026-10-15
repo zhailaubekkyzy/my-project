@@ -3,7 +3,8 @@
 // Owner's decisions: the Buddy screen is a chat with Buddy; every notification is Buddy's message
 // (telegram-bot.notifyUser saves it here first, then repeats it in Telegram); the person can talk to
 // Buddy about plans and ask for reminders ("напомни завтра в 9 позвонить маме"); later — the calendar.
-// Up to 30 messages a day per person (OpenAI costs); reminders and notifications are not limited.
+// Up to 30 messages a day per person (OpenAI costs) + 10 for every person they brought to SmartFlow
+// (partner-service.broughtCount); reminders and notifications are not limited.
 //
 // Messages live in `notifications` (sender 'buddy' | 'user'); reminders wait in buddy_reminders and
 // the alarm clock (scheduler-service.js) sends them in time as Buddy's messages.
@@ -19,8 +20,10 @@ const telegramBot = require('./telegram-bot');
 const profileService = require('./profile-service');
 const analytics = require('./analytics-service');
 const { langOf } = require('./i18n');
+const partnerService = require('./partner-service');
 
 const DAILY_LIMIT = 30;
+const PER_INVITED = 10;
 const MAX_TEXT = 1000;
 const HISTORY = 16;
 const MAX_ACTIVE_REMINDERS = 200;
@@ -34,10 +37,10 @@ const PLACES = {
   profile: 'GO_profile',
   support: 'S_support'
 };
-const LIMIT_TEXT = 'На сегодня я ответил на все 30 сообщений — давайте продолжим завтра 🙂 Напоминания и уведомления будут приходить как обычно.';
+const LIMIT_TEXT = 'На сегодня я ответил на все сообщения — давайте продолжим завтра 🙂 Напоминания и уведомления будут приходить как обычно.';
 const NO_AI_TEXT = 'Я пока не могу отвечать на сообщения — подключение ещё настраивается. Уведомления и напоминания будут приходить сюда как обычно.';
 const EN_TEXTS = {
-  [LIMIT_TEXT]: 'I have answered all 30 messages for today — let\u2019s continue tomorrow 🙂 Reminders and notifications will come as usual.',
+  [LIMIT_TEXT]: 'I have answered all messages for today — let\u2019s continue tomorrow 🙂 Reminders and notifications will come as usual.',
   [NO_AI_TEXT]: 'I cannot answer messages yet — the connection is still being set up. Notifications and reminders will come here as usual.',
   'Извините, я не расслышал — напишите, пожалуйста, ещё раз 🙂': 'Sorry, I did not catch that — please write again 🙂'
 };
@@ -118,7 +121,13 @@ async function usage(userId, offset, now = new Date()) {
     `SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND sender = 'user' AND created_at >= ?`,
     [userId, sqlTime(localMidnightUtc(now, offset || 0))]
   );
-  return { used: Number(row.count) || 0, max: DAILY_LIMIT };
+  return { used: Number(row.count) || 0, max: await dailyLimit(userId) };
+}
+
+// 30 a day + 10 for every person who came by the person's links (owner's decision 15 Oct.)
+async function dailyLimit(userId) {
+  const brought = await partnerService.broughtCount(userId).catch(() => 0);
+  return DAILY_LIMIT + PER_INVITED * (Number(brought) || 0);
 }
 
 // Upcoming plans and reminders (not cancelled), for Buddy's prompt and the limit
@@ -263,22 +272,22 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
   const lang = langOf(user);
   const before = await usage(user.id, offset, now);
   const mine = await saveMessage(user.id, 'user', text, { kind: voice ? 'voice' : 'chat' });
-  analytics.capture('buddy_message', user.id, { voice, limit_reached: before.used >= DAILY_LIMIT });
+  analytics.capture('buddy_message', user.id, { voice, limit_reached: before.used >= before.max });
   const created = [mine];
 
-  if (before.used >= DAILY_LIMIT) {
+  if (before.used >= before.max) {
     // Say it once a day; then stay quiet (no OpenAI)
     const told = await db.get(
       `SELECT id FROM notifications WHERE user_id = ? AND sender = 'buddy' AND text = ? AND created_at >= ? LIMIT 1`,
       [user.id, inLang(LIMIT_TEXT, lang), sqlTime(localMidnightUtc(now, offset))]
     );
     if (!told) created.push(await saveMessage(user.id, 'buddy', inLang(LIMIT_TEXT, lang)));
-    return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT }, limitReached: true };
+    return { messages: created, usage: { used: before.used + 1, max: before.max }, limitReached: true };
   }
 
   if (!siEngine.isConfigured()) {
     created.push(await saveMessage(user.id, 'buddy', inLang(NO_AI_TEXT, lang)));
-    return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT } };
+    return { messages: created, usage: { used: before.used + 1, max: before.max } };
   }
 
   const reminders = await upcomingPlans(user.id, now, PROMPT_PLANS);
@@ -329,7 +338,7 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
 
   const startParam = parsed && PLACES[parsed.open] ? PLACES[parsed.open] : null;
   created.push(await saveMessage(user.id, 'buddy', reply, { startParam }));
-  return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT }, calendarChanged: asked.length > 0 || Boolean(parsed && Array.isArray(parsed.cancel) && parsed.cancel.length) };
+  return { messages: created, usage: { used: before.used + 1, max: before.max }, calendarChanged: asked.length > 0 || Boolean(parsed && Array.isArray(parsed.cancel) && parsed.cancel.length) };
 }
 
 /**
@@ -364,6 +373,8 @@ async function reminderText(r) {
 
 module.exports = {
   DAILY_LIMIT,
+  PER_INVITED,
+  dailyLimit,
   calendar,
   cancelPlan,
   upcomingPlans,

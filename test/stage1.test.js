@@ -2453,6 +2453,19 @@ async function runAllTests() {
     assert.deepStrictEqual(pub.partner, { count: partnerService.PARTNER_MIN });
     assert.strictEqual((await api('GET', `/api/marketplace/profiles/${expertA_InternalId}`)).body.profile.partner, null, 'Expert A brought 1 person: no medal yet');
 
+    // Benefits: +10 Buddy messages a day for everyone brought; partners' SI-sellers go first in the Marketplace
+    const buddyService = require('../server/services/buddy-service');
+    assert.strictEqual((await buddyService.usage(expertB_InternalId, 0)).max, 30 + 10 * partnerService.PARTNER_MIN);
+    assert.strictEqual((await buddyService.usage(expertA_InternalId, 0)).max, 40, 'Expert A brought 1 person');
+    assert.strictEqual((await buddyService.usage(friend.id, 0)).max, 30);
+    const bListed = await db.get(`SELECT id FROM projects WHERE owner_id = ? AND is_listed = 1 AND status = 'active' AND COALESCE(offer, '') <> ''`, [expertB_InternalId]);
+    if (!bListed) {
+      await db.run(`UPDATE projects SET is_listed = 1, status = 'active', offer = 'Разбор продаж' WHERE id = (SELECT id FROM projects WHERE owner_id = ? ORDER BY created_at LIMIT 1)`, [expertB_InternalId]);
+    }
+    const cards = (await api('GET', '/api/marketplace')).body.consultants;
+    assert(cards.length > 1 && cards.some(c => c.author.id !== expertB_InternalId), 'There are other SI-sellers too');
+    assert.strictEqual(cards[0].author.id, expertB_InternalId, 'The partner\u2019s SI-seller is in the top row');
+
     // The team sees who brings people and by which links
     assert.strictEqual((await api('GET', '/api/admin/partners', tokenB)).status, 403);
     config.adminUsers = [ownerTg.id.toString()];

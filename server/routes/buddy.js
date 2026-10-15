@@ -56,7 +56,7 @@ router.post('/voice', readVoiceBody, async (req, res, next) => {
     const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.userId]);
     // Within today's limit only: a transcription costs as much as a message
     const used = await buddyService.usage(user.id, user.tz_offset_minutes);
-    if (used.used >= buddyService.DAILY_LIMIT) {
+    if (used.used >= used.max) {
       return res.status(429).json({ error: 'bad_request', code: 'BUDDY_LIMIT', message: 'На сегодня сообщения Бадди закончились — продолжим завтра.' });
     }
     const text = await voiceService.transcribe(buffer, type);
