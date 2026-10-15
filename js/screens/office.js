@@ -829,6 +829,7 @@
             <input type="checkbox" name="isListed" ${c.isListed ? 'checked' : ''} class="w-4 h-4 accent-[#0d9488]" />
             <span class="text-xs font-semibold text-ink">Показывать в Маркетплейсе</span>
           </label>
+          <div class="text-[10px] text-faint leading-snug px-1">Показанный в Маркетплейсе SI-продавец может появляться и в чатах других экспертов — когда их клиенту что-то не подошло. Чем подробнее в методологии описан продукт и закрыты возражения (общее описание, сценарии, шаги), тем чаще он появляется.</div>
         </div>
 
         <div class="glass-card-3d p-4 space-y-3">

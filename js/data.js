@@ -88,6 +88,7 @@
         siPaused: Boolean(res.siPaused),
         contactShared: Boolean(res.contactShared),
         broadcastsOff: Boolean(res.broadcastsOff),
+        altOffers: res.altOffers || [],
         tools: res.tools || { contact: false, receipt: false }
       });
     }, maxAge),

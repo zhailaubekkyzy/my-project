@@ -328,6 +328,11 @@
       return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts/${encodeURIComponent(broadcastId)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
+    // The client opened an alternative offer above the chat (numbers only)
+    async altOfferOpened(slug, projectId) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/alt-opened`, { method: 'POST', body: JSON.stringify({ projectId }) });
+    },
+
     async setBroadcastsOff(slug, off) {
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/broadcasts`, { method: 'POST', body: JSON.stringify({ off }) });
     },

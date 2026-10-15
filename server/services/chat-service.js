@@ -210,6 +210,9 @@ async function handleClientMessage(project, lead, text, voice = null) {
   return { message, reply, source: result.source };
 }
 
+// The last alternative-offers pick in progress (tests wait for it)
+let altOffersPending = Promise.resolve([]);
+
 // Funnel events of this turn (offer, answer to it, objection, refusal), asked from OpenAI next to
 // the SI reply. A failure never breaks the chat: the journal just gets fewer events.
 async function analyze(project, lead, past, text) {
@@ -237,6 +240,10 @@ async function applyAnalysis(project, lead, analysis, text) {
     }
     if (analysis.objection) {
       await clientEvent(project, lead, 'objection', CLIENT, { objection: analysis.objection, text });
+      // Other experts' SI-sellers that may solve this doubt appear above the chat (not waited for:
+      // the client already has the SI's answer; the next refresh of the chat shows them)
+      altOffersPending = require('./alt-offer-service').refresh(project, lead, analysis.objection, text)
+        .catch(err => { console.warn('[SmartFlow alt offers]', err.message); return []; });
     }
     if (analysis.refused && lead.funnel_status !== 'refused' && lead.funnel_status !== 'bought') {
       await clientEvent(project, lead, 'refused', CLIENT);
@@ -500,6 +507,7 @@ async function setSiEnabled(client, enabled, member) {
 }
 
 module.exports = {
+  altOffersSettled: () => altOffersPending,
   LIMIT_TEXT,
   findOrCreateLead,
   leadForUser,

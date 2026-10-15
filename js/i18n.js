@@ -13,7 +13,8 @@
   const STORE_KEY = 'sf_lang';
 
   function fromTelegram() {
-    const code = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || navigator.language || 'ru').slice(0, 2).toLowerCase();
+    // Only Telegram's own language counts; unknown (e.g. outside Telegram) — Russian
+    const code = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'ru').slice(0, 2).toLowerCase();
     return RU_FAMILY.includes(code) ? 'ru' : 'en';
   }
 
@@ -126,7 +127,8 @@
     'Поставьте оценку — от 1 до 5 звёзд': 'Choose a rating — from 1 to 5 stars', 'Спасибо за отзыв!': 'Thank you for the review!', 'Отзыв обновлён': 'Review updated',
     'Не присылать рассылки': 'Do not send me announcements', 'Снова присылать рассылки': 'Send announcements again',
     'Больше не будем присылать рассылки. Переписка остаётся как была': 'No more announcements. The conversation stays as it was',
-    'Рассылки снова включены': 'Announcements are on again', '· скрыт командой': '· hidden by the team',
+    'Рассылки снова включены': 'Announcements are on again',
+    'Может подойти и это': 'This may suit you too', 'Скрыть': 'Hide', '· скрыт командой': '· hidden by the team',
 
     // Buddy
     'Напишите Бадди: план, дело, напоминание…': 'Write to Buddy: a plan, a task, a reminder…',
