@@ -33,6 +33,17 @@ router.get('/consultants/:projectId', async (req, res, next) => {
 /**
  * GET /api/marketplace/profiles/:userId
  */
+/**
+ * GET /api/marketplace/partners — who has the «SMARTFLOW PARTNER» badge (public, shown next to the person)
+ */
+router.get('/partners', async (req, res, next) => {
+  try {
+    res.json({ partners: await require('../services/partner-service').partnerList() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/profiles/:userId', async (req, res, next) => {
   try {
     const profile = await marketplaceService.getPublicProfile(req.params.userId);

@@ -297,7 +297,7 @@ function renderApp(state) {
             <div class="text-sm font-bold text-ink truncate">${title}</div>
           </div>
           <button onclick="SF.go('profile')" class="flex-shrink-0" aria-label="Профиль">
-            ${SF.avatar(state.me.photoUrl, { size: 30, kind: 'human' })}
+            ${SF.avatar(state.me.photoUrl, { size: 30, kind: 'human', userId: state.me.id })}
           </button>
         </header>
 
@@ -336,6 +336,8 @@ function renderApp(state) {
     console.error('[SmartFlow] afterRender failed:', err);
     SF.reportAppError(err, `afterRender ${tab}/${route.screen}`);
   }
+  // Who has the «SMARTFLOW PARTNER» badge (shown next to people's photos and names everywhere)
+  if (SF.data && SF.data.partners) SF.data.partners();
   if (window.lucide) window.lucide.createIcons();
   // English for clients: the Office and the support panel stay Russian (owner's decision)
   SF.clientScreen = !(tab === 'marketplace' && String(route.screen).startsWith('office')) && !(tab === 'profile' && String(route.screen).startsWith('admin'));

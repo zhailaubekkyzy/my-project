@@ -354,6 +354,14 @@
       return await apiFetch('/api/me/referral');
     },
 
+    async getPartners() {
+      return await apiFetch('/api/marketplace/partners');
+    },
+
+    async setInviteText(text) {
+      return await apiFetch('/api/me/invite-text', { method: 'PUT', body: JSON.stringify({ text }) });
+    },
+
     // Move a client to a step of the funnel by hand
     async moveClientStep(projectId, clientId, stepId) {
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/step`, {

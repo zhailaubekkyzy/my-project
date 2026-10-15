@@ -2453,6 +2453,18 @@ async function runAllTests() {
     assert.deepStrictEqual(pub.partner, { count: partnerService.PARTNER_MIN });
     assert.strictEqual((await api('GET', `/api/marketplace/profiles/${expertA_InternalId}`)).body.profile.partner, null, 'Expert A brought 1 person: no medal yet');
 
+    // The badge is shown next to the person everywhere: the phone gets the list of partners
+    const partners = (await api('GET', '/api/marketplace/partners')).body.partners;
+    assert.deepStrictEqual(partners, [{ id: expertB_InternalId, count: partnerService.PARTNER_MIN }]);
+    // The partner writes their own invitation text; an empty one brings the standard text back
+    assert.strictEqual(again.inviteText, null);
+    const saved = await api('PUT', '/api/me/invite-text', tokenB, { text: '  Мой текст для друзей 🙂  ' });
+    assert.strictEqual(saved.body.inviteText, 'Мой текст для друзей 🙂');
+    assert.strictEqual((await api('GET', '/api/me/referral', tokenB)).body.inviteText, 'Мой текст для друзей 🙂');
+    await api('PUT', '/api/me/profile', tokenB, { displayName: 'Эксперт Борис' });
+    assert.strictEqual((await api('GET', '/api/me/referral', tokenB)).body.inviteText, 'Мой текст для друзей 🙂', 'Saving the profile keeps it');
+    assert.strictEqual((await api('PUT', '/api/me/invite-text', tokenB, { text: ' ' })).body.inviteText, null);
+
     // Benefits: +10 Buddy messages a day for everyone brought; partners' SI-sellers go first in the Marketplace
     const buddyService = require('../server/services/buddy-service');
     assert.strictEqual((await buddyService.usage(expertB_InternalId, 0)).max, 30 + 10 * partnerService.PARTNER_MIN);

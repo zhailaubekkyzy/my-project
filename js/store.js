@@ -57,6 +57,7 @@ const defaultData = {
   // Data loaded from the server (js/data.js). null = not loaded yet.
   remote: {
     marketplace: null,       // listed consultant cards
+    partners: null,          // [{ id, count }] people with the «SMARTFLOW PARTNER» badge
     cards: {},               // consultant cards by slug (also unlisted, opened by link)
     profiles: {},            // public profiles by user id
     chats: null,             // my chats with SI-consultants (as a client)

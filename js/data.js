@@ -221,6 +221,11 @@
       store().setRemote(`projectLinks.${projectId}`, await api().getProjectLinks(projectId));
     }, 30000),
 
+    // Who has the «SMARTFLOW PARTNER» badge (public; a few people)
+    partners: () => ensure('partners', async () => {
+      store().setRemote('partners', (await api().getPartners()).partners || []);
+    }, 300000),
+
     referral: () => ensure('referral', async () => {
       if (!signedIn()) return false;
       store().setRemote('referral', await api().getReferral());

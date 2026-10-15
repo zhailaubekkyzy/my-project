@@ -191,6 +191,29 @@ async function broughtCount(userId) {
   return Number(row.n) || 0;
 }
 
+// Everyone with the badge (few people): the phone marks them next to the photo and the name everywhere
+async function partnerList() {
+  const rows = await db.all(
+    `SELECT l.owner_user_id AS id, COUNT(*) AS n FROM users u JOIN tracked_links l ON l.id = u.referred_by_link
+     GROUP BY l.owner_user_id HAVING COUNT(*) >= ?`,
+    [PARTNER_MIN]
+  );
+  return rows.map(r => ({ id: r.id, count: Number(r.n) || 0 }));
+}
+
+// The invitation text the person wrote themselves (null — the standard one on the phone)
+const MAX_INVITE_TEXT = 1000;
+async function inviteTextOf(userId) {
+  const row = await db.get('SELECT invite_text FROM users WHERE id = ?', [userId]);
+  return row && row.invite_text && row.invite_text.trim() ? row.invite_text : null;
+}
+
+async function setInviteText(userId, text) {
+  const clean = String(text || '').replace(/\r/g, '').trim().slice(0, MAX_INVITE_TEXT);
+  await db.run('UPDATE users SET invite_text = ? WHERE id = ?', [clean || null, userId]);
+  return clean || null;
+}
+
 const partnerOf = async (userId) => {
   const count = await broughtCount(userId);
   return count >= PARTNER_MIN ? { count } : null;
@@ -211,7 +234,7 @@ async function myReferral(userId) {
     }
   }
   const brought = await broughtCount(userId);
-  return { url: linkUrl(link), brought, partner: brought >= PARTNER_MIN, partnerMin: PARTNER_MIN };
+  return { url: linkUrl(link), brought, partner: brought >= PARTNER_MIN, partnerMin: PARTNER_MIN, inviteText: await inviteTextOf(userId) };
 }
 
 /**
@@ -262,6 +285,9 @@ module.exports = {
   PartnerError,
   MAX_SOURCE_LINKS,
   PARTNER_MIN,
+  MAX_INVITE_TEXT,
+  partnerList,
+  setInviteText,
   parseStartParam,
   recordVisit,
   attributeClient,

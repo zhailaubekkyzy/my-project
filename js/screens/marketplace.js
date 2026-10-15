@@ -160,10 +160,10 @@
 
       <!-- 6. Author -->
       <button onclick="SF.push('person', { id: '${SF.js(c.author.id)}' })" class="w-full glass-card-3d p-3 flex items-center gap-3 text-left">
-        ${SF.avatar(c.author.photoUrl, { size: 36, kind: 'human' })}
+        ${SF.avatar(c.author.photoUrl, { size: 36, kind: 'human', userId: c.author.id })}
         <div class="flex-1 min-w-0">
           <div class="text-[10px] text-muted uppercase tracking-wider">Автор</div>
-          <div class="text-xs font-bold text-ink truncate">${SF.esc(c.author.name)}</div>
+          <div class="flex items-center gap-1 text-xs font-bold text-ink min-w-0"><span class="truncate">${SF.esc(c.author.name)}</span>${SF.partnerBadge(c.author.id, 14)}</div>
         </div>
         <div class="w-24">
           <div class="text-[10px] text-muted text-right">Доверие ${c.author.trust}%</div>
@@ -229,14 +229,14 @@
       </div>` : '';
     return `
       <div class="glass-card-3d p-4 text-center space-y-2">
-        <div class="flex justify-center">${SF.avatar(p.photoUrl, { size: 88, kind: 'human' })}</div>
+        <div class="flex justify-center">${SF.avatar(p.photoUrl, { size: 88, kind: 'human', userId: p.partner ? p.id : null })}</div>
         <div class="text-lg font-extrabold text-ink">${SF.esc(p.displayName)}</div>
         ${pr.headline ? `<div class="text-xs text-brand font-semibold">${SF.esc(pr.headline)}</div>` : ''}
         <div class="max-w-[220px] mx-auto pt-1">
           <div class="text-[11px] text-muted mb-1">Доверие ${p.trust}%</div>
           ${SF.progressBar(p.trust)}
         </div>
-        ${p.partner ? `<div class="pt-2">${SF.partnerMedal(p.photoUrl, p.partner.count, { size: 84 })}</div>` : ''}
+        ${p.partner ? `<div class="pt-1">${SF.partnerMedal(p.partner.count, { size: 56 })}</div>` : ''}
         ${pr.offerButton ? `<button onclick="${pr.offerButton.consultantId ? `SF.actions.openChat('${SF.js(pr.offerButton.consultantId)}')` : `SF.openLink('${SF.js(pr.offerButton.url)}')`}" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-tiffany text-sm">${SF.esc(pr.offerButton.label)}</button>` : ''}
         ${p.id !== store().data.me.id ? `<button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i>Написать</button>` : ''}
       </div>

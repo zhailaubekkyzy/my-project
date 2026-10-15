@@ -239,7 +239,7 @@
       ${!q ? '<div class="text-[11px] text-muted px-1">Последние, кто заходил:</div>' : ''}
       ${!list ? loading(key) : !list.length ? SF.emptyState('assistant', 'Никого не нашли', 'Попросите человека открыть Профиль: внизу его номер вида SF-48213.') : list.map(u => `
         <button onclick="SF.push('admin-user', { id: '${SF.js(u.id)}' })" class="glass-card-3d p-3 w-full text-left flex items-center gap-2.5">
-          ${SF.avatar(u.photoUrl, { size: 36, kind: 'human' })}
+          ${SF.avatar(u.photoUrl, { size: 36, kind: 'human', userId: u.id })}
           <span class="min-w-0 flex-1">
             <span class="block text-xs font-bold text-ink truncate">${esc(u.displayName)}${u.status === 'blocked' ? ' <span class="text-si">(заблокирован)</span>' : ''}</span>
             <span class="block text-[10px] text-muted truncate">${esc(u.supportCode || '—')}${u.username ? ` · @${esc(u.username)}` : ''} · был(а) ${fmtTime(u.lastSeenAt || u.createdAt)}</span>
@@ -442,7 +442,7 @@
       `)}
       ${!list ? loading('staff') : list.map(p => `
         <div class="glass-card-3d p-3 flex items-center gap-2.5">
-          ${SF.avatar(p.photoUrl, { size: 36, kind: 'human' })}
+          ${SF.avatar(p.photoUrl, { size: 36, kind: 'human', userId: p.userId })}
           <div class="flex-1 min-w-0">
             <div class="text-xs font-bold text-ink truncate">${esc(p.displayName)}</div>
             <div class="text-[10px] text-muted">${esc(p.supportCode || '')} · ${esc(p.roleLabel)}</div>

@@ -39,7 +39,7 @@
             <i data-lucide="camera" class="w-4 h-4"></i>
           </span>
         </button>
-        <div class="text-lg font-extrabold text-ink">${SF.esc(me.displayName)}</div>
+        <div class="text-lg font-extrabold text-ink flex items-center justify-center gap-1.5">${SF.esc(me.displayName)}${SF.partnerBadge(me.id, 22)}</div>
         ${p.headline ? `<div class="text-xs text-brand font-semibold">${SF.esc(p.headline)}</div>` : ''}
         ${me.username ? `<div class="text-[11px] text-faint">@${SF.esc(me.username)}</div>` : ''}
         <div class="max-w-[220px] mx-auto pt-1">
@@ -143,17 +143,26 @@
     const r = state.remote.referral;
     return `
       <div class="glass-card-3d p-3.5 space-y-2 text-xs">
-        ${r && r.partner ? SF.partnerMedal(state.me.photoUrl, r.brought, { size: 88 }) : ''}
+        ${r && r.partner ? SF.partnerMedal(r.brought, { size: 72 }) : ''}
         <div class="font-bold text-ink">Пригласить в SmartFlow</div>
         <div class="text-[11px] text-muted leading-snug">Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам.</div>
         <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
           <div class="text-[11px] font-semibold text-ink-2">Что вы получаете</div>
-          <div class="text-[11px] text-ink-2">• В будущем — процент с каждого пришедшего, поэтому советуем начать собирать прямо сейчас</div>
-          <div class="text-[11px] text-ink-2">• ${r ? r.partnerMin : 10} человек перешли по ссылке — вы получаете знак «SMARTFLOW PARTNER»</div>
+          <div class="text-[11px] text-ink-2">• ${r ? r.partnerMin : 10} человек перешли по ссылке — вы получаете знак «SMARTFLOW PARTNER»: он виден рядом с вашим фото и именем везде в SmartFlow</div>
           <div class="text-[11px] text-ink-2">• Ваши SI-продавцы — в верхних строках Маркетплейса, а знак повышает доверие клиентов</div>
           <div class="text-[11px] text-ink-2">• +10 сообщений Бадди в день за каждого пришедшего</div>
         </div>
         ${r ? `
+          <div class="space-y-1">
+            <div class="text-[11px] font-semibold text-ink-2">Текст приглашения — можно изменить</div>
+            <textarea id="invite-text" data-keep="invite-text" rows="9" maxlength="1000" data-no-tr
+              class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs leading-relaxed resize-y">${SF.esc(r.inviteText || inviteText())}</textarea>
+            <div class="flex items-center gap-3">
+              <button onclick="SF.actions.saveInviteText()" class="px-3 py-1.5 rounded-lg btn-3d-tiffany text-[11px] font-bold">Сохранить текст</button>
+              ${r.inviteText ? '<button onclick="SF.actions.resetInviteText()" class="text-[11px] text-muted underline">Вернуть исходный</button>' : ''}
+            </div>
+            <div class="text-[10px] text-faint leading-snug">Ссылка добавится в конце сама.</div>
+          </div>
           <div class="flex items-center gap-2 p-2 rounded-xl bg-sunken border border-line">
             <span class="text-[11px] font-mono text-brand truncate flex-1 min-w-0">${SF.esc(r.url)}</span>
           </div>
@@ -161,19 +170,45 @@
             <button onclick="SF.actions.shareInvite()" class="py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="share-2" class="w-3.5 h-3.5"></i>Отправить</button>
             <button onclick="SF.actions.copyInvite()" class="py-2.5 rounded-xl bg-card border border-line text-ink text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i>Скопировать</button>
           </div>
-          <div class="text-[10px] text-faint leading-snug">Текст с приглашением и ссылкой уже готов — отправьте в любое приложение: WhatsApp, Instagram, Telegram и другие. Друг попадёт сразу к своему Бадди.</div>
+          <div class="text-[10px] text-faint leading-snug">Отправьте в любое приложение: WhatsApp, Instagram, Telegram и другие. Друг попадёт сразу к своему Бадди.</div>
           <div class="text-[11px] text-ink-2">Пришло по вашим ссылкам: <b>${r.brought}</b>${r.partner ? '' : ` · знак партнёра — с ${r.partnerMin}`}</div>
           ${r.brought ? `<div class="text-[11px] text-ink-2">Сообщений Бадди в день: <b>${30 + 10 * r.brought}</b></div>` : ''}` : '<div class="text-muted">Загружаю…</div>'}
       </div>`;
   }
 
-  // The invitation text the friend receives (owner's text; SI instead of "ИИ" as everywhere), the link at the end
+  // The standard invitation text (owner's text; SI instead of "ИИ" as everywhere). The person can change it.
   function inviteText() {
     return SF.lang() === 'en'
       ? 'Hi! I use SmartFlow — try it too 😉\n\nYou will have your own SI-Buddy: plan your day and get reminders; and SI-sellers: they will sell your online products for you.\n\nEverything is free for now and there is nothing to install — don\u2019t miss the best terms, only for beta members 🤩'
       : 'Привет! Я пользуюсь SmartFlow — попробуй и ты 😉\n\nУ тебя будет свой SI-Бадди: сможешь планировать день и получать напоминания; SI-продавцы: будут за тебя продавать твои онлайн-продукты.\n\nПока всё бесплатно и ничего не нужно устанавливать — советую не пропустить самые выгодные условия только для участников бета-версии 🤩';
   }
-  const inviteMessage = (r) => `${inviteText()}\n\n${r.url}`;
+  // What goes out: the text in the field (even if not saved yet), then the link
+  const inviteMessage = (r) => {
+    const field = document.getElementById('invite-text');
+    const text = (field && field.value.trim()) || r.inviteText || inviteText();
+    return `${text}\n\n${r.url}`;
+  };
+
+  SF.actions.saveInviteText = async () => {
+    const field = document.getElementById('invite-text');
+    if (!field) return;
+    // The standard text unchanged = nothing personal to keep
+    const value = field.value.trim() === inviteText().trim() ? '' : field.value;
+    try {
+      const res = await window.smartFlowApi.setInviteText(value);
+      const r = window.funnelStore.data.remote.referral;
+      window.funnelStore.setRemote('referral', { ...r, inviteText: res.inviteText });
+      SF.showToast('Текст приглашения сохранён');
+    } catch (err) {
+      SF.showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+
+  SF.actions.resetInviteText = async () => {
+    const field = document.getElementById('invite-text');
+    if (field) field.value = inviteText();
+    await SF.actions.saveInviteText();
+  };
 
   // "Отправить": the phone's own share sheet (WhatsApp, Instagram, Telegram, mail…); where there is none
   // (some Android Telegram versions) — the text is copied to paste anywhere
