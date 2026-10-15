@@ -62,7 +62,7 @@ function capture(event, userId, props = {}) {
 const FUNNEL_EVENTS = new Set([
   'client_message', 'offer_sent', 'offer_answered', 'objection', 'buy_clicked', 'booked', 'meeting_moved',
   'meeting_cancelled', 'receipt_sent', 'paid', 'refused', 'handed_to_human', 'human_replied', 'contact_shared',
-  'scenario', 'step_reached'
+  'scenario', 'step_reached', 'broadcast', 'broadcasts_off'
 ]);
 
 /**

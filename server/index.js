@@ -14,6 +14,7 @@ const followupService = require('./services/followup-service');
 scheduler.register('silent-clients', followupService.runSilentScenarios);
 scheduler.register('buddy-reminders', require('./services/buddy-service').runReminders);
 scheduler.register('meeting-reminders', require('./services/calendar-service').runMeetingReminders);
+scheduler.register('broadcasts', require('./services/broadcast-service').runBroadcasts);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 
@@ -92,6 +93,7 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects/:projectId/clients', clientRoutes);
+app.use('/api/projects/:projectId/broadcasts', require('./routes/broadcasts'));
 app.use('/api/projects/:projectId/conversations', conversationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
