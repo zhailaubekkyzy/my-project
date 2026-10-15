@@ -2444,6 +2444,9 @@ async function runAllTests() {
     assert.strictEqual(ref.partner, false);
     const code = ref.url.split('R_')[1];
     for (let i = 0; i < partnerService.PARTNER_MIN; i++) await login({ id: 700100 + i, first_name: `Друг${i}` }, `R_${code}`);
+    const friend = await authService.findOrCreateTelegramUser({ id: 700100, first_name: 'Друг0' }, 'expert');
+    const welcome = await db.get(`SELECT text FROM notifications WHERE user_id = ? AND sender = 'buddy'`, [friend.id]);
+    assert(welcome && welcome.text.includes('Вас пригласил(а) Эксперт Борис'), 'The invited person is greeted by Buddy with the inviter\u2019s name');
     const again = (await api('GET', '/api/me/referral', tokenB)).body;
     assert.deepStrictEqual([again.brought, again.partner], [partnerService.PARTNER_MIN, true]);
     const pub = (await api('GET', `/api/marketplace/profiles/${expertB_InternalId}`)).body.profile;

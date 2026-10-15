@@ -76,9 +76,27 @@ async function recordVisit(user, startParam, isNewUser, now = new Date()) {
     analytics.capture('link_opened', user.id, { kind: link.kind, link_id: link.id, project_id: link.project_id || '', new_user: Boolean(isNewUser) });
   }
   if (isNewUser) {
-    await db.run('UPDATE users SET referred_by_link = ? WHERE id = ? AND referred_by_link IS NULL', [link.id, user.id]);
+    const set = await db.run('UPDATE users SET referred_by_link = ? WHERE id = ? AND referred_by_link IS NULL', [link.id, user.id]);
+    // An invitation: the newcomer lands at their own Buddy, who says who invited them
+    if (link.kind === 'referral' && Number(set.changes) === 1) await welcomeInvited(user, link.owner_user_id);
   }
   return link;
+}
+
+// Buddy's first message to a person who came by someone's invitation (in their language)
+async function welcomeInvited(user, inviterId) {
+  const inviter = await db.get('SELECT display_name, profile FROM users WHERE id = ?', [inviterId]);
+  let name = inviter ? inviter.display_name : '';
+  try { name = (JSON.parse((inviter && inviter.profile) || '{}').displayName || '').trim() || name; } catch (e) {}
+  const en = require('./i18n').langOf(user) === 'en';
+  const who = name || (en ? 'a friend' : 'друг');
+  const text = en
+    ? `👋 Welcome to SmartFlow! ${who} invited you. I\u2019m Buddy, your helper for every day: tell me plans and I\u2019ll put them in your calendar and remind you. In the Marketplace there are experts whose SI-sellers answer in seconds. What shall we start with?`
+    : `👋 Добро пожаловать в SmartFlow! Вас пригласил(а) ${who}. Я Бадди — ваш помощник на каждый день: расскажите планы — я запишу их в календарь и напомню. А в Маркетплейсе — эксперты, чьи SI-продавцы отвечают за секунды. С чего начнём?`;
+  await db.run(
+    `INSERT INTO notifications (id, user_id, text, sender, kind) VALUES (?, ?, ?, 'buddy', 'chat')`,
+    [newId('ntf'), user.id, text]
+  );
 }
 
 /**

@@ -145,8 +145,15 @@
       <div class="glass-card-3d p-3.5 space-y-2 text-xs">
         ${r && r.partner ? SF.partnerMedal(state.me.photoUrl, r.brought, { size: 88 }) : ''}
         <div class="font-bold text-ink">Пригласить в SmartFlow</div>
-        <div class="text-[11px] text-muted leading-snug">Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам. Самые активные получают знак «SMARTFLOW PARTNER» в профиле.</div>
+        <div class="text-[11px] text-muted leading-snug">Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам.</div>
+        <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
+          <div class="text-[11px] font-semibold text-ink-2">Что вы получаете</div>
+          <div class="text-[11px] text-ink-2">• Счётчик в профиле: сколько людей пришло от вас</div>
+          <div class="text-[11px] text-ink-2">• С ${r ? r.partnerMin : 10} человек — знак «SMARTFLOW PARTNER» с медалью и вашим фото: его видят все в вашем профиле</div>
+        </div>
         ${r ? `
+          <button onclick="SF.actions.shareInvite()" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="send" class="w-3.5 h-3.5"></i>Отправить приглашение</button>
+          <div class="text-[10px] text-faint leading-snug">Откроется Telegram: выберите, кому отправить, — текст с приглашением и ссылкой уже готов. Друг попадёт сразу к своему Бадди.</div>
           <div class="flex items-center gap-2">
             <span class="text-[11px] font-mono text-brand truncate flex-1">${SF.esc(r.url)}</span>
             <button onclick="SF.copyText('${SF.js(r.url)}', 'Ссылка скопирована')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[11px] flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i>Копировать</button>
@@ -154,6 +161,23 @@
           <div class="text-[11px] text-ink-2">Пришло по вашим ссылкам: <b>${r.brought}</b>${r.partner ? '' : ` · знак партнёра — с ${r.partnerMin}`}</div>` : '<div class="text-muted">Загружаю…</div>'}
       </div>`;
   }
+
+  // The invitation text the friend receives: an offer and their benefit, the link inside (in my language)
+  function inviteText() {
+    return SF.lang() === 'en'
+      ? 'Hi! I use SmartFlow in Telegram — try it too 🙂\n\nYou get your own Buddy: plans, reminders and a calendar for every day, just write or say it. And in the Marketplace — experts whose SI-sellers answer your questions in seconds, any time. Free, nothing to install.'
+      : 'Привет! Я пользуюсь SmartFlow в Telegram — попробуй и ты 🙂\n\nУ тебя будет свой Бадди: планы, напоминания и календарь на каждый день — просто напиши или скажи голосом. А в Маркетплейсе — эксперты, чьи SI-продавцы отвечают на вопросы за секунды в любое время. Бесплатно и ничего не нужно устанавливать.';
+  }
+
+  SF.actions.shareInvite = () => {
+    const r = window.funnelStore.data.remote.referral;
+    if (!r) return;
+    const text = inviteText();
+    const share = `https://t.me/share/url?url=${encodeURIComponent(r.url)}&text=${encodeURIComponent(text)}`;
+    const tg = window.Telegram?.WebApp;
+    if (tg && tg.initData && tg.openTelegramLink) tg.openTelegramLink(share);
+    else SF.copyText(`${text}\n\n${r.url}`, 'Приглашение скопировано — вставьте его в чат');
+  };
 
   // Russian / English for the client screens; the server keeps it for notifications too
   SF.actions.setLanguage = async (lang) => {
