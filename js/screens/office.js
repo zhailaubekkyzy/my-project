@@ -1018,6 +1018,32 @@
         ${tile('Ждут ответа', a.waiting || 0)}
       </div>
       <div class="text-[10px] text-faint px-1">Только настоящие цифры этого SI-продавца. Оплаты идут вам напрямую, поэтому продажи здесь пока не считаются. Советы SI по воронке появятся позже.</div>
+      ${renderOwnerReviews(c, state)}
+    `;
+  }
+
+  // Reviews of real clients: the expert answers, never deletes (owner's decision)
+  function renderOwnerReviews(c, state) {
+    const list = state.remote.projectReviews[c.id];
+    return `
+      <div class="glass-card-3d p-4 space-y-2.5 text-xs">
+        ${SF.sectionTitle('message-square-heart', 'Отзывы клиентов')}
+        ${!list ? '<div class="text-muted">Загружаю…</div>' : ''}
+        ${list && !list.length ? '<div class="text-muted leading-snug">Отзывов пока нет. Оставить отзыв может только клиент, которого вы или помощник отметили «Купил». Он увидит приглашение в чате с SI-продавцом.</div>' : ''}
+        ${(list || []).map(r => `
+          <div class="space-y-1.5 pt-2 border-t border-line first:border-0 first:pt-0">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold text-ink">${SF.esc(r.name)}${r.hidden ? ' <span class="text-[10px] text-faint font-normal">· скрыт командой после жалобы</span>' : ''}</span>
+              ${SF.stars(r.rating)}
+            </div>
+            ${r.text ? `<p class="text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(r.text)}</p>` : ''}
+            <form onsubmit="SF.actions.replyReview(event, '${SF.js(c.id)}', '${SF.js(r.id)}')" class="space-y-1.5">
+              <textarea name="text" rows="2" maxlength="1000" placeholder="Ответить на отзыв (увидят все)" class="w-full p-2 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(r.reply || '')}</textarea>
+              <button type="submit" class="w-full py-2 rounded-xl btn-3d-dark text-[11px]">${r.reply ? 'Изменить ответ' : 'Ответить'}</button>
+            </form>
+          </div>`).join('')}
+        ${list && list.length ? '<div class="text-[10px] text-faint">Удалить отзыв нельзя — можно ответить. Если отзыв нарушает правила, нажмите «Пожаловаться» на карточке в Маркетплейсе: команда проверит.</div>' : ''}
+      </div>
     `;
   }
 
@@ -1370,6 +1396,20 @@
       SF.data.invalidate(`clients:${projectId}`);
       SF.data.invalidate('funnel');
       showToast(`Отмечено: ${res.funnelLabel}`);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.replyReview = async (e, projectId, reviewId) => {
+    e.preventDefault();
+    if (needServer()) return;
+    try {
+      await api().replyReview(projectId, reviewId, e.target.text.value);
+      SF.data.invalidate(`projectReviews:${projectId}`);
+      SF.data.invalidate('cardReviews');
+      await SF.data.projectReviews(projectId);
+      showToast('Ответ сохранён — его видят все на карточке');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
     }
@@ -1816,7 +1856,10 @@
           return;
         }
         if (!route.tab || route.tab === 'methodology') SF.data.brain();
-        if (route.tab === 'analytics') SF.data.analytics(route.id);
+        if (route.tab === 'analytics') {
+          SF.data.analytics(route.id);
+          SF.data.projectReviews(route.id);
+        }
         if (route.tab === 'income') SF.data.clients(route.id);
       } else if (route.screen === 'office-client') {
         SF.data.clients(route.projectId);

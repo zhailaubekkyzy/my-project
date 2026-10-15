@@ -64,7 +64,10 @@
             <div class="text-sm font-bold text-ink truncate">${SF.esc(c.name)}</div>
             <div class="text-[11px]">${SF.siLabel(c.roleTitle)}</div>
           </div>
-          <div class="text-right text-[11px] text-faint">${c.stats.dialogs} диалог.</div>
+          <div class="text-right text-[11px] text-faint">
+            ${c.reviews && c.reviews.count ? `<div class="font-bold text-ink">★ ${String(c.reviews.average).replace('.', ',')} <span class="text-faint font-normal">(${c.reviews.count})</span></div>` : ''}
+            <div>${c.stats.dialogs} диалог.</div>
+          </div>
         </div>
         <div class="text-xs font-semibold text-ink leading-snug">${SF.esc(c.offer)}</div>
         <div class="flex items-center justify-between text-[11px] gap-2">
@@ -139,11 +142,8 @@
         <span class="font-extrabold text-ink">${c.stats.dialogs}</span>
       </div>
 
-      <!-- 4. Reviews -->
-      <div class="glass-card-3d p-3.5 space-y-1">
-        ${SF.sectionTitle('message-square-heart', 'Отзывы')}
-        <div class="text-xs text-muted">Пока нет отзывов. Отзывы появятся от реальных клиентов, имена будут скрыты.</div>
-      </div>
+      <!-- 4. Reviews of real clients (short names only) -->
+      ${renderReviews(c, state)}
 
       <!-- 5. Buttons -->
       <div class="grid grid-cols-2 gap-2">
@@ -172,6 +172,49 @@
       </button>
     `;
   }
+
+  const dateLabel = (v) => {
+    const d = new Date(String(v).replace(' ', 'T') + (/[Z+]/.test(String(v)) ? '' : 'Z'));
+    return isNaN(d) ? '' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  function renderReviews(c, state) {
+    const data = state.remote.cardReviews[c.id];
+    const list = data ? data.reviews : [];
+    return `
+      <div class="glass-card-3d p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          ${SF.sectionTitle('message-square-heart', 'Отзывы')}
+          ${data && data.count ? `<span class="text-xs font-bold text-ink whitespace-nowrap">★ ${String(data.average).replace('.', ',')} <span class="text-faint font-normal">· ${data.count}</span></span>` : ''}
+        </div>
+        ${!data ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
+        ${data && !data.count ? '<div class="text-xs text-muted">Пока нет отзывов. Оставить отзыв могут только клиенты, которые купили; видно только имя и первую букву фамилии.</div>' : ''}
+        ${list.map(r => `
+          <div class="space-y-1 pt-2 border-t border-line first:border-0 first:pt-0">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-ink">${SF.esc(r.name)}</span>
+              ${SF.stars(r.rating)}
+            </div>
+            ${r.text ? `<p class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(r.text)}</p>` : ''}
+            ${r.reply ? `<div class="ml-3 pl-2.5 border-l-2 border-[#81D8D0] text-[11px] text-ink-2"><span class="font-semibold text-ink">Ответ автора:</span> ${SF.esc(r.reply)}</div>` : ''}
+            <div class="flex items-center justify-between text-[10px] text-faint">
+              <span>${dateLabel(r.createdAt)}</span>
+              ${SF.data.signedIn() ? `<button onclick="SF.actions.reportReview('${SF.js(r.id)}')" class="underline">Пожаловаться</button>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  SF.actions.reportReview = async (reviewId) => {
+    const reason = prompt('Что не так с этим отзывом? Команда SmartFlow проверит.');
+    if (reason === null) return;
+    try {
+      await window.smartFlowApi.reportReview(reviewId, reason);
+      SF.showToast('Спасибо! Команда проверит отзыв');
+    } catch (err) {
+      SF.showToast(SF.withErrorCode(err.message || 'Не отправилось', err));
+    }
+  };
 
   // ---------------- Someone's public profile (opened by link P_<userId> or from a card) ----------------
   function renderPerson(route, state) {
@@ -266,6 +309,7 @@
         if (store().isBusinessActive() || store().isAssistant()) SF.data.allInquiries();
       } else if (route.screen === 'consultant') {
         if (!findCard(state, route.id)) SF.data.cardById(route.id);
+        SF.data.cardReviews(route.id);
       } else if (route.screen === 'person') {
         SF.data.profile(route.id);
       } else if (SF.office.afterRender) {

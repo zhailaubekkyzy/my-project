@@ -331,6 +331,13 @@
       ${section('Его/её чаты с SI (как клиент)', d.chatsAsClient, c => chatRow(u.id, c, c.consultantName, c.consultantActive ? '' : ' · SI-продавец выключен'))}
       ${section('Клиенты его/её SI-продавцов', d.myClients, c => chatRow(u.id, c, `${c.name}${c.username ? ` (@${c.username})` : ''} → ${c.consultantName}`, ''))}
 
+      ${section('Отзывы этого человека', d.reviews || [], r => `
+        <div class="space-y-1 pb-2 border-b border-line last:border-0">
+          <div class="text-[11px] text-ink-2">«${esc(r.consultantName)}» · ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)} · ${fmtTime(r.createdAt)}${r.hidden ? ' · <span class="text-si font-semibold">скрыт</span>' : ''}</div>
+          ${r.text ? `<div class="text-[11px] text-muted">${esc(r.text)}</div>` : ''}
+          <div class="flex flex-wrap gap-1.5">${fixBtn(u.id, 'review_visibility', r.hidden ? 'Показать отзыв' : 'Скрыть отзыв', { reviewId: r.id, visible: r.hidden })}</div>
+        </div>`)}
+
       ${section('Что команда уже делала', d.actions, a => `
         <div class="text-[11px] text-ink-2">${fmtTime(a.createdAt)} · ${esc(a.staffName)} ${actionLabel(a)}</div>`)}
     `;

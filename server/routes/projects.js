@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const projectService = require('../services/project-service');
 const funnelService = require('../services/funnel-service');
+const reviewService = require('../services/review-service');
 const { requireAuth } = require('../middleware/auth');
 const { requireProjectPermission } = require('../middleware/permissions');
 const db = require('../db');
@@ -191,6 +192,28 @@ router.get('/:projectId/analytics', requireProjectPermission('analytics:read'), 
     },
     live: { clients, talked, clientMessages, siReplies, humanRequests, waiting }
   });
+});
+
+/**
+ * GET /api/projects/:projectId/reviews — all reviews of my SI-seller (hidden ones marked)
+ * POST /api/projects/:projectId/reviews/:reviewId/reply  { text } — answer (empty = remove the answer)
+ * The owner only: the expert answers a review but never deletes it.
+ */
+router.get('/:projectId/reviews', requireProjectPermission('funnel:write'), async (req, res, next) => {
+  try {
+    res.json({ reviews: await reviewService.reviewsForOwner(req.project.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:projectId/reviews/:reviewId/reply', requireProjectPermission('funnel:write'), async (req, res, next) => {
+  try {
+    res.json({ review: await reviewService.reply(req.project, req.params.reviewId, req.body?.text) });
+  } catch (err) {
+    if (err instanceof reviewService.ReviewError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
 });
 
 module.exports = router;

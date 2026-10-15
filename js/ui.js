@@ -129,6 +129,12 @@
     setTimeout(() => toast.remove(), 2800);
   }
 
+  // Stars of a review: ★★★★☆ (Tiffany — it is about people)
+  function stars(rating, cls = 'text-[11px]') {
+    const n = Math.max(0, Math.min(5, Math.round(Number(rating) || 0)));
+    return `<span class="${cls} text-brand tracking-tight" aria-label="${n} из 5">${'★'.repeat(n)}<span class="text-faint">${'★'.repeat(5 - n)}</span></span>`;
+  }
+
   function openModal(innerHtml) {
     const modal = document.getElementById('modal-container');
     if (!modal) return;
@@ -235,6 +241,7 @@
     progressBar,
     showToast,
     openModal,
+    stars,
     closeModal,
     openLink,
     copyText,

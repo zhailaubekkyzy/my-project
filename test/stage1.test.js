@@ -2022,6 +2022,59 @@ async function runAllTests() {
     await projectService.updateProject(projectA.id, { custom_ai_settings: settings });
   });
 
+  await test('56. Отзывы: только после «Купили», один на SI-продавца, короткое имя, ответ эксперта, жалоба и скрытие', async () => {
+    const tg = { id: 700057, first_name: 'Анна', last_name: 'Каримова' };
+    const token = await tokenFor(tg);
+    const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+    await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Здравствуйте, интересует курс' });
+    const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, user.id]);
+    await db.run('UPDATE projects SET is_listed = 1, status = ? WHERE id = ?', ['active', projectA.id]);
+
+    let mine = await api('GET', `/api/chat/${projectA.slug}/review`, token);
+    assert.strictEqual(mine.body.canReview, false);
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/review`, token, { rating: 5, text: 'Супер' })).status, 403, 'Only after a purchase');
+
+    // The expert marks "Купил" → the client may write one review
+    await api('POST', `/api/projects/${projectA.id}/clients/${lead.id}/funnel`, tokenA, { outcome: 'paid' });
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/review`, token)).body.canReview, true);
+    assert.strictEqual((await api('POST', `/api/chat/${projectA.slug}/review`, token, { rating: 7 })).status, 400, 'Rating 1–5');
+    telegramBot.testOutbox.length = 0;
+    const created = await api('POST', `/api/chat/${projectA.slug}/review`, token, { rating: 4, text: 'Очень помогло разобраться в продажах' });
+    assert.strictEqual(created.status, 201);
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('4 из 5') && m.text.includes('Анна К.')), 'The expert learns about a new review');
+    const changed = await api('POST', `/api/chat/${projectA.slug}/review`, token, { rating: 5, text: 'Очень помогло разобраться в продажах!' });
+    assert.strictEqual(changed.status, 200, 'The same review is changed, not a second one');
+    assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM reviews WHERE project_id = ?', [projectA.id])).n), 1);
+
+    // Public: the short name only, the average
+    let pub = await api('GET', `/api/marketplace/consultants/${projectA.id}/reviews`);
+    assert.strictEqual(pub.status, 200);
+    assert.deepStrictEqual([pub.body.count, pub.body.average], [1, 5]);
+    assert.strictEqual(pub.body.reviews[0].name, 'Анна К.');
+    assert(!JSON.stringify(pub.body).includes('Каримова') && !JSON.stringify(pub.body).includes(user.id), 'No full name or id');
+    const card = (await api('GET', `/api/marketplace/consultants/${projectA.id}`)).body.consultant;
+    assert.deepStrictEqual(card.reviews, { count: 1, average: 5 });
+
+    // The expert answers, cannot delete; the assistant and strangers cannot answer
+    const reviewId = pub.body.reviews[0].id;
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/reviews/${reviewId}/reply`, tokenB, { text: 'x' })).status, 403);
+    const replied = await api('POST', `/api/projects/${projectA.id}/reviews/${reviewId}/reply`, tokenA, { text: 'Спасибо, Анна!' });
+    assert.strictEqual(replied.status, 200);
+    assert.strictEqual((await api('GET', `/api/marketplace/consultants/${projectA.id}/reviews`)).body.reviews[0].reply, 'Спасибо, Анна!');
+    assert.strictEqual((await api('DELETE', `/api/projects/${projectA.id}/reviews/${reviewId}`, tokenA)).status, 404, 'There is no way to delete');
+
+    // A complaint goes to the team; the team hides the review on the author's card
+    assert.strictEqual((await api('POST', `/api/marketplace/reviews/${reviewId}/report`, tokenB, { reason: 'неправда' })).status, 200);
+    const fb = await db.get(`SELECT text FROM feedback WHERE user_id = ? AND text LIKE ? LIMIT 1`, [expertB_InternalId, '%Жалоба на отзыв%']);
+    assert(fb && fb.text.includes('неправда'));
+    const fixes = require('../server/services/support-fixes');
+    await fixes.applyFix('review_visibility', user.id, { reviewId, visible: false }, 1, { userId: expertA_InternalId, role: 'owner' });
+    pub = await api('GET', `/api/marketplace/consultants/${projectA.id}/reviews`);
+    assert.deepStrictEqual([pub.body.count, pub.body.reviews.length], [0, 0], 'A hidden review is not shown nor counted');
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/review`, token)).body.review.hidden, true, 'The author still sees it');
+    await db.run('DELETE FROM reviews WHERE id = ?', [reviewId]);
+  });
+
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenAssistant)).status, 404, 'Only the owner removes');
     const removed = await api('DELETE', `/api/business/assistants/${assistantUser.id}`, tokenA);

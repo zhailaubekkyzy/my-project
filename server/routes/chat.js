@@ -10,6 +10,7 @@ const { mediaUrl } = require('../services/media-service');
 const receiptService = require('../services/receipt-service');
 const { readReceiptBody, readVoiceBody } = require('../middleware/image-upload');
 const voiceService = require('../services/voice-service');
+const reviewService = require('../services/review-service');
 const calendarService = require('../services/calendar-service');
 
 router.use(requireAuth);
@@ -193,6 +194,32 @@ router.post('/:slug/receipts', readReceiptBody, async (req, res, next) => {
     res.status(201).json({ receipt });
   } catch (err) {
     sendReceiptError(res, err, next);
+  }
+});
+
+/**
+ * GET /api/chat/:slug/review — may I write a review (after "Купили") and my own review
+ * POST /api/chat/:slug/review  { rating: 1–5, text } — write or change it
+ */
+router.get('/:slug/review', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    res.json(await reviewService.myReview(project, req.user.userId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:slug/review', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const result = await reviewService.saveReview(project, req.user.userId, { rating: req.body?.rating, text: req.body?.text });
+    res.status(result.created ? 201 : 200).json(result);
+  } catch (err) {
+    if (err instanceof reviewService.ReviewError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
   }
 });
 

@@ -73,6 +73,9 @@ const defaultData = {
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
+    cardReviews: {},         // { [projectId]: { count, average, reviews } } отзывы на карточке
+    myReviews: {},           // { [slug]: { canReview, review } } мой отзыв в чате
+    projectReviews: {},      // { [projectId]: [reviews] } Офис → Аналитика
     funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
     funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }

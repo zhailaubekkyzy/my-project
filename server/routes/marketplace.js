@@ -2,6 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const marketplaceService = require('../services/marketplace-service');
+const reviewService = require('../services/review-service');
+const { requireAuth } = require('../middleware/auth');
+const db = require('../db');
 
 /**
  * GET /api/marketplace?category=sales|warmup
@@ -36,6 +39,32 @@ router.get('/profiles/:userId', async (req, res, next) => {
     if (!profile) return res.status(404).json({ error: 'not_found', message: 'Профиль не найден' });
     res.json({ profile });
   } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/marketplace/consultants/:projectId/reviews?offset=
+ * Reviews of real clients (short names only), with the average rating. Listed SI-sellers only.
+ */
+router.get('/consultants/:projectId/reviews', async (req, res, next) => {
+  try {
+    const project = await db.get(`SELECT id FROM projects WHERE id = ? AND status = 'active' AND is_listed = 1`, [req.params.projectId]);
+    if (!project) return res.status(404).json({ error: 'not_found', message: 'Карточка не найдена или снята с витрины' });
+    res.json(await reviewService.publicReviews(project.id, { offset: req.query.offset }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/marketplace/reviews/:reviewId/report  { reason } — "Пожаловаться" on a review (the team decides)
+ */
+router.post('/reviews/:reviewId/report', requireAuth, async (req, res, next) => {
+  try {
+    res.json(await reviewService.report(req.params.reviewId, req.user.userId, req.body?.reason));
+  } catch (err) {
+    if (err instanceof reviewService.ReviewError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
     next(err);
   }
 });

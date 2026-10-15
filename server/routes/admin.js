@@ -266,6 +266,11 @@ router.get('/users/:id', async (req, res, next) => {
     ) : [];
 
     const feedback = await db.all('SELECT id, text, status, created_at, reply FROM feedback WHERE user_id = ? ORDER BY created_at DESC LIMIT 20', [user.id]);
+    // Reviews this person wrote (the team hides one after a complaint)
+    const reviews = await db.all(
+      `SELECT r.id, r.rating, r.text, r.hidden_at, r.created_at, p.name AS project_name
+       FROM reviews r JOIN projects p ON p.id = r.project_id WHERE r.author_user_id = ? ORDER BY r.created_at DESC LIMIT 30`, [user.id]
+    );
     const errors = await db.all('SELECT * FROM error_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 30', [user.id]);
     const actions = await db.all(
       `SELECT a.*, s.display_name AS staff_name FROM admin_actions a LEFT JOIN users s ON s.id = a.staff_user_id
@@ -294,6 +299,7 @@ router.get('/users/:id', async (req, res, next) => {
         clientId: c.id, consultantName: c.project_name, slug: c.slug, consultantActive: c.project_status === 'active',
         siPaused: c.responsible_type === 'human', messages: Number(c.messages) || 0, lastActivity: c.last_activity
       })),
+      reviews: reviews.map(r => ({ id: r.id, rating: Number(r.rating), text: r.text, hidden: Boolean(r.hidden_at), consultantName: r.project_name, createdAt: r.created_at })),
       myClients: myClients.map(c => ({
         clientId: c.id, name: c.name, username: c.username, consultantName: c.project_name,
         siPaused: c.responsible_type === 'human', messages: Number(c.messages) || 0, lastActivity: c.last_activity
