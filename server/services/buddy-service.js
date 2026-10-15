@@ -7,6 +7,10 @@
 //
 // Messages live in `notifications` (sender 'buddy' | 'user'); reminders wait in buddy_reminders and
 // the alarm clock (scheduler-service.js) sends them in time as Buddy's messages.
+// The calendar "for the whole life" (owner's decision 15 Oct.): plans the person tells Buddy are rows in
+// buddy_reminders too (kind 'plan', starts_at = when it happens); a plan is reminded only if the person
+// asked (notify). Meetings with experts (meetings, 012) are shown next to them. Voice messages to Buddy
+// are transcribed and answered like text (the recording itself is not kept).
 const crypto = require('crypto');
 const db = require('../db');
 const config = require('../config');
@@ -17,7 +21,9 @@ const profileService = require('./profile-service');
 const DAILY_LIMIT = 30;
 const MAX_TEXT = 1000;
 const HISTORY = 16;
-const MAX_ACTIVE_REMINDERS = 50;
+const MAX_ACTIVE_REMINDERS = 200;
+const PROMPT_PLANS = 40;
+const MAX_RANGE_DAYS = 62;
 // Where Buddy's button may lead (SF.openStartParam on the phone)
 const PLACES = {
   marketplace: 'GO_marketplace',
@@ -107,6 +113,75 @@ async function usage(userId, offset, now = new Date()) {
   return { used: Number(row.count) || 0, max: DAILY_LIMIT };
 }
 
+// Upcoming plans and reminders (not cancelled), for Buddy's prompt and the limit
+async function upcomingPlans(userId, now = new Date(), limit = MAX_ACTIVE_REMINDERS) {
+  return db.all(
+    `SELECT id, kind, text, remind_at, starts_at, notify, sent_at FROM buddy_reminders
+     WHERE user_id = ? AND cancelled_at IS NULL AND COALESCE(starts_at, remind_at) >= ?
+     ORDER BY COALESCE(starts_at, remind_at) ASC LIMIT ?`,
+    [userId, sqlTime(new Date(now.getTime() - 60 * 60000)), limit]
+  );
+}
+
+// Meetings with experts: as a client (the person's own client rows) or as the host (expert / assistant)
+async function meetingsOf(userId, from, to) {
+  const rows = await db.all(
+    `SELECT m.id, m.starts_at, m.ends_at, m.status, m.zoom_url, m.host_user_id, p.name AS project_name, p.slug,
+            c.name AS client_name, c.external_client_id
+     FROM meetings m
+     JOIN clients c ON c.id = m.client_id
+     LEFT JOIN projects p ON p.id = m.project_id
+     WHERE m.status IN ('booked', 'done') AND m.starts_at >= ? AND m.starts_at < ?
+       AND (c.external_client_id = ? OR m.host_user_id = ?)
+     ORDER BY m.starts_at ASC LIMIT 200`,
+    [sqlTime(from), sqlTime(to), userId, userId]
+  );
+  return rows.map(r => {
+    const asClient = r.external_client_id === userId;
+    return {
+      id: r.id,
+      kind: 'meeting',
+      title: asClient ? `Встреча: «${r.project_name || 'эксперт'}»` : `Встреча с ${r.client_name || 'клиентом'}`,
+      startsAt: toDate(r.starts_at).toISOString(),
+      endsAt: toDate(r.ends_at).toISOString(),
+      startParam: asClient ? (r.slug || null) : 'CAL'
+    };
+  });
+}
+
+/**
+ * Buddy's calendar for [from, to): the person's plans and reminders and their meetings with experts.
+ */
+async function calendar(userId, from, to) {
+  if (!(from instanceof Date) || !(to instanceof Date) || isNaN(from) || isNaN(to) || to <= from) return [];
+  if (to - from > MAX_RANGE_DAYS * 86400000) to = new Date(from.getTime() + MAX_RANGE_DAYS * 86400000);
+  const plans = await db.all(
+    `SELECT id, kind, text, remind_at, starts_at, notify FROM buddy_reminders
+     WHERE user_id = ? AND cancelled_at IS NULL AND COALESCE(starts_at, remind_at) >= ? AND COALESCE(starts_at, remind_at) < ?
+     ORDER BY COALESCE(starts_at, remind_at) ASC LIMIT 500`,
+    [userId, sqlTime(from), sqlTime(to)]
+  );
+  const items = plans.map(r => ({
+    id: r.id,
+    kind: r.kind === 'plan' ? 'plan' : 'reminder',
+    title: r.text,
+    startsAt: toDate(r.starts_at || r.remind_at).toISOString(),
+    remindAt: Number(r.notify) ? toDate(r.remind_at).toISOString() : null
+  }));
+  return items.concat(await meetingsOf(userId, from, to)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+/**
+ * The person removes a plan or a reminder from the calendar (only their own).
+ */
+async function cancelPlan(userId, id) {
+  const res = await db.run(
+    'UPDATE buddy_reminders SET cancelled_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND cancelled_at IS NULL',
+    [String(id || ''), userId]
+  );
+  return Number(res.changes) === 1;
+}
+
 async function activeReminders(userId) {
   return db.all(
     `SELECT id, text, remind_at FROM buddy_reminders WHERE user_id = ? AND sent_at IS NULL AND cancelled_at IS NULL ORDER BY remind_at ASC LIMIT ?`,
@@ -114,18 +189,27 @@ async function activeReminders(userId) {
   );
 }
 
-function systemPrompt(user, offset, now, reminders) {
+function planLine(r, offset) {
+  const at = toDate(r.starts_at || r.remind_at);
+  const remind = Number(r.notify) && r.kind === 'plan' && r.remind_at && toDate(r.remind_at).getTime() !== at.getTime()
+    ? ` (напомню: ${localLabel(toDate(r.remind_at), offset)})` : '';
+  const what = r.kind === 'plan' ? r.text : `напоминание: ${r.text}`;
+  return `${localLabel(at, offset)} — ${what}${remind}`;
+}
+
+function systemPrompt(user, offset, now, reminders, meetings = []) {
   const name = (profileService.toPublicUser(user).displayName || '').split(' ')[0];
   return [
     'Ты — Бадди, личный помощник человека в приложении SmartFlow на каждый день.',
-    'Помогаешь спланировать день, разобрать дела и цели, не забыть важное (напоминания), подсказываешь по приложению.',
+    'Помогаешь спланировать день, разобрать дела и цели, ведёшь его календарь (планы, дела, встречи), не забыть важное',
+    '(напоминания), подсказываешь по приложению. Календарь человек видит над перепиской: сегодня, завтра, послезавтра и месяц.',
     '',
     'Как общаться:',
     '- Тепло, по-дружески, коротко: 1–3 предложения, как в мессенджере. На «ты» не переходи, если человек сам не начал.',
     '- Ничего не продаёшь и не советуешь покупать. Не давишь, не морализируешь.',
     '- Ты SI (Super Intelligence) — на прямой вопрос честно скажи, что ты SI-помощник, а не человек.',
     '- Медицинские, юридические и финансовые решения не принимаешь за человека — мягко советуешь специалиста.',
-    '- Не выдумывай факты о человеке и его делах: знаешь только то, что он написал, и список напоминаний ниже.',
+    '- Не выдумывай факты о человеке и его делах: знаешь только то, что он написал, и его календарь ниже.',
     '- Никогда не предлагай написать или познакомиться с конкретным человеком и не называй людей. Можно посоветовать',
     '  поискать SI-продавца в Маркетплейсе (позже — группу в Инкубаторе), но не человека.',
     '',
@@ -134,24 +218,30 @@ function systemPrompt(user, offset, now, reminders) {
     '',
     `Сейчас у человека: ${localLabel(now, offset)}.`,
     name ? `Имя: ${name}.` : '',
-    'Его напоминания (номер. когда — что):',
+    'Его календарь — планы и напоминания (номер. когда — что):',
     ...(reminders.length
-      ? reminders.map((r, i) => `${i + 1}. ${localLabel(toDate(r.remind_at), offset)} — ${r.text}`)
-      : ['(нет)']),
+      ? reminders.map((r, i) => `${i + 1}. ${planLine(r, offset)}`)
+      : ['(пусто)']),
+    'Встречи с экспертами (их меняют в чате с SI-продавцом или в Офисе, не здесь):',
+    ...(meetings.length ? meetings.map(m => `- ${localLabel(new Date(m.startsAt), offset)} — ${m.title}`) : ['(нет)']),
     '',
     'Ответь только JSON:',
-    '{"reply": "текст ответа", "reminders": [{"text": "что напомнить", "at": "ГГГГ-ММ-ДД ЧЧ:ММ"}], "cancel": [номера], "open": "marketplace|office|chats|profile|support|none"}',
-    '- reminders: только если человек ясно просит напомнить; время — по его часам; если время неясно, спроси в reply и оставь [].',
-    '- cancel: номера напоминаний, которые человек просит отменить.',
+    '{"reply": "текст ответа", "plans": [{"text": "что", "at": "ГГГГ-ММ-ДД ЧЧ:ММ", "remind_before": число минут или null}], "cancel": [номера], "open": "marketplace|office|chats|profile|support|none"}',
+    '- plans: дела, встречи, планы и напоминания, о которых человек ясно говорит («завтра в 13:00 созвон с коучем», «напомни в 9 позвонить маме»).',
+    '  text — коротко, как запись в календаре («Созвон с коучем по нутрициологии»). at — когда это будет, по его часам.',
+    '  remind_before: если просит напомнить — за сколько минут (0 = в это время, «за час» = 60); если не просил — null.',
+    '  Если время неясно — спроси в reply и оставь []. Чтобы перенести — отмени старое (cancel) и добавь новое.',
+    '- cancel: номера из календаря, которые человек просит отменить или перенести.',
+    '- На вопросы «что у меня сегодня / завтра / на неделе» отвечай по календарю и встречам выше.',
     '- open: раздел, куда уместно дать кнопку (например, человек спрашивает, где найти экспертов → marketplace), иначе "none".',
-    '- В reply подтверди, что запомнил напоминание, с днём и временем.'
+    '- В reply подтверди, что добавил в календарь, с днём и временем; если напоминание не просили — можно мягко предложить.'
   ].filter(line => line !== '').join('\n');
 }
 
 /**
  * The person writes to Buddy. Returns { messages: [new ones], usage }.
  */
-async function send(user, rawText, tzOffset, now = new Date()) {
+async function send(user, rawText, tzOffset, now = new Date(), { voice = false } = {}) {
   const text = String(rawText || '').trim().slice(0, MAX_TEXT);
   if (!text) return { messages: [], usage: await usage(user.id, user.tz_offset_minutes) };
   const offset = cleanOffset(tzOffset) ?? cleanOffset(user.tz_offset_minutes) ?? 0;
@@ -160,7 +250,7 @@ async function send(user, rawText, tzOffset, now = new Date()) {
   }
 
   const before = await usage(user.id, offset, now);
-  const mine = await saveMessage(user.id, 'user', text);
+  const mine = await saveMessage(user.id, 'user', text, { kind: voice ? 'voice' : 'chat' });
   const created = [mine];
 
   if (before.used >= DAILY_LIMIT) {
@@ -178,9 +268,10 @@ async function send(user, rawText, tzOffset, now = new Date()) {
     return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT } };
   }
 
-  const reminders = await activeReminders(user.id);
+  const reminders = await upcomingPlans(user.id, now, PROMPT_PLANS);
+  const meetings = await meetingsOf(user.id, new Date(now.getTime() - 3600000), new Date(now.getTime() + 31 * 86400000));
   const history = (await messages(user.id, HISTORY + 1)).slice(0, -1); // without the message just saved
-  const chat = [{ role: 'system', content: systemPrompt(user, offset, now, reminders) }];
+  const chat = [{ role: 'system', content: systemPrompt(user, offset, now, reminders, meetings.slice(0, 20)) }];
   for (const m of history) {
     chat.push({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text });
   }
@@ -193,16 +284,24 @@ async function send(user, rawText, tzOffset, now = new Date()) {
     ? parsed.reply.trim()
     : 'Извините, я не расслышал — напишите, пожалуйста, ещё раз 🙂';
 
-  // Reminders the person asked for (in the future, within a year, not too many)
-  if (parsed && Array.isArray(parsed.reminders)) {
-    let active = reminders.length;
-    for (const r of parsed.reminders.slice(0, 5)) {
+  // Plans and reminders (in the future, within a year, not too many). "reminders" is the older answer
+  // format: a reminder at that very time.
+  const asked = [];
+  if (parsed && Array.isArray(parsed.plans)) asked.push(...parsed.plans);
+  if (parsed && Array.isArray(parsed.reminders)) asked.push(...parsed.reminders.map(r => ({ ...r, remind_before: 0, reminder: true })));
+  if (asked.length) {
+    let active = (await upcomingPlans(user.id, now)).length;
+    for (const r of asked.slice(0, 5)) {
       const at = parseLocal(r && r.at, offset);
       const what = String((r && r.text) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
       if (!at || !what || at <= now || at - now > 366 * 86400000 || active >= MAX_ACTIVE_REMINDERS) continue;
+      const before = r.remind_before === null || r.remind_before === undefined || r.remind_before === '' ? null : parseInt(r.remind_before, 10);
+      const notify = Number.isFinite(before) && before >= 0;
+      // A reminder earlier than now (e.g. "за час" to something in 30 minutes) goes at once
+      const remindAt = notify ? new Date(Math.max(now.getTime(), at.getTime() - Math.min(before, 7 * 1440) * 60000)) : at;
       await db.run(
-        'INSERT INTO buddy_reminders (id, user_id, text, remind_at) VALUES (?, ?, ?, ?)',
-        [newId('rem'), user.id, what, sqlTime(at)]
+        'INSERT INTO buddy_reminders (id, user_id, kind, text, starts_at, remind_at, notify) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [newId('rem'), user.id, r.reminder ? 'reminder' : 'plan', what, sqlTime(at), sqlTime(remindAt), notify ? 1 : 0]
       );
       active++;
     }
@@ -216,7 +315,7 @@ async function send(user, rawText, tzOffset, now = new Date()) {
 
   const startParam = parsed && PLACES[parsed.open] ? PLACES[parsed.open] : null;
   created.push(await saveMessage(user.id, 'buddy', reply, { startParam }));
-  return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT } };
+  return { messages: created, usage: { used: before.used + 1, max: DAILY_LIMIT }, calendarChanged: asked.length > 0 || Boolean(parsed && Array.isArray(parsed.cancel) && parsed.cancel.length) };
 }
 
 /**
@@ -224,7 +323,7 @@ async function send(user, rawText, tzOffset, now = new Date()) {
  */
 async function runReminders(now = new Date()) {
   const due = await db.all(
-    `SELECT * FROM buddy_reminders WHERE sent_at IS NULL AND cancelled_at IS NULL AND remind_at <= ? ORDER BY remind_at ASC LIMIT 100`,
+    `SELECT * FROM buddy_reminders WHERE sent_at IS NULL AND cancelled_at IS NULL AND notify = 1 AND remind_at <= ? ORDER BY remind_at ASC LIMIT 100`,
     [sqlTime(now)]
   );
   let sent = 0;
@@ -232,14 +331,27 @@ async function runReminders(now = new Date()) {
     // Taken by this run only (another server copy may run at the same time)
     const taken = await db.run('UPDATE buddy_reminders SET sent_at = CURRENT_TIMESTAMP WHERE id = ? AND sent_at IS NULL', [r.id]);
     if (Number(taken.changes) !== 1) continue;
-    await telegramBot.notifyUser(r.user_id, `⏰ Напоминаю: ${r.text}`, { buttonText: 'Открыть Бадди' });
+    await telegramBot.notifyUser(r.user_id, await reminderText(r), { buttonText: 'Открыть Бадди' });
     sent++;
   }
   return { sent };
 }
 
+// "⏰ Напоминаю: …" — for a plan reminded in advance, also its time in the person's clock
+async function reminderText(r) {
+  const starts = r.starts_at ? toDate(r.starts_at) : null;
+  const remind = toDate(r.remind_at);
+  if (r.kind !== 'plan' || !starts || starts - remind < 60000) return `⏰ Напоминаю: ${r.text}`;
+  const user = await db.get('SELECT tz_offset_minutes FROM users WHERE id = ?', [r.user_id]);
+  const local = localClock(starts, cleanOffset(user && user.tz_offset_minutes) ?? 0);
+  return `⏰ Скоро, в ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}: ${r.text}`;
+}
+
 module.exports = {
   DAILY_LIMIT,
+  calendar,
+  cancelPlan,
+  upcomingPlans,
   LIMIT_TEXT,
   PLACES,
   messages,

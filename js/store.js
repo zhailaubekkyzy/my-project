@@ -76,6 +76,7 @@ const defaultData = {
     cardReviews: {},         // { [projectId]: { count, average, reviews } } отзывы на карточке
     myReviews: {},           // { [slug]: { canReview, review } } мой отзыв в чате
     projectReviews: {},      // { [projectId]: [reviews] } Офис → Аналитика
+    buddyCalendar: {},       // { days | 'YYYY-MM': { from, to, items } } Бадди → календарь
     funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
     funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
