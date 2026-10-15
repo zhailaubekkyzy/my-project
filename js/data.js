@@ -87,6 +87,7 @@
         messages: res.messages || [],
         siPaused: Boolean(res.siPaused),
         contactShared: Boolean(res.contactShared),
+        broadcastsOff: Boolean(res.broadcastsOff),
         tools: res.tools || { contact: false, receipt: false }
       });
     }, maxAge),
@@ -206,6 +207,12 @@
       const res = await api().getBuddyCalendar(from, to);
       store().setRemote(`buddyCalendar.${key}`, { from, to, items: res.items || [] });
     }, maxAge),
+
+    // Broadcasts of an SI-seller: history and limits
+    broadcasts: (projectId) => ensure(`broadcasts:${projectId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`broadcasts.${projectId}`, await api().getBroadcasts(projectId));
+    }, 15000),
 
     // My business: owner + assistant
     business: () => ensure('business', async () => {

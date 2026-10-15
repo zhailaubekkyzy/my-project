@@ -107,6 +107,7 @@ function toMessage(row) {
     isVoice: Boolean(row.is_voice),
     voiceId: row.voice_id || null,
     voiceSeconds: row.voice_seconds ? Number(row.voice_seconds) : null,
+    isBroadcast: Boolean(row.is_broadcast),
     createdAt: row.created_at
   };
 }
@@ -140,13 +141,13 @@ async function history(projectId, clientId) {
 /**
  * author: { type: 'si' | 'client' | 'owner' | 'assistant', userId? } (userId for owner / assistant)
  */
-async function saveMessage(client, author, text, voice = null) {
+async function saveMessage(client, author, text, voice = null, { broadcast = false } = {}) {
   const id = newMessageId();
   await db.run(
-    `INSERT INTO conversations (id, project_id, client_id, business_id, sender, author_type, author_user_id, text, is_voice, voice_id, voice_seconds)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO conversations (id, project_id, client_id, business_id, sender, author_type, author_user_id, text, is_voice, voice_id, voice_seconds, is_broadcast)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, client.project_id, client.id, client.business_id || null, SENDER_OF[author.type], author.type, author.userId || null, text,
-      voice ? 1 : 0, voice ? voice.id : null, voice ? voice.seconds : null]
+      voice ? 1 : 0, voice ? voice.id : null, voice ? voice.seconds : null, broadcast ? 1 : 0]
   );
   await db.run(
     'UPDATE clients SET last_message = ?, last_activity = CURRENT_TIMESTAMP WHERE id = ?',

@@ -440,6 +440,15 @@
       const body = msg.voiceId ? SF.voiceContent(msg, `/api/chat/${encodeURIComponent(slug)}/voice/${msg.voiceId}`) : SF.formatChatMarkdown(msg.text);
       return `<div class="flex justify-end"><div class="chat-bubble-human">${body}</div></div>`;
     }
+    if (msg.isBroadcast) {
+      const thread = store().data.remote.messages[slug] || {};
+      return `
+        <div class="flex flex-col items-start">
+          <div class="text-[9px] text-brand font-semibold px-1 mb-0.5">📣 Рассылка · ${SF.esc(consultant?.author?.name || 'эксперт')}</div>
+          <div class="chat-bubble-expert">${SF.formatChatMarkdown(msg.text)}</div>
+          <button onclick="SF.actions.toggleBroadcasts('${SF.js(slug)}', ${thread.broadcastsOff ? 'false' : 'true'})" class="text-[9px] text-faint underline px-1 mt-0.5">${thread.broadcastsOff ? 'Снова присылать рассылки' : 'Не присылать рассылки'}</button>
+        </div>`;
+    }
     if (msg.sender === 'expert_human') {
       return `
         <div class="flex flex-col items-start">
@@ -453,6 +462,17 @@
         <div class="chat-bubble-si">${SF.formatChatMarkdown(msg.text)}</div>
       </div>`;
   }
+
+  SF.actions.toggleBroadcasts = async (slug, off) => {
+    try {
+      await api().setBroadcastsOff(slug, off);
+      SF.data.invalidate(`messages:${slug}`);
+      await SF.data.chatMessages(slug);
+      showToast(off ? 'Больше не будем присылать рассылки. Переписка остаётся как была' : 'Рассылки снова включены');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
 
   // "Купить" leads to this consultant's own payment link (SmartFlow takes no payments)
   function buyBanner(state, slug, consultant, messages) {

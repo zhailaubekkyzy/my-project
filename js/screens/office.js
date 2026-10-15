@@ -750,7 +750,7 @@
     if (tab === 'methodology') body = renderMethodology(c, route) + renderConsultantBrain(c, state);
     if (tab === 'analytics') body = renderAnalytics(c, state);
     if (tab === 'income') body = renderClients(c, state);
-    if (tab === 'broadcasts') body = renderBroadcasts();
+    if (tab === 'broadcasts') body = renderBroadcasts(c, state);
 
     return `
       <div class="glass-card-3d p-4 space-y-3 border-[var(--si-bubble-line)]">
@@ -801,6 +801,7 @@
         </div>
       </div>
       ${renderClients(c, state)}
+      ${renderBroadcasts(c, state)}
     `;
   }
 
@@ -1076,12 +1077,91 @@
     `;
   }
 
-  function renderBroadcasts() {
+  // ---------------- Broadcasts: announcements in words, SI picks whom and drafts; sent only after confirming ----------------
+  const BROADCAST_STATUSES = [
+    { id: 'not_finished', label: 'Не дошли до конца' },
+    { id: 'objections', label: 'Есть возражения' },
+    { id: 'waiting_human', label: 'Ждут человека' },
+    { id: 'bought', label: 'Купили' }
+  ];
+  const BROADCAST_DAYS = [{ id: '', label: 'Все' }, { id: '7', label: '7 дней' }, { id: '30', label: '30 дней' }, { id: '90', label: '90 дней' }];
+  const BROADCAST_STATE = {
+    draft: ['Черновик', 'text-muted'],
+    pending_approval: ['Ждёт одобрения владельца', 'text-amber-500'],
+    sending: ['Отправляется', 'text-brand'],
+    sent: ['Отправлена', 'text-emerald-500'],
+    cancelled: ['Отменена', 'text-faint']
+  };
+  const broadcastDrafts = {}; // { [projectId]: { request, audience, text, count, sample, busy } }
+
+  function broadcastDraft(projectId) {
+    return broadcastDrafts[projectId] || (broadcastDrafts[projectId] = { request: '', audience: { statuses: [], stepIds: [], days: null, objection: '' }, text: '', count: null, sample: [], open: false });
+  }
+
+  function renderBroadcasts(c, state) {
+    const assisting = Boolean(c.assisting);
+    const data = state.remote.broadcasts[c.id];
+    const d = broadcastDraft(c.id);
+    const a = d.audience;
+    const steps = c.steps || [];
+    const chip = (active, onclick, label) => `<button type="button" onclick="${onclick}" class="px-2 py-1 rounded-lg border text-[11px] ${active ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0] font-semibold' : 'bg-sunken text-muted border-line'}">${label}</button>`;
+    const id = SF.js(c.id);
     return `
-      <div class="glass-card-3d p-4 space-y-2">
-        <div class="flex items-center gap-2"><span class="si-dot"></span><span class="text-sm font-bold text-ink">Рассылки</span>${SF.soonBadge()}</div>
-        <p class="text-xs text-muted leading-relaxed">Анонсы для ваших клиентов: мероприятие, новость, акция. Напишете обычными словами, кому и что отправить — SI подберёт клиентов и подготовит текст, отправка только после вашего подтверждения.</p>
-        <p class="text-[11px] text-faint leading-snug">Догоняющие сообщения, если клиент замолчал, настраиваются в методологии: «Карточка и методология» → сценарии «если…, то…».</p>
+      <div class="glass-card-3d p-4 space-y-2.5 text-xs">
+        ${SF.sectionTitle('send-horizontal', 'Новая рассылка')}
+        <div class="text-[11px] text-muted leading-snug">Анонс мероприятия, новость, акция. Напишите словами, кому и что отправить, — SI подберёт клиентов и подготовит текст. Ничего не уйдёт без вашего подтверждения${assisting ? ' (рассылку помощника одобряет владелец)' : ''}.</div>
+        <textarea rows="3" maxlength="500" data-keep="bc-request-${id}" oninput="SF.office.broadcastField('${id}', 'request', this.value)" placeholder="Например: всем, кто не купил за последний месяц, — пригласить на бесплатный эфир в субботу в 19:00" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(d.request)}</textarea>
+        <div class="flex gap-2">
+          <button onclick="SF.actions.planBroadcast('${id}')" ${d.busy ? 'disabled' : ''} class="flex-1 py-2.5 rounded-xl btn-3d-tiffany font-bold disabled:opacity-60">${d.busy ? 'SI готовит…' : 'Подготовить'}</button>
+          ${!d.open ? `<button onclick="SF.actions.openBroadcastForm('${id}')" class="px-3 py-2.5 rounded-xl btn-3d-dark">Вручную</button>` : ''}
+        </div>
+        ${d.open ? `
+          <div class="space-y-2 pt-2 border-t border-line">
+            <div class="font-semibold text-ink-2">Кому</div>
+            <div class="flex flex-wrap gap-1.5">
+              ${chip(!a.statuses.length, `SF.actions.broadcastStatus('${id}', '')`, 'Всем')}
+              ${BROADCAST_STATUSES.map(st => chip(a.statuses.includes(st.id), `SF.actions.broadcastStatus('${id}', '${st.id}')`, st.label)).join('')}
+            </div>
+            ${steps.length ? `
+              <div class="text-[11px] text-muted">Шаг воронки (необязательно)</div>
+              <div class="flex flex-wrap gap-1.5">${steps.map((st, i) => chip(a.stepIds.includes(st.id), `SF.actions.broadcastStep('${id}', '${SF.js(st.id)}')`, `${i + 1}. ${SF.esc(st.title)}`)).join('')}</div>` : ''}
+            <div class="text-[11px] text-muted">Писали за последние</div>
+            <div class="flex flex-wrap gap-1.5">${BROADCAST_DAYS.map(dd => chip(String(a.days || '') === dd.id, `SF.actions.broadcastDays('${id}', '${dd.id}')`, dd.label)).join('')}</div>
+            <input maxlength="60" value="${SF.esc(a.objection)}" onchange="SF.actions.broadcastObjection('${id}', this.value)" placeholder="Возражение содержит… (например: дорого) — необязательно" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
+            <div class="p-2.5 rounded-xl bg-sunken border border-line">
+              ${d.count === null ? '<span class="text-muted">Считаю…</span>' : `<span class="font-bold text-ink">Получат: ${d.count}</span>${d.sample.length ? `<span class="text-muted"> · ${d.sample.map(n => SF.esc(n)).join(', ')}${d.count > d.sample.length ? '…' : ''}</span>` : ''}`}
+            </div>
+            <div class="font-semibold text-ink-2 pt-1">Текст</div>
+            <textarea rows="5" maxlength="1000" data-keep="bc-text-${id}" oninput="SF.office.broadcastField('${id}', 'text', this.value)" placeholder="Сообщение придёт клиенту от вас в чат с SI-продавцом" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(d.text)}</textarea>
+            <div class="text-[10px] text-faint leading-snug">Не получат: отказавшиеся, нажавшие «Не присылать рассылки» и те, кто ни разу не писал. Сообщение придёт в чат с SI-продавцом и уведомлением у Бадди / в Telegram — с 9:00 до 21:00 по времени клиента. Не больше 1 рассылки в день и 3 в неделю.</div>
+            ${assisting
+              ? `<button onclick="SF.actions.sendBroadcast('${id}', false)" class="w-full py-2.5 rounded-xl btn-3d-tiffany font-bold">Отправить владельцу на одобрение</button>`
+              : `<div class="flex gap-2">
+                  <button onclick="SF.actions.sendBroadcast('${id}', false)" class="px-3 py-2.5 rounded-xl btn-3d-dark">В черновик</button>
+                  <button onclick="SF.actions.sendBroadcast('${id}', true)" ${!d.count ? 'disabled' : ''} class="flex-1 py-2.5 rounded-xl btn-3d-tiffany font-bold disabled:opacity-60">Отправить${d.count ? ` ${d.count} клиентам` : ''}</button>
+                </div>`}
+          </div>` : ''}
+      </div>
+
+      <div class="glass-card-3d p-4 space-y-2 text-xs">
+        ${SF.sectionTitle('history', 'Рассылки')}
+        ${!data ? '<div class="text-muted">Загружаю…</div>' : ''}
+        ${data && !data.broadcasts.length ? '<div class="text-muted">Рассылок пока не было.</div>' : ''}
+        ${(data ? data.broadcasts : []).map(b => `
+          <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+              <span class="font-semibold ${BROADCAST_STATE[b.status][1]}">${BROADCAST_STATE[b.status][0]}</span>
+              <span class="text-faint">${timeLabel(b.startedAt || b.createdAt)}</span>
+            </div>
+            <div class="text-ink-2 whitespace-pre-line line-clamp-4">${SF.esc(b.text)}</div>
+            ${b.total ? `<div class="text-[11px] text-muted">Получили ${b.sent} из ${b.total}</div>` : ''}
+            ${b.status === 'pending_approval' && b.createdByName ? `<div class="text-[10px] text-faint">Подготовил(а): ${SF.esc(b.createdByName)}</div>` : ''}
+            <div class="flex gap-2">
+              ${!assisting && (b.status === 'draft' || b.status === 'pending_approval') ? `<button onclick="SF.actions.approveBroadcast('${id}', '${SF.js(b.id)}')" class="flex-1 py-1.5 rounded-lg btn-3d-tiffany text-[11px] font-bold">${b.status === 'draft' ? 'Отправить' : 'Одобрить и отправить'}</button>` : ''}
+              ${['draft', 'pending_approval'].includes(b.status) && (!assisting || b.createdBy === myUserId()) ? `<button onclick="SF.actions.cancelBroadcast('${id}', '${SF.js(b.id)}', false)" class="px-3 py-1.5 rounded-lg btn-3d-dark text-[11px]">${b.status === 'pending_approval' && !assisting ? 'Отклонить' : 'Удалить'}</button>` : ''}
+              ${b.status === 'sending' && !assisting ? `<button onclick="SF.actions.cancelBroadcast('${id}', '${SF.js(b.id)}', true)" class="px-3 py-1.5 rounded-lg btn-3d-dark text-[11px]">Остановить</button>` : ''}
+            </div>
+          </div>`).join('')}
       </div>
     `;
   }
@@ -1396,6 +1476,129 @@
       SF.data.invalidate(`clients:${projectId}`);
       SF.data.invalidate('funnel');
       showToast(`Отмечено: ${res.funnelLabel}`);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  // ---- Broadcasts ----
+  let broadcastPreviewTimer = null;
+  function refreshBroadcastPreview(projectId) {
+    const d = broadcastDraft(projectId);
+    d.count = null;
+    store().notify();
+    clearTimeout(broadcastPreviewTimer);
+    broadcastPreviewTimer = setTimeout(async () => {
+      try {
+        const res = await api().previewBroadcast(projectId, d.audience);
+        d.count = res.count;
+        d.sample = res.sample || [];
+      } catch (err) {
+        d.count = 0;
+      }
+      store().notify();
+    }, 250);
+  }
+
+  SF.actions.openBroadcastForm = (projectId) => {
+    broadcastDraft(projectId).open = true;
+    refreshBroadcastPreview(projectId);
+  };
+
+  SF.actions.planBroadcast = async (projectId) => {
+    if (needServer()) return;
+    const d = broadcastDraft(projectId);
+    if (!d.request.trim()) {
+      showToast('Напишите словами, кому и что отправить');
+      return;
+    }
+    d.busy = true;
+    store().notify();
+    try {
+      const res = await api().planBroadcast(projectId, d.request);
+      d.open = true;
+      if (res.plan) {
+        d.audience = { statuses: res.plan.audience.statuses, stepIds: res.plan.audience.stepIds, days: res.plan.audience.days, objection: res.plan.audience.objection };
+        d.text = res.plan.text || d.text;
+        d.count = res.plan.count;
+        d.sample = res.plan.sample || [];
+      } else {
+        showToast('SI пока не подключён — выберите, кому отправить, и напишите текст вручную');
+        refreshBroadcastPreview(projectId);
+      }
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    } finally {
+      d.busy = false;
+      store().notify();
+    }
+  };
+
+  SF.actions.broadcastStatus = (projectId, status) => {
+    const a = broadcastDraft(projectId).audience;
+    a.statuses = !status ? [] : (a.statuses.includes(status) ? a.statuses.filter(s => s !== status) : [...a.statuses, status]);
+    refreshBroadcastPreview(projectId);
+  };
+
+  SF.actions.broadcastStep = (projectId, stepId) => {
+    const a = broadcastDraft(projectId).audience;
+    a.stepIds = a.stepIds.includes(stepId) ? a.stepIds.filter(s => s !== stepId) : [...a.stepIds, stepId];
+    refreshBroadcastPreview(projectId);
+  };
+
+  SF.actions.broadcastDays = (projectId, days) => {
+    broadcastDraft(projectId).audience.days = days ? Number(days) : null;
+    refreshBroadcastPreview(projectId);
+  };
+
+  SF.actions.broadcastObjection = (projectId, value) => {
+    broadcastDraft(projectId).audience.objection = value.trim();
+    refreshBroadcastPreview(projectId);
+  };
+
+  SF.actions.sendBroadcast = async (projectId, send) => {
+    if (needServer()) return;
+    const d = broadcastDraft(projectId);
+    if (!d.text.trim()) {
+      showToast('Напишите текст рассылки');
+      return;
+    }
+    if (send && !confirm(`Отправить рассылку ${d.count} клиентам? Отменить уже отправленные сообщения будет нельзя.`)) return;
+    try {
+      const res = await api().createBroadcast(projectId, { request: d.request, audience: d.audience, text: d.text, send });
+      delete broadcastDrafts[projectId];
+      SF.data.invalidate(`broadcasts:${projectId}`);
+      await SF.data.broadcasts(projectId);
+      const status = res.broadcast.status;
+      showToast(status === 'sending' ? 'Рассылка отправляется — клиенты получат её с 9:00 до 21:00 по своему времени'
+        : status === 'pending_approval' ? 'Отправлено владельцу на одобрение' : 'Черновик сохранён');
+    } catch (err) {
+      SF.data.invalidate(`broadcasts:${projectId}`);
+      SF.data.broadcasts(projectId);
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.approveBroadcast = async (projectId, broadcastId) => {
+    if (needServer()) return;
+    if (!confirm('Отправить эту рассылку клиентам? Отменить уже отправленные сообщения будет нельзя.')) return;
+    try {
+      await api().broadcastAction(projectId, broadcastId, 'approve');
+      SF.data.invalidate(`broadcasts:${projectId}`);
+      await SF.data.broadcasts(projectId);
+      showToast('Рассылка отправляется');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.cancelBroadcast = async (projectId, broadcastId, sending) => {
+    if (needServer()) return;
+    if (!confirm(sending ? 'Остановить рассылку? Кто уже получил — получил, остальным не придёт.' : 'Убрать эту рассылку? Клиентам она не уйдёт.')) return;
+    try {
+      await api().broadcastAction(projectId, broadcastId, 'cancel');
+      SF.data.invalidate(`broadcasts:${projectId}`);
+      await SF.data.broadcasts(projectId);
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
     }
@@ -1804,6 +2007,8 @@
   };
 
   SF.office = {
+    // Typing in a broadcast draft is kept without re-drawing the screen
+    broadcastField: (projectId, field, value) => { broadcastDraft(projectId)[field] = value; },
     thenHints: THEN_HINTS,
     title(route) {
       return TITLES[route.screen] || 'Офис';
@@ -1853,8 +2058,10 @@
         const c = store().findOfficeConsultant(route.id);
         if (c && c.assisting) {
           SF.data.clients(route.id);
+          SF.data.broadcasts(route.id);
           return;
         }
+        if (route.tab === 'broadcasts') SF.data.broadcasts(route.id);
         if (!route.tab || route.tab === 'methodology') SF.data.brain();
         if (route.tab === 'analytics') {
           SF.data.analytics(route.id);

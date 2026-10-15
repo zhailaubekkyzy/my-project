@@ -17,6 +17,9 @@ if (TEST_DRIVER === 'postgres') process.env.DATABASE_URL = process.env.TEST_DATA
 // Fake token: tests only need a value to sign initData with. Never put a real bot token here.
 process.env.TELEGRAM_BOT_TOKEN = '1234567890:TEST_ONLY_fake_bot_token_not_real';
 process.env.JWT_SECRET = 'sf_test_jwt_secret_key_stage1_testing_12345';
+// Messages to clients go only 9:00–21:00 by their time: for clients without a time zone the tests
+// pick one where it is midday now, so the suite does not depend on the hour it runs
+process.env.DEFAULT_TZ_OFFSET_MINUTES = String(((12 - new Date().getUTCHours() + 36) % 24 - 12) * 60);
 
 // Remove old test db if present
 if (fs.existsSync(TEST_DB_FILE)) {
@@ -2193,6 +2196,84 @@ async function runAllTests() {
     assert.strictEqual(analytics.isConfigured(), false);
     analytics.capture('anything', 'usr_x', { name: 'x' });
     assert.strictEqual((await api('GET', '/api/health')).body.posthog.configured, false);
+  });
+
+  await test('58. Рассылки: помощник готовит, владелец одобряет; не получают отказавшиеся и отписавшиеся; лимиты и ночь', async () => {
+    const broadcastService = require('../server/services/broadcast-service');
+    const mk = async (id, name) => {
+      const tg = { id, first_name: name };
+      const token = await tokenFor(tg);
+      const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Здравствуйте!' });
+      const lead = await db.get('SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?', [projectA.id, user.id]);
+      return { token, user, lead };
+    };
+    const night = await mk(700081, 'Сова');
+    const refused = await mk(700082, 'Нет');
+    const off = await mk(700083, 'Тишина');
+    await api('POST', `/api/projects/${projectA.id}/clients/${refused.lead.id}/funnel`, tokenA, { outcome: 'refused' });
+    const optOut = await api('POST', `/api/chat/${projectA.slug}/broadcasts`, off.token, { off: true });
+    assert.strictEqual(optOut.body.broadcastsOff, true);
+    assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/messages`, off.token)).body.broadcastsOff, true);
+    // 3 a.m. for this client right now
+    await db.run('UPDATE users SET tz_offset_minutes = ? WHERE id = ?', [((3 - new Date().getUTCHours() + 36) % 24 - 12) * 60, night.user.id]);
+
+    // Without OpenAI the form is filled by hand
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/broadcasts/plan`, tokenA, { request: 'всем анонс эфира' })).body.plan, null);
+    const pre = await api('POST', `/api/projects/${projectA.id}/broadcasts/preview`, tokenA, { audience: { statuses: ['refused', 'bogus'] } });
+    assert.deepStrictEqual(pre.body.audience.statuses, [], 'Refused can never be chosen');
+    const expected = pre.body.count;
+    assert(expected >= 2);
+    const ids = (await db.all(`SELECT id FROM clients WHERE project_id = ?`, [projectA.id])).map(r => r.id);
+    assert(ids.includes(night.lead.id));
+
+    // The assistant prepares → the owner is asked; the assistant cannot send
+    telegramBot.testOutbox.length = 0;
+    const draft = await api('POST', `/api/projects/${projectA.id}/broadcasts`, tokenAssistant, { request: 'анонс', audience: {}, text: 'Друзья, в субботу в 19:00 бесплатный эфир!', send: true });
+    assert.strictEqual(draft.status, 201);
+    assert.strictEqual(draft.body.broadcast.status, 'pending_approval', 'The assistant cannot send by themselves');
+    assert(telegramBot.testOutbox.some(m => m.userId === expertA_InternalId && m.text.includes('Помощник подготовил рассылку')));
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/broadcasts/${draft.body.broadcast.id}/approve`, tokenAssistant)).status, 403);
+    assert.strictEqual((await api('POST', `/api/projects/${projectA.id}/broadcasts/${draft.body.broadcast.id}/approve`, tokenB)).status, 403, 'Strangers cannot');
+
+    const approved = await api('POST', `/api/projects/${projectA.id}/broadcasts/${draft.body.broadcast.id}/approve`, tokenA);
+    assert.strictEqual(approved.status, 200);
+    assert.strictEqual(approved.body.broadcast.status, 'sending');
+    assert.strictEqual(approved.body.broadcast.total, expected);
+    const recipients = (await db.all('SELECT client_id FROM broadcast_recipients WHERE broadcast_id = ?', [draft.body.broadcast.id])).map(r => r.client_id);
+    assert(!recipients.includes(refused.lead.id) && !recipients.includes(off.lead.id), 'No refused or opted-out');
+
+    // A second one today is refused (1 a day)
+    const second = await api('POST', `/api/projects/${projectA.id}/broadcasts`, tokenA, { audience: {}, text: 'Ещё новость', send: true });
+    assert.strictEqual(second.status, 429);
+
+    // The alarm clock: everybody but the "night" client now; the night one in the morning
+    telegramBot.testOutbox.length = 0;
+    await broadcastService.runBroadcasts(new Date());
+    let row = await db.get('SELECT * FROM broadcasts WHERE id = ?', [draft.body.broadcast.id]);
+    assert.strictEqual(row.status, 'sending', 'Waits for the night client');
+    assert.strictEqual(Number(row.sent), expected - 1);
+    const pending = await db.get(`SELECT status FROM broadcast_recipients WHERE broadcast_id = ? AND client_id = ?`, [row.id, night.lead.id]);
+    assert.strictEqual(pending.status, 'pending');
+    await broadcastService.runBroadcasts(new Date(Date.now() + 8 * 3600000));
+    row = await db.get('SELECT * FROM broadcasts WHERE id = ?', [row.id]);
+    assert.deepStrictEqual([row.status, Number(row.sent)], ['sent', expected]);
+    assert(telegramBot.testOutbox.some(m => m.text.startsWith('📣 Рассылка') && m.text.includes(`получили ${expected} из ${expected}`)), 'The owner is told it is done');
+
+    // In the client's chat: a message from the expert marked as a broadcast; the SI keeps answering
+    const chat = (await api('GET', `/api/chat/${projectA.slug}/messages`, night.token)).body;
+    const last = chat.messages.at(-1);
+    assert.strictEqual(last.isBroadcast, true);
+    assert.strictEqual(last.text, 'Друзья, в субботу в 19:00 бесплатный эфир!');
+    assert.strictEqual(chat.siPaused, false, 'A broadcast does not pause the SI');
+    assert(!(await api('GET', `/api/chat/${projectA.slug}/messages`, refused.token)).body.messages.some(m => m.isBroadcast));
+    const events = (await api('GET', `/api/projects/${projectA.id}/clients/${night.lead.id}`, tokenA)).body.events;
+    assert(events.some(e => e.type === 'broadcast'));
+
+    // Follow-ups also wait for the client's morning
+    assert.strictEqual(broadcastService.isDaytime(3), false);
+    assert.strictEqual(broadcastService.isDaytime(12), true);
+    await db.run(`UPDATE broadcasts SET started_at = '2020-01-01 00:00:00' WHERE project_id = ?`, [projectA.id]);
   });
 
   await test('40. Владелец убирает помощника: доступ закрывается, его диалоги возвращаются владельцу', async () => {

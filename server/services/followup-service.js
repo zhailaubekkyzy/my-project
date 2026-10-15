@@ -13,6 +13,8 @@
 //  - each scenario fires once per silence (until the client writes again), one action per client
 //    per minute; at most 3 SI follow-ups per silence, with the pause between their minutes kept;
 //  - dialogs silent for longer than the longest scenario + 3 days are not woken up;
+//  - messages to the client go only 9:00–21:00 by the client's time (from the phone; unknown — Almaty):
+//    a follow-up due at night waits for the morning;
 //  - at most 50 actions per minute for the whole platform.
 const db = require('../db');
 const siEngine = require('./si-engine');
@@ -20,6 +22,7 @@ const telegramBot = require('./telegram-bot');
 const businessService = require('./business-service');
 const funnelService = require('./funnel-service');
 const chatService = require('./chat-service');
+const broadcastService = require('./broadcast-service');
 const { sqlTime } = require('./scheduler-service');
 
 const LATE_WINDOW_MINUTES = 3 * 24 * 60;
@@ -121,6 +124,7 @@ async function dueScenario(project, client, scenarios, now, steps = []) {
     // "Только на шаге …": the client is silent on that step of the funnel
     if (!funnelService.scenarioOnStep(scenario, steps, client.step_id)) continue;
     if (writesToClient(scenario.then)) {
+      if (!broadcastService.isDaytime(await broadcastService.localHour(client, now))) continue;
       if (chatService.isSiPaused(client) || siFired.length >= MAX_SI_PER_SILENCE) continue;
       const previous = siFired[siFired.length - 1];
       if (previous && (now - previous.at) / 60000 < scenario.minutes - previous.minutes) continue;

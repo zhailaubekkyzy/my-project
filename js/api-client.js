@@ -307,6 +307,31 @@
       return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}/reply`, { method: 'POST', body: JSON.stringify({ text }) });
     },
 
+    // Broadcasts of an SI-seller (Офис → «Рассылки») and the client's "Не присылать рассылки"
+    async getBroadcasts(projectId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts`);
+    },
+
+    async planBroadcast(projectId, request) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts/plan`, { method: 'POST', body: JSON.stringify({ request }) });
+    },
+
+    async previewBroadcast(projectId, audience) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts/preview`, { method: 'POST', body: JSON.stringify({ audience }) });
+    },
+
+    async createBroadcast(projectId, body) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    async broadcastAction(projectId, broadcastId, action, body = {}) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/broadcasts/${encodeURIComponent(broadcastId)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    async setBroadcastsOff(slug, off) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/broadcasts`, { method: 'POST', body: JSON.stringify({ off }) });
+    },
+
     // Move a client to a step of the funnel by hand
     async moveClientStep(projectId, clientId, stepId) {
       return await apiFetch(`/api/projects/${projectId}/clients/${clientId}/step`, {

@@ -11,6 +11,7 @@ const receiptService = require('../services/receipt-service');
 const { readReceiptBody, readVoiceBody } = require('../middleware/image-upload');
 const voiceService = require('../services/voice-service');
 const reviewService = require('../services/review-service');
+const broadcastService = require('../services/broadcast-service');
 const calendarService = require('../services/calendar-service');
 
 router.use(requireAuth);
@@ -95,6 +96,8 @@ router.get('/:slug/messages', async (req, res, next) => {
       messages,
       siPaused: chatService.isSiPaused(lead),
       contactShared: Boolean(lead && lead.contact_consent_at),
+      // "Не присылать рассылки" was pressed in this chat
+      broadcastsOff: Boolean(lead && lead.broadcasts_off_at),
       // Which buttons to show above the input (only when the conversation needs them)
       tools: await chatService.chatTools(project, lead, messages)
     });
@@ -219,6 +222,21 @@ router.post('/:slug/review', async (req, res, next) => {
     res.status(result.created ? 201 : 200).json(result);
   } catch (err) {
     if (err instanceof reviewService.ReviewError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/broadcasts  { off: true | false } — "Не присылать рассылки" / "Снова присылать"
+ */
+router.post('/:slug/broadcasts', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const lead = await chatService.leadForUser(project, req.user.userId, { create: false });
+    if (!lead) return res.status(404).json({ error: 'not_found', message: 'Переписка не найдена' });
+    res.json(await broadcastService.setClientOptOut(project, lead, Boolean(req.body?.off)));
+  } catch (err) {
     next(err);
   }
 });

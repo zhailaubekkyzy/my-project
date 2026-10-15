@@ -61,6 +61,9 @@ const config = {
   // PostHog Settings
   posthogApiKey: process.env.POSTHOG_API_KEY || '',
   posthogHost: process.env.POSTHOG_HOST || 'https://app.posthog.com',
+  // A client's time zone when the phone has not told it yet (minutes east of UTC; Almaty = 300).
+  // Messages to clients (broadcasts, follow-ups) go only 9:00–21:00 by the client's time.
+  defaultTzOffset: Number.isFinite(parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10)) ? parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10) : 300,
 
   // SmartFlow Business Rules
   firstUsersFreeLimit: 100,

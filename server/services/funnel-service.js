@@ -47,7 +47,9 @@ const EVENTS = {
   contact_shared: 'Поделился контактом',
   condition: 'Условие эксперта',
   scenario: 'Сработал сценарий',
-  step_reached: 'Перешёл на шаг'
+  step_reached: 'Перешёл на шаг',
+  broadcast: 'Получил рассылку',
+  broadcasts_off: 'Отписался от рассылок'
 };
 
 const ACTORS = ['client', 'si', 'owner', 'assistant', 'system'];
