@@ -185,6 +185,13 @@
       store().setRemote('notifications', { list: [], unread: Number(res.unread) || 0 });
     }, maxAge),
 
+    // Buddy's calendar for a period. key: 'days' (today + 2 days) or 'YYYY-MM' (a month); from/to: ISO
+    buddyCalendar: (key, from, to, maxAge = 30000) => ensure(`buddyCalendar:${key}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getBuddyCalendar(from, to);
+      store().setRemote(`buddyCalendar.${key}`, { from, to, items: res.items || [] });
+    }, maxAge),
+
     // My business: owner + assistant
     business: () => ensure('business', async () => {
       if (!signedIn()) return false;

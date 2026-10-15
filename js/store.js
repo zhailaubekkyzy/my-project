@@ -73,6 +73,7 @@ const defaultData = {
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
+    buddyCalendar: {},       // { days | 'YYYY-MM': { from, to, items } } Бадди → календарь
     funnelSteps: {},         // { ["projectId|days"]: { steps, bought, total, stopStepId } } Воронка → «По шагам»
     funnelStepLists: {},     // { ["projectId|days|stepId"]: { clients, done } } portions of 30
     clientCards: {},         // { [clientId]: { funnel_status, last_objection, events } }
