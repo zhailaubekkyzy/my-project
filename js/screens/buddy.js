@@ -18,8 +18,7 @@
     if (!business && !chats.length) {
       return {
         text: 'Найдите SI-продавца под свою задачу в Маркетплейсе — он ответит за пару секунд.',
-        primary: { label: 'Открыть Маркетплейс', action: "SF.go('marketplace')" },
-        secondary: { label: 'У меня свой продукт', action: "SF.openIn('marketplace', 'office')" }
+        primary: { label: 'Открыть Маркетплейс', action: "SF.go('marketplace')" }
       };
     }
     // No "create your own SI-seller" offer from Buddy (owner's decision 16 Oct.: for clients it is spam);
