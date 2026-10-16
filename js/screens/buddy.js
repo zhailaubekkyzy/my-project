@@ -10,8 +10,6 @@
   const SF = window.SF;
   const store = () => window.funnelStore;
 
-  let hintDismissed = false; // "Не сейчас" hides the hint until the app is reopened
-
   // The chain of hints after key events (see the structure document, "Бадди")
   function nextStep(state) {
     const me = state.me;
@@ -24,14 +22,9 @@
         secondary: { label: 'У меня свой продукт', action: "SF.openIn('marketplace', 'office')" }
       };
     }
-    if (!business) {
-      if (hintDismissed) return null;
-      return {
-        text: 'Хотите такого же SI-продавца, чтобы он общался с вашими клиентами? У вас есть свой продукт или услуга?',
-        primary: { label: 'Да, есть продукт', action: "SF.openIn('marketplace', 'office')" },
-        secondary: { label: 'Не сейчас', action: 'SF.actions.dismissBuddyHint()' }
-      };
-    }
+    // No "create your own SI-seller" offer from Buddy (owner's decision 16 Oct.: for clients it is spam);
+    // experts find the Office in the Marketplace themselves
+    if (!business) return null;
     const consultants = store().ownConsultants();
     const unfinished = consultants.find(c => !c.offer || !c.paymentUrl);
     if (!consultants.length || unfinished) {
@@ -422,11 +415,6 @@
       .then(() => { SF.data.invalidate('notifications'); return SF.data.notifications(0); })
       .catch(() => {});
   }
-
-  SF.actions.dismissBuddyHint = () => {
-    hintDismissed = true;
-    store().notify();
-  };
 
   SF.screens.buddy = {
     title: () => 'Бадди',
