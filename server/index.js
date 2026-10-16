@@ -50,6 +50,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400 // let browsers cache the preflight for a day
 }));
+// Slow answers go to the Railway logs: «[SmartFlow Slow] GET /api/chat 3200ms»
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    if (ms >= 2000 && req.path.startsWith('/api/')) console.warn(`[SmartFlow Slow] ${req.method} ${req.path} ${ms}ms`);
+  });
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -57,6 +66,11 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/api/health', async (req, res) => {
   try {
     const { activeDriver } = db.getDatabase();
+    // How long one trip to the database takes (Railway ↔ Supabase): more than ~100 ms means
+    // the server and the database are far apart
+    const pingStart = Date.now();
+    await db.get('SELECT 1 AS ok');
+    const pingMs = Date.now() - pingStart;
     const migrations = await migrator.getAppliedMigrations();
     res.json({
       status: 'ok',
@@ -67,6 +81,7 @@ app.get('/api/health', async (req, res) => {
       environment: config.nodeEnv,
       database: {
         driver: activeDriver,
+        pingMs,
         appliedMigrationsCount: migrations.length
       },
       telegramBot: {
@@ -174,6 +189,10 @@ async function startServer(port = config.port) {
   await supportService.refreshBlocked();
 
   scheduler.start();
+  // A forgotten error somewhere must not stop the whole server: it goes to the Railway logs
+  process.on('unhandledRejection', (err) => {
+    console.error('[SmartFlow] Unhandled error (server keeps running):', err && err.message ? err.message : err);
+  });
   // Railway stops the old copy on every deploy: the waiting PostHog events are sent first
   process.once('SIGTERM', () => { analytics.flush().finally(() => process.exit(0)); });
 

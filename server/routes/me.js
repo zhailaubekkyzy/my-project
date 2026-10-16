@@ -14,6 +14,33 @@ async function loadUser(userId) {
   return db.get('SELECT * FROM users WHERE id = ?', [userId]);
 }
 
+const stamp = (v) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
+
+/**
+ * GET /api/me/pulse — one small query the app asks every few seconds on any screen:
+ * when anything of mine last changed (Buddy notifications, conversations with people, chats
+ * with SI-sellers). The app reloads a list only when its time changed.
+ */
+router.get('/pulse', async (req, res, next) => {
+  try {
+    const me = req.user.userId;
+    const row = await db.get(
+      `SELECT
+         (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND sender = 'buddy' AND read_at IS NULL) AS unread,
+         (SELECT MAX(created_at) FROM notifications WHERE user_id = ?) AS notes,
+         (SELECT MAX(last_activity) FROM dm_threads WHERE user_a = ?) AS dm_a,
+         (SELECT MAX(last_activity) FROM dm_threads WHERE user_b = ?) AS dm_b,
+         (SELECT MAX(last_activity) FROM clients WHERE external_client_id = ?) AS chats`,
+      [me, me, me, me, me]
+    );
+    const dm = [stamp(row.dm_a), stamp(row.dm_b)].filter(Boolean).sort().pop() || null;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ unread: Number(row.unread) || 0, notes: stamp(row.notes), people: dm, chats: stamp(row.chats) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * GET /api/me/notifications — my notifications for Buddy (newest first) and how many are unread
  */

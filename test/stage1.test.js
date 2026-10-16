@@ -2216,7 +2216,9 @@ async function runAllTests() {
     const optOut = await api('POST', `/api/chat/${projectA.slug}/broadcasts`, off.token, { off: true });
     assert.strictEqual(optOut.body.broadcastsOff, true);
     assert.strictEqual((await api('GET', `/api/chat/${projectA.slug}/messages`, off.token)).body.broadcastsOff, true);
-    // 3 a.m. for this client right now
+    // Noon for everybody else and 3 a.m. for this client right now (otherwise the test fails
+    // at night by the default Almaty time, when nobody may get a broadcast)
+    await db.run('UPDATE users SET tz_offset_minutes = ?', [((12 - new Date().getUTCHours() + 36) % 24 - 12) * 60]);
     await db.run('UPDATE users SET tz_offset_minutes = ? WHERE id = ?', [((3 - new Date().getUTCHours() + 36) % 24 - 12) * 60, night.user.id]);
 
     // Without OpenAI the form is filled by hand
@@ -2489,6 +2491,37 @@ async function runAllTests() {
       assert(a.linkList.some(l => l.label === 'Instagram' && l.consultantName === projectA.name && l.clients === 1));
     } finally {
       config.adminUsers = [];
+    }
+  });
+
+  await test('62. Пульс: новое сообщение от человека видно на любом экране; уведомления идут по каналам', async () => {
+    const login = (tg) => api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg), role: 'expert' });
+    const anna = (await login({ id: 700091, first_name: 'Пульс-Анна' })).body;
+    const boris = (await login({ id: 700092, first_name: 'Пульс-Борис' })).body;
+    assert.strictEqual((await api('GET', '/api/me/pulse', null)).status, 401, 'Only for the signed-in person');
+
+    const before = (await api('GET', '/api/me/pulse', boris.token)).body;
+    assert.strictEqual(before.people, null);
+    await new Promise(r => setTimeout(r, 1100)); // times in the database are kept to the second
+    assert.strictEqual((await api('POST', `/api/people/${boris.user.id}/messages`, anna.token, { text: 'Привет!' })).status, 201);
+    const after = (await api('GET', '/api/me/pulse', boris.token)).body;
+    assert.notStrictEqual(after.people, before.people, 'Boris sees that something new came from people');
+    assert(after.unread > before.unread, 'and the Buddy notification about it');
+    assert.notStrictEqual(after.notes, before.notes);
+
+    // Notifications: always saved in SmartFlow first, then every delivery channel is tried;
+    // a broken channel never breaks the others or the main action
+    const notifyService = require('../server/services/notify-service');
+    const got = [];
+    notifyService.CHANNELS.push({ name: 'broken', send: async () => { throw new Error('down'); } });
+    notifyService.CHANNELS.push({ name: 'test', send: async (userId, msg) => { got.push({ userId, ...msg }); return true; } });
+    try {
+      assert.strictEqual(await notifyService.notifyUser(boris.user.id, { ru: 'Проверка', en: 'Check' }, { startParam: 'S_support' }), true);
+      assert.deepStrictEqual(got, [{ userId: boris.user.id, text: 'Проверка', buttonText: 'Открыть в SmartFlow', startParam: 'S_support' }]);
+      const saved = await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND text = ?`, [boris.user.id, 'Проверка']);
+      assert.strictEqual(Number(saved.n), 1, 'Saved in SmartFlow (Buddy) too');
+    } finally {
+      notifyService.CHANNELS.splice(1);
     }
   });
 

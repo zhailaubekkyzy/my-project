@@ -42,7 +42,19 @@ function initDatabase(customOptions = {}) {
     const connectionString = customOptions.connectionString || process.env.DATABASE_URL;
     pgPool = new Pool({
       connectionString,
-      ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false }
+      ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+      // Never wait forever: no connection in 10 s or no answer in 30 s → an error the person sees
+      // with a code, instead of an endless «Загрузка…»
+      connectionTimeoutMillis: 10000,
+      query_timeout: 30000,
+      // Idle connections are closed before the Supabase pooler drops them on its side
+      idleTimeoutMillis: 30000,
+      keepAlive: true
+    });
+    // The database closed an idle connection (restart, network blip). Without this handler Node
+    // stops the whole server; with it the pool simply opens a new connection on the next query.
+    pgPool.on('error', (err) => {
+      console.warn('[SmartFlow DB] idle connection lost, will reconnect:', err.message);
     });
     return { driver: 'postgres', pool: pgPool };
   }
