@@ -88,6 +88,9 @@ const defaultData = {
     buddy: null              // { messages, unread, usage } the conversation with Buddy
   },
 
+  // This copy of SmartFlow from the server at sign-in: { env, appLink, features } (see app-info.js)
+  app: null,
+
   // When the support team last pressed "Очистить данные на телефоне" (see setAuth)
   deviceResetSeen: null,
 
@@ -102,6 +105,18 @@ const defaultData = {
 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+// Link that opens this copy's Mini App on a screen: t.me/<bot>/app?startapp=<param>.
+// The working bot until the server has told its own (the test copy has another bot).
+const DEFAULT_APP_LINK = 'https://t.me/smartflow_ai_support_bot/app';
+function appLink(param) {
+  const base = window.funnelStore?.data?.app?.appLink || DEFAULT_APP_LINK;
+  return param ? `${base}?startapp=${param}` : base;
+}
+window.SF = window.SF || {};
+window.SF.appLink = appLink;
+// A risky change switched on for this person (Railway: FEATURES + BETA_USERS)
+window.SF.feature = (name) => Boolean(window.funnelStore?.data?.app?.features?.includes(name));
 
 class Store {
   constructor() {
@@ -175,6 +190,7 @@ class Store {
       if (hadSeen && window.SF && window.SF.showToast) setTimeout(() => window.SF.showToast('Поддержка обновила приложение на этом телефоне'), 500);
     }
     this.data.auth = { status: 'authenticated', internalUserId: authData.user?.id || null, error: null };
+    if (authData.app) this.data.app = authData.app;
     if (authData.user) this.applyServerUser(authData.user);
     if (authData.projects?.owned) this.setServerConsultants(authData.projects.owned, authData.projects.assisting || []);
     this.saveData();
@@ -278,7 +294,7 @@ class Store {
       name: p.name,
       roleTitle: p.role_title || 'SI-консультант',
       photoUrl: p.photo_url || null,
-      link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
+      link: appLink(p.slug),
       assisting: true,
       ownerName: p.owner_name || ''
     }));
@@ -290,7 +306,7 @@ class Store {
         name: p.name,
         roleTitle: p.role_title || 'SI-консультант',
         photoUrl: p.photo_url || null,
-        link: `https://t.me/smartflow_ai_support_bot/app?startapp=${p.slug}`,
+        link: appLink(p.slug),
         goal: settings.goal || '',
         instructions: settings.instructions || '',
         methodology: settings.methodology || '',

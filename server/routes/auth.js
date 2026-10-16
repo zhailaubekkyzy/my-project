@@ -8,6 +8,7 @@ const projectService = require('../services/project-service');
 const subscriptionService = require('../services/subscription-service');
 const { requireAuth, BLOCKED_RESPONSE } = require('../middleware/auth');
 const supportService = require('../services/support-service');
+const appInfo = require('../services/app-info');
 const config = require('../config');
 const db = require('../db');
 
@@ -77,6 +78,7 @@ router.post('/telegram', async (req, res, next) => {
     res.json({
       token,
       user: { ...(await supportService.sessionUser(user)), telegramId: user.telegramId },
+      app: await appInfo.forUser(user.id),
       projects,
       subscription
     });
@@ -102,6 +104,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
 
     res.json({
       user: await supportService.sessionUser(user),
+      app: await appInfo.forUser(user.id),
       projects,
       subscription,
       funnelSubscriptions: funnelSubs
@@ -153,6 +156,7 @@ router.post('/dev-login', async (req, res, next) => {
     res.json({
       token,
       user: await supportService.sessionUser(user),
+      app: await appInfo.forUser(user.id),
       projects,
       subscription,
       isDevBypass: true

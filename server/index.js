@@ -79,6 +79,8 @@ app.get('/api/health', async (req, res) => {
       // Which commit is running (Railway sets this): shows whether the latest merge reached the server
       commit: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || null,
       environment: config.nodeEnv,
+      // production = the working copy; staging = the test copy («ТЕСТ» strip, its own bot and database)
+      appEnv: config.appEnv,
       database: {
         driver: activeDriver,
         pingMs,

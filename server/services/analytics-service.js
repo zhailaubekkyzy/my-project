@@ -33,6 +33,7 @@ function personId(userId) {
   return `p_${crypto.createHash('sha256').update(`smartflow:${userId}`).digest('hex').slice(0, 20)}`;
 }
 
+// app_env (production / staging) is on every event: numbers of the test copy are filtered out in PostHog
 // Only short plain values: ids of SI-sellers / steps, kinds, counts, yes/no
 const SAFE_KEY = /^[a-z_]{2,40}$/;
 function safeProps(props) {
@@ -52,7 +53,7 @@ function capture(event, userId, props = {}) {
   try {
     const c = getClient();
     if (!c) return;
-    c.capture({ distinctId: personId(userId), event, properties: { ...safeProps(props), $process_person_profile: false } });
+    c.capture({ distinctId: personId(userId), event, properties: { ...safeProps(props), app_env: config.appEnv, $process_person_profile: false } });
   } catch (err) {
     console.warn('[SmartFlow Analytics] not sent:', err.message);
   }

@@ -76,7 +76,7 @@
     return `<button onclick="SF.push('admin-user', { id: '${SF.js(u.id)}' })" class="text-brand font-semibold text-left">${esc(u.displayName || u.id)}${u.supportCode ? ` · ${esc(u.supportCode)}` : ''}</button>`;
   }
 
-  const PANEL_LINK = 'https://t.me/smartflow_ai_support_bot/app?startapp=ADMIN';
+  const panelLink = () => SF.appLink('ADMIN');
 
   function noAccess() {
     const code = store().data.me.supportCode;
@@ -437,8 +437,8 @@
       ${card(`
         <div class="text-xs font-bold text-ink">Ссылка для входа в панель</div>
         <div class="text-[11px] text-muted leading-relaxed">Отправьте её студенту. Он открывает её в своём Telegram (на телефоне или в Telegram Desktop на компьютере) — сразу открывается панель. Без вашего «Добавить» он увидит только «Панель только для команды».</div>
-        <div class="text-[11px] font-mono text-ink-2 break-all">${PANEL_LINK}</div>
-        ${btn('Скопировать ссылку', `SF.copyText('${PANEL_LINK}', 'Ссылка скопирована')`, 'tiffany', { icon: 'copy' })}
+        <div class="text-[11px] font-mono text-ink-2 break-all">${panelLink()}</div>
+        ${btn('Скопировать ссылку', `SF.copyText('${panelLink()}', 'Ссылка скопирована')`, 'tiffany', { icon: 'copy' })}
       `)}
       ${!list ? loading('staff') : list.map(p => `
         <div class="glass-card-3d p-3 flex items-center gap-2.5">

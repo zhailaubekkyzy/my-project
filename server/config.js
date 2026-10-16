@@ -5,6 +5,13 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const isProd = process.env.NODE_ENV === 'production';
 
+// Which copy of SmartFlow this is: the working one (production) or the test copy (staging).
+// The test copy has its own bot, server and database and shows a «ТЕСТ» strip on top.
+const appEnv = /^(staging|test)$/i.test(process.env.APP_ENV || '') ? 'staging' : 'production';
+
+// List from Railway Variables: comma-separated, spaces ignored
+const listOf = (value) => String(value || '').split(',').map(v => v.trim()).filter(Boolean);
+
 // JWT secret must come from the environment. In development a fixed fallback keeps
 // sessions alive across restarts; in production a missing secret falls back to a
 // random per-process value (sessions reset on restart) instead of a value known from git.
@@ -22,6 +29,14 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   isProd,
   isTest: process.env.NODE_ENV === 'test',
+  appEnv,
+  isStaging: appEnv === 'staging',
+
+  // Risky changes go to one person first. FEATURES = "name:beta,other:all,old:off"
+  // (beta = only the people from BETA_USERS: SF-numbers, Telegram ids or usr_... ids).
+  // See server/services/app-info.js
+  features: listOf(process.env.FEATURES),
+  betaUsers: listOf(process.env.BETA_USERS),
 
   // Security & Telegram Auth
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -43,7 +58,7 @@ const config = {
 
   // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.
   // Telegram ids (digits) and usr_... ids work too. The support team is added in the panel itself.
-  adminUsers: (process.env.ADMIN_USERS || '').split(',').map(v => v.trim()).filter(Boolean),
+  adminUsers: listOf(process.env.ADMIN_USERS),
 
   // Frontend origins allowed by CORS (Cloudflare Pages domain, custom domain)
   corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean),

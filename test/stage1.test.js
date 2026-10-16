@@ -2576,6 +2576,43 @@ async function runAllTests() {
     for (const extra of ['-wal', '-shm']) if (fs.existsSync(file + extra)) fs.unlinkSync(file + extra);
   });
 
+  await test('63. Тестовая копия и включение «сначала одному человеку»', async () => {
+    const appInfo = require('../server/services/app-info');
+    const saved = { appEnv: config.appEnv, isStaging: config.isStaging, features: config.features, betaUsers: config.betaUsers, bot: config.telegramBotUsername };
+    try {
+      // The working copy: no strip, the working bot, no flags
+      let me = (await api('GET', '/api/auth/me', tokenOwner)).body;
+      assert.strictEqual(me.app.env, 'production');
+      assert.strictEqual(me.app.appLink, 'https://t.me/smartflow_ai_support_bot/app');
+      assert.deepStrictEqual(me.app.features, []);
+      assert.strictEqual((await api('GET', '/api/health')).body.appEnv, 'production');
+
+      // The test copy: its own bot in every link, the server and the phone know it is the test one
+      Object.assign(config, { appEnv: 'staging', isStaging: true, telegramBotUsername: 'smartflow_test_bot' });
+      me = (await api('GET', '/api/auth/me', tokenOwner)).body;
+      assert.strictEqual(me.app.env, 'staging');
+      assert.strictEqual(me.app.appLink, 'https://t.me/smartflow_test_bot/app');
+      assert.strictEqual((await api('GET', '/api/health')).body.appEnv, 'staging');
+
+      // A risky change: only for the people from BETA_USERS (by SF-number or Telegram id), the rest do not get it
+      assert.deepStrictEqual(appInfo.parseFeatures(['new-chat:beta', 'voice2', 'old:off', 'BAD NAME:all', 'x:weird']),
+        { 'new-chat': 'beta', voice2: 'all', old: 'off', x: 'off' });
+      config.features = ['new-chat:beta', 'voice2:all', 'old:off'];
+      config.betaUsers = [me.user.supportCode.toLowerCase().replace('-', ' ')];
+      assert.deepStrictEqual((await api('GET', '/api/auth/me', tokenOwner)).body.app.features, ['new-chat', 'voice2']);
+      assert.deepStrictEqual((await api('GET', '/api/auth/me', tokenStudent)).body.app.features, ['voice2']);
+      assert.strictEqual(await appInfo.isOn('new-chat', ownerUser.id), true);
+      assert.strictEqual(await appInfo.isOn('new-chat', studentUser.id), false);
+      assert.strictEqual(await appInfo.isOn('old', ownerUser.id), false);
+      assert.strictEqual(await appInfo.isOn('unknown', ownerUser.id), false);
+      config.betaUsers = [String(studentTg.id)];
+      assert.strictEqual(await appInfo.isOn('new-chat', studentUser.id), true);
+      assert.strictEqual(await appInfo.isOn('new-chat', ownerUser.id), false);
+    } finally {
+      Object.assign(config, { appEnv: saved.appEnv, isStaging: saved.isStaging, features: saved.features, betaUsers: saved.betaUsers, telegramBotUsername: saved.bot });
+    }
+  });
+
   await test('34. Неверный DB_DRIVER — понятная ошибка вместо тихого SQLite', async () => {
     assert.strictEqual(db.resolveDriver('postgres'), 'postgres');
     assert.strictEqual(db.resolveDriver('PostgreSQL'), 'postgres');

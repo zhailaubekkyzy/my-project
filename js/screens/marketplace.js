@@ -11,7 +11,7 @@
     { id: 'warmup', label: 'Прогрев и заявки' }
   ];
 
-  const startLink = (param) => `https://t.me/smartflow_ai_support_bot/app?startapp=${param}`;
+  const startLink = (param) => SF.appLink(param);
   const store = () => window.funnelStore;
 
   function findCard(state, id) {

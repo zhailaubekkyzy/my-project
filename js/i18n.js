@@ -35,6 +35,7 @@
     'Ссылка скопирована': 'Link copied', 'печатает': 'typing', 'друг': 'friend', 'Эксперт': 'Expert', 'эксперт': 'expert',
     'эксперта': 'the expert', 'Автор': 'Author', 'Фото': 'Photo', 'Чат': 'Chat', 'Переписка': 'Conversation', 'Запись': 'Recording',
     'Бесплатно': 'Free', 'Пожаловаться': 'Report', 'Поддержка': 'Support',
+    'ТЕСТ · тестовая копия SmartFlow': 'TEST · SmartFlow test copy',
 
     // Session / errors
     'Нет связи с сервером. Откройте приложение в Telegram или проверьте интернет.': 'No connection to the server. Open the app in Telegram or check your internet.',
