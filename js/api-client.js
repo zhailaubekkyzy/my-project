@@ -63,21 +63,35 @@
       headers['Authorization'] = `Bearer ${sessionToken}`;
     }
 
+    // Never wait forever: a reading request gives up after 20 s; sending (an SI reply, a file,
+    // a voice message) may take longer, up to 90 s. options.timeoutMs overrides.
+    const { timeoutMs, ...fetchOptions } = options;
+    const method = String(options.method || 'GET').toUpperCase();
+    const limit = timeoutMs || (method === 'GET' ? 20000 : 90000);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), limit);
+
     let res;
     try {
       res = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
-        headers
+        ...fetchOptions,
+        headers,
+        signal: controller.signal
       });
     } catch (networkErr) {
-      // No connection or the server did not answer
+      // No connection, or the server did not answer in time
+      const timedOut = controller.signal.aborted;
       const code = newErrorCode();
-      rememberError({ code, status: 0, path: endpoint.split('?')[0], message: networkErr.message });
-      setTimeout(() => reportError(code, `network: ${networkErr.message} ${endpoint.split('?')[0]}`), 3000);
-      const error = new Error(withCode('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз', code));
+      const reason = timedOut ? `timeout ${limit}ms` : networkErr.message;
+      rememberError({ code, status: 0, path: endpoint.split('?')[0], message: reason });
+      setTimeout(() => reportError(code, `network: ${reason} ${endpoint.split('?')[0]}`), 3000);
+      const error = new Error(withCode(timedOut
+        ? 'Сервер долго не отвечает. Попробуйте ещё раз через минуту'
+        : 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз', code));
       error.status = 0;
       error.errorCode = code;
-      console.warn(`[SmartFlow API] Request failed for ${endpoint}:`, networkErr.message);
+      console.warn(`[SmartFlow API] Request failed for ${endpoint}:`, reason);
+      clearTimeout(timer);
       throw error;
     }
 
@@ -120,6 +134,8 @@
     } catch (err) {
       console.warn(`[SmartFlow API] Request failed for ${endpoint}:`, err.message);
       throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -647,6 +663,11 @@
       return await apiFetch('/api/me/notifications');
     },
 
+    // When my notifications and conversations last changed (asked every few seconds)
+    async getPulse() {
+      return await apiFetch('/api/me/pulse', { timeoutMs: 10000 });
+    },
+
     async markNotificationRead(id) {
       return await apiFetch('/api/me/notifications/read', { method: 'POST', body: JSON.stringify(id ? { id } : {}) });
     },
@@ -691,7 +712,8 @@
       return await apiFetch(`/api/brain/materials?${query}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: file
+        body: file,
+        timeoutMs: 180000 // a long PDF is read and indexed on the server
       });
     },
 

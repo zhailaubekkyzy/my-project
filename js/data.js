@@ -283,5 +283,53 @@
 
   const isMissing = (state, key) => Boolean(state.remote.missing && state.remote.missing[key]);
 
+  // ---------------- Pulse: new messages reach the person on any screen ----------------
+  // Every few seconds while the app is on screen, one small request asks when my notifications,
+  // conversations with people and chats with SI-sellers last changed. Only what changed is reloaded,
+  // so a message shows up in seconds even if the person is on another tab.
+  const PULSE_MS = 4000;
+  let lastPulse = null;
+  let pulseBusy = false;
+
+  async function checkPulse() {
+    if (pulseBusy || !signedIn() || document.hidden) return;
+    pulseBusy = true;
+    try {
+      const pulse = await api().getPulse();
+      const prev = lastPulse;
+      lastPulse = pulse;
+      if (!prev) return; // the first answer is the starting point; screens load their own data
+      const tab = store().data.ui.tab;
+      const route = store().currentRoute();
+      if (pulse.people !== prev.people) {
+        loaders.peopleChats(0);
+        if (tab === 'chats' && route.screen === 'person' && route.id) loaders.personMessages(route.id, 0);
+      }
+      if (pulse.chats !== prev.chats) {
+        invalidate('chats');
+        loaders.myChats();
+        if (tab === 'chats' && route.screen === 'chat' && route.slug) loaders.chatMessages(route.slug, 0);
+      }
+      if (pulse.unread !== prev.unread || pulse.notes !== prev.notes) {
+        if (tab === 'buddy') loaders.buddy(0);
+        else loaders.notifications(0);
+      }
+    } catch (err) {
+      // No connection for a moment: the next pulse tries again
+    } finally {
+      pulseBusy = false;
+    }
+  }
+
+  setInterval(checkPulse, PULSE_MS);
+  // Back to the app (unlocked the phone, returned from another app): check at once
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkPulse(); });
+  window.addEventListener('online', checkPulse);
+  try {
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.onEvent) {
+      window.Telegram.WebApp.onEvent('activated', checkPulse);
+    }
+  } catch (e) {}
+
   SF.data = { isMissing, ensure, invalidate, ...loaders, poll, stopPolling, waitingInquiries, isUnread, signedIn };
 })(window);

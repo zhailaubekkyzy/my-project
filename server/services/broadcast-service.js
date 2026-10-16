@@ -181,7 +181,9 @@ async function recentStarts(projectId, now = new Date()) {
     [projectId, sqlTime(new Date(now.getTime() - 7 * 86400000))]
   );
   const dayAgo = now.getTime() - 86400000;
-  const day = rows.filter(r => new Date(String(r.started_at).replace(' ', 'T') + (/[Z+]/.test(String(r.started_at)) ? '' : 'Z')).getTime() >= dayAgo).length;
+  // PostgreSQL gives a Date, SQLite a 'YYYY-MM-DD HH:MM:SS' text in UTC
+  const timeOf = (v) => (v instanceof Date ? v : new Date(String(v).replace(' ', 'T') + (/[Z+]/.test(String(v)) ? '' : 'Z'))).getTime();
+  const day = rows.filter(r => timeOf(r.started_at) >= dayAgo).length;
   return { day, week: rows.length };
 }
 
