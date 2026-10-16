@@ -24,34 +24,28 @@
   }
 
   // ---------------- List ----------------
-  // Visible way to create your own SI-consultant (Office terms first, if not accepted yet)
-  function createButton() {
+  // People with an Office see it at the top; creating an SI-seller is inside the Office.
+  // Everybody else (clients) gets no banners — only one quiet line under the list (owner's decision 16 Oct.:
+  // a big "create your SI-seller" offer on every visit is spam for clients).
+  function officeEntry(state) {
+    if (!store().isBusinessActive() && !store().isAssistant()) return '';
+    const waiting = SF.data.waitingInquiries(state).length;
     return `
-      <button onclick="SF.actions.startCreateConsultant()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-продавца
+      <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
+        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
+        <span class="flex-1">
+          <span class="block text-sm font-bold text-ink">Мой Офис</span>
+          <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
+        </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
       </button>`;
   }
 
-  function officeEntry(state) {
-    if (store().isBusinessActive() || store().isAssistant()) {
-      const waiting = SF.data.waitingInquiries(state).length;
-      return `
-        <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
-          <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
-          <span class="flex-1">
-            <span class="block text-sm font-bold text-ink">Мой Офис</span>
-            <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
-          </span>
-          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-        </button>`;
-    }
+  function quietOfficeLink() {
+    if (store().isBusinessActive() || store().isAssistant()) return '';
     return `
-      <button onclick="SF.push('office')" class="w-full hero-tiffany-banner p-4 text-left flex items-center gap-3">
-        <img src="${SF.MASCOTS.consultant}" alt="" class="w-14 h-14 flex-shrink-0" />
-        <span class="flex-1">
-          <span class="block text-sm font-extrabold">Офис для бизнеса</span>
-          <span class="block text-xs font-medium leading-snug">Свой SI-продавец продаёт ваши услуги 24/7. Откройте бизнес-профиль — это бесплатно.</span>
-        </span>
+      <button onclick="SF.push('office')" class="w-full py-2 text-[11px] text-faint text-center">
+        Вы эксперт? Свой SI-продавец — в Офисе →
       </button>`;
   }
 
@@ -86,7 +80,6 @@
     const items = (all || []).filter(c => (filter === 'all' || c.category === filter) && matches(c));
     return `
       ${officeEntry(state)}
-      ${createButton()}
 
       <div class="relative">
         <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -107,6 +100,8 @@
         ${all && !items.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
           'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».') : ''}
       </div>
+
+      ${quietOfficeLink()}
     `;
   }
 

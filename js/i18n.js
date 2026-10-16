@@ -52,7 +52,7 @@
     // Marketplace
     'Все': 'All', 'Продажи': 'Sales', 'Прогрев и заявки': 'Warm-up & leads',
     'Найти SI-продавца: имя, тема, эксперт': 'Find an SI-seller: name, topic, expert',
-    'Создать своего SI-продавца': 'Create your own SI-seller', 'Мой Офис': 'My Office', 'Офис для бизнеса': 'Office for business',
+    'Создать своего SI-продавца': 'Create your own SI-seller', 'Вы эксперт? Свой SI-продавец — в Офисе →': 'Are you an expert? Your own SI-seller is in the Office →', 'Мой Офис': 'My Office', 'Офис для бизнеса': 'Office for business',
     'Свой SI-продавец продаёт ваши услуги 24/7. Откройте бизнес-профиль — это бесплатно.': 'Your own SI-seller sells your services 24/7. Open a business profile — it is free.',
     'Ничего не нашли. Людей можно найти во вкладке «Чаты».': 'Nothing found. People can be found in the «Chats» tab.',
     'Витрина только открывается': 'The marketplace is just opening',
