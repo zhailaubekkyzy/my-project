@@ -12,12 +12,14 @@
 const crypto = require('crypto');
 const db = require('../db');
 const analytics = require('./analytics-service');
+const telegramBot = require('./telegram-bot');
 
 const MAX_SOURCE_LINKS = 3;
 const PARTNER_MIN = 10; // people who came from someone's links → "SMARTFLOW PARTNER"
 const VISIT_GAP_HOURS = 12;
 const ATTRIBUTION_DAYS = 30;
-const APP_LINK = 'https://t.me/smartflow_ai_support_bot/app?startapp=';
+// The Mini App of this copy's bot (the test copy has its own): ...?startapp=
+const appLink = () => `${telegramBot.miniAppLink()}?startapp=`;
 
 class PartnerError extends Error {
   constructor(message, status = 400, code = 'LINK_REFUSED') {
@@ -49,7 +51,7 @@ function parseStartParam(param) {
 }
 
 function linkUrl(link, slug) {
-  return link.kind === 'referral' ? `${APP_LINK}R_${link.code}` : `${APP_LINK}${slug}__${link.code}`;
+  return link.kind === 'referral' ? `${appLink()}R_${link.code}` : `${appLink()}${slug}__${link.code}`;
 }
 
 /**
@@ -154,7 +156,7 @@ async function projectLinks(project) {
   const links = [];
   for (const r of rows) links.push(toLink(r, project.slug, await statsOf(r.id)));
   const plain = await db.get('SELECT COUNT(*) AS n FROM clients WHERE project_id = ? AND source_link_id IS NULL', [project.id]);
-  return { links, max: MAX_SOURCE_LINKS, withoutLink: Number(plain.n) || 0, plainUrl: `${APP_LINK}${project.slug}` };
+  return { links, max: MAX_SOURCE_LINKS, withoutLink: Number(plain.n) || 0, plainUrl: `${appLink()}${project.slug}` };
 }
 
 async function createSourceLink(project, ownerId, label) {

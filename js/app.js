@@ -195,7 +195,8 @@ SF.openIn = (tab, screen, params = {}) => {
   store.pushRoute({ screen, ...params }, tab);
 };
 
-// Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=<param>
+// Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=<param> (SF.appLink;
+// the test copy has its own bot, the server tells its link at sign-in)
 //   (no param)      → Buddy
 //   C_<projectId>   → consultant card in the Marketplace
 //   P_<userId>      → a person's profile
@@ -287,6 +288,7 @@ function renderApp(state) {
 
     <main class="w-full flex-1 min-h-0 flex flex-col items-center">
       <div class="app-frame">
+        ${state.app?.env === 'staging' ? '<div class="test-strip">ТЕСТ · тестовая копия SmartFlow</div>' : ''}
         <header class="tg-header flex items-center gap-2">
           ${canGoBack ? `
             <button onclick="SF.back()" class="p-1.5 -ml-1.5 rounded-xl text-muted hover:text-ink" aria-label="Назад">

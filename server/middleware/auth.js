@@ -1,11 +1,12 @@
 // server/middleware/auth.js - Authentication Middleware
 const authService = require('../services/auth-service');
 const supportService = require('../services/support-service');
+const config = require('../config');
 
 const BLOCKED_RESPONSE = {
   error: 'forbidden',
   code: 'USER_BLOCKED',
-  message: 'Доступ к SmartFlow приостановлен. Если это ошибка — напишите в поддержку @smartflow_ai_support_bot.'
+  message: 'Доступ к SmartFlow приостановлен. Если это ошибка — напишите в поддержку @' + config.telegramBotUsername + '.'
 };
 
 function requireAuth(req, res, next) {

@@ -119,7 +119,7 @@
       ${renderInvite(state)}
 
       ${me.id ? `
-        <button onclick="SF.copyText('https://t.me/smartflow_ai_support_bot/app?startapp=P_${SF.js(me.id)}', 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
+        <button onclick="SF.copyText(SF.appLink('P_${SF.js(me.id)}'), 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
           <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться профилем
         </button>` : ''}
 
