@@ -4,10 +4,15 @@ const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const isProd = process.env.NODE_ENV === 'production';
+// Running on Railway (any environment: the working copy and the test copy). Railway sets these itself.
+const isHosted = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID);
 
 // Which copy of SmartFlow this is: the working one (production) or the test copy (staging).
 // The test copy has its own bot, server and database and shows a «ТЕСТ» strip on top.
 const appEnv = /^(staging|test)$/i.test(process.env.APP_ENV || '') ? 'staging' : 'production';
+// Only a developer's own computer may use the dev login and the fixed dev JWT secret:
+// never on Railway and never in the test copy, even if NODE_ENV was forgotten there.
+const isLocalDev = !isProd && !isHosted && appEnv !== 'staging';
 
 // List from Railway Variables: comma-separated, spaces ignored
 const listOf = (value) => String(value || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -17,7 +22,7 @@ const listOf = (value) => String(value || '').split(',').map(v => v.trim()).filt
 // random per-process value (sessions reset on restart) instead of a value known from git.
 function resolveJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
-  if (isProd) {
+  if (!isLocalDev) {
     console.warn('[SmartFlow] JWT_SECRET is not set — using a random secret. Set JWT_SECRET in Railway Variables.');
     return crypto.randomBytes(48).toString('hex');
   }
@@ -28,6 +33,9 @@ const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isProd,
+  isHosted,
+  // true only on a developer's computer: the dev login (/api/auth/dev-login) works only then
+  devLoginAllowed: isLocalDev,
   isTest: process.env.NODE_ENV === 'test',
   appEnv,
   isStaging: appEnv === 'staging',

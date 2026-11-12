@@ -41,7 +41,7 @@ router.post('/', async (req, res, next) => {
       name,
       templateId,
       niche,
-      customAiSettings,
+      customAiSettings: projectService.limitAiSettings(customAiSettings),
       pricingOptions
     });
 
@@ -80,6 +80,10 @@ function readCardFields(body, project) {
   }
   if (body.is_listed !== undefined) {
     fields.is_listed = body.is_listed ? 1 : 0;
+    // Hidden by the support team after a complaint: only the team shows it again
+    if (fields.is_listed && Number(project.hidden_by_staff) === 1) {
+      return { error: 'Команда SmartFlow скрыла этого SI-продавца из Маркетплейса. Чтобы вернуть его, напишите в поддержку.', status: 403 };
+    }
     const offer = fields.offer !== undefined ? fields.offer : project.offer;
     if (fields.is_listed && !offer) {
       return { error: 'Чтобы показать SI-продавца в Маркетплейсе, заполните оффер' };
@@ -107,12 +111,13 @@ router.get('/:projectId', requireProjectPermission('funnel:read'), async (req, r
  */
 router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, res, next) => {
   try {
-    const { name, niche, custom_ai_settings, pricing_options, status, role_title } = req.body;
+    // status (on / off) is not taken from here: only the support team turns an SI-seller off and on
+    const { name, niche, custom_ai_settings, pricing_options, role_title } = req.body;
     const card = readCardFields(req.body, req.project);
-    if (card.error) return res.status(400).json({ error: 'bad_request', message: card.error });
+    if (card.error) return res.status(card.status || 400).json({ error: card.status === 403 ? 'forbidden' : 'bad_request', message: card.error });
 
     // "If…, then…" scenarios are part of the methodology: only known conditions and actions are kept
-    let aiSettings = custom_ai_settings;
+    let aiSettings = projectService.limitAiSettings(custom_ai_settings);
     // The general description of the methodology: plain text, limited
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.methodology !== undefined) {
       aiSettings = { ...aiSettings, methodology: String(aiSettings.methodology || '').trim().slice(0, 3000) };
@@ -131,7 +136,6 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
       niche,
       custom_ai_settings: aiSettings,
       pricing_options,
-      status,
       role_title,
       ...card.fields
     });

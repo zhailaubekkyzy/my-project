@@ -25,8 +25,20 @@ function hoursAgo(hours) {
 // ---------------------------------------------------------------
 // Short user number
 // ---------------------------------------------------------------
+// Numbers written in ADMIN_USERS open the support panel as the owner. A new person must never
+// get such a number by chance (e.g. an old number left in ADMIN_USERS after moving the database),
+// so these numbers are never given out.
+function reservedSupportCodes() {
+  return new Set(config.adminUsers.filter(e => /^sf/i.test(e)).map(normalizeSupportCode).filter(Boolean));
+}
+
 function randomSupportCode() {
-  return `SF-${crypto.randomInt(10000, 100000)}`;
+  const reserved = reservedSupportCodes();
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const code = `SF-${crypto.randomInt(10000, 100000)}`;
+    if (!reserved.has(code)) return code;
+  }
+  throw new Error('Could not find a free support number');
 }
 
 // "sf 48213", "SF-48213", "48213" → "SF-48213"; anything else → null
@@ -133,18 +145,35 @@ async function telegramIdOf(userId) {
 async function ownerUserIds() {
   const ids = new Set();
   for (const entry of config.adminUsers) {
-    let row = null;
-    if (/^sf/i.test(entry)) {
-      const supportCode = normalizeSupportCode(entry);
-      if (supportCode) row = await db.get('SELECT id FROM users WHERE support_code = ?', [supportCode]);
-    } else if (/^\d+$/.test(entry)) {
-      row = await db.get('SELECT user_id AS id FROM auth_identities WHERE provider = ? AND provider_user_id = ?', ['telegram', entry]);
-    } else {
-      row = await db.get('SELECT id FROM users WHERE id = ?', [entry]);
-    }
+    const row = await adminEntryUser(entry);
     if (row) ids.add(row.id);
   }
   return [...ids];
+}
+
+// One ADMIN_USERS entry → the user it names: SF-number, Telegram id (digits) or usr_... id
+async function adminEntryUser(entry) {
+  if (/^sf/i.test(entry)) {
+    const supportCode = normalizeSupportCode(entry);
+    return supportCode ? db.get('SELECT id FROM users WHERE support_code = ?', [supportCode]) : null;
+  }
+  if (/^\d+$/.test(entry)) {
+    return db.get('SELECT user_id AS id FROM auth_identities WHERE provider = ? AND provider_user_id = ?', ['telegram', entry]);
+  }
+  return db.get('SELECT id FROM users WHERE id = ?', [entry]);
+}
+
+/**
+ * ADMIN_USERS entries that match nobody in the database (a typo, or an old number after the
+ * database moved). Written to the Railway log at start so the owner fixes the variable.
+ */
+async function unknownAdminEntries() {
+  const unknown = [];
+  for (const entry of config.adminUsers) {
+    const row = await adminEntryUser(entry);
+    if (!row) unknown.push(entry);
+  }
+  return unknown;
 }
 
 /**
@@ -287,6 +316,8 @@ async function notifyStaffAboutFeedback(feedbackId) {
 }
 
 module.exports = {
+  unknownAdminEntries,
+  randomSupportCode,
   sqlTime,
   hoursAgo,
   ROLE_LABELS,

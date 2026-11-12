@@ -2620,6 +2620,114 @@ async function runAllTests() {
     assert.throws(() => db.resolveDriver('postgress'), /DB_DRIVER/);
   });
 
+  await test('64. Проверка безопасности: лимиты SI, решения команды, быстрый вход, номера SF', async () => {
+    const config = require('../server/config');
+    const chatService = require('../server/services/chat-service');
+    const supportService = require('../server/services/support-service');
+    const fixes = require('../server/services/support-fixes');
+    const tg = { id: 990035001, first_name: 'Взломщик', username: 'pentest_35' };
+    const token = await tokenFor(tg);
+    const me = await db.get(`SELECT user_id AS id FROM auth_identities WHERE provider = 'telegram' AND provider_user_id = ?`, [String(tg.id)]);
+
+    // Headers: no "Express" label, nosniff everywhere
+    const health = await fetch(baseUrl + '/api/health');
+    assert.strictEqual(health.headers.get('x-powered-by'), null, 'No X-Powered-By');
+    assert.strictEqual(health.headers.get('x-content-type-options'), 'nosniff');
+
+    // The reply limit is kept within 5–500 by the server, not only by the phone
+    const created = await api('POST', '/api/projects', token, { name: 'pentest', customAiSettings: { clientLimit: 1000000 } });
+    assert.strictEqual(created.status, 201);
+    const pid = created.body.id;
+    let row = await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [pid]);
+    assert.strictEqual(JSON.parse(row.custom_ai_settings).clientLimit, 500, 'POST: clamped to 500');
+    await api('PUT', `/api/projects/${pid}`, token, { custom_ai_settings: { clientLimit: 999999 } });
+    row = await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [pid]);
+    assert.strictEqual(JSON.parse(row.custom_ai_settings).clientLimit, 500, 'PUT: clamped to 500');
+    await api('PUT', `/api/projects/${pid}`, token, { custom_ai_settings: { clientLimit: 1 } });
+    row = await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [pid]);
+    assert.strictEqual(JSON.parse(row.custom_ai_settings).clientLimit, 5, 'PUT: at least 5');
+
+    // At most MAX_PROJECTS_PER_OWNER SI-sellers per person
+    const { count } = await db.get('SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?', [me.id]);
+    for (let i = Number(count); i < projectService.MAX_PROJECTS_PER_OWNER; i++) {
+      assert.strictEqual((await api('POST', '/api/projects', token, { name: `p${i}` })).status, 201);
+    }
+    const tooMany = await api('POST', '/api/projects', token, { name: 'one more' });
+    assert.strictEqual(tooMany.status, 409, 'The next SI-seller is refused');
+    assert.strictEqual(tooMany.body.code, 'TOO_MANY_SI_SELLERS');
+
+    // The team turned the SI-seller off: the owner cannot turn it on again
+    const staff = { userId: expertA_InternalId, role: 'owner' };
+    await fixes.applyFix('consultant_status', me.id, { projectId: pid, active: false }, 1, staff);
+    await api('PUT', `/api/projects/${pid}`, token, { status: 'active', name: 'renamed' });
+    row = await db.get('SELECT status, name FROM projects WHERE id = ?', [pid]);
+    assert.strictEqual(row.status, 'paused', 'status is not taken from the owner');
+    assert.strictEqual(row.name, 'renamed', 'other fields still save');
+
+    // The team hid it from the Marketplace: the owner cannot show it again; the team can
+    await db.run(`UPDATE projects SET offer = 'offer', is_listed = 1 WHERE id = ?`, [pid]);
+    await fixes.applyFix('consultant_listing', me.id, { projectId: pid, listed: false }, 1, staff);
+    const relist = await api('PUT', `/api/projects/${pid}`, token, { is_listed: true });
+    assert.strictEqual(relist.status, 403, 'Owner cannot show a hidden SI-seller');
+    assert.strictEqual((await db.get('SELECT is_listed FROM projects WHERE id = ?', [pid])).is_listed, 0);
+    assert.strictEqual((await api('PUT', `/api/projects/${pid}`, token, { is_listed: false, name: 'still editable' })).status, 200, 'Saving the form unlisted still works');
+    await fixes.applyFix('consultant_listing', me.id, { projectId: pid, listed: true }, 1, staff);
+    assert.strictEqual((await api('PUT', `/api/projects/${pid}`, token, { is_listed: false })).status, 200);
+    assert.strictEqual((await api('PUT', `/api/projects/${pid}`, token, { is_listed: true })).status, 200, 'After the team shows it, the owner manages it again');
+
+    // One person, all SI-sellers: at most DAILY_SI_REPLIES_PER_PERSON SI answers a day
+    const clientTg = { id: 990035002, first_name: 'Болтун' };
+    const clientToken = await tokenFor(clientTg);
+    const clientUser = await db.get(`SELECT user_id AS id FROM auth_identities WHERE provider = 'telegram' AND provider_user_id = ?`, [String(clientTg.id)]);
+    const lead = await chatService.leadForUser(projectA, clientUser.id);
+    for (let i = 0; i < chatService.DAILY_SI_REPLIES_PER_PERSON; i++) {
+      // An hour ago: inside the last 24 hours, and before the messages this test sends now
+      await db.run(`INSERT INTO conversations (id, project_id, client_id, sender, author_type, text, created_at) VALUES (?, ?, ?, 'ai', 'si', 'ok', ?)`,
+        [`msg_pentest_${i}`, projectA.id, lead.id, supportService.sqlTime(new Date(Date.now() - 3600 * 1000))]);
+    }
+    await db.run(`UPDATE projects SET custom_ai_settings = ? WHERE id = ?`, [JSON.stringify({ clientLimit: 500 }), projectA.id]);
+    const capped = await api('POST', `/api/chat/${projectA.slug}/messages`, clientToken, { text: 'ещё вопрос' });
+    assert.strictEqual(capped.status, 201);
+    assert.strictEqual(capped.body.limitReached, true, 'Daily cap reached');
+    assert.strictEqual(capped.body.reply.text, chatService.DAILY_LIMIT_TEXT);
+    const again = await api('POST', `/api/chat/${projectA.slug}/messages`, clientToken, { text: 'и ещё' });
+    assert.strictEqual(again.body.reply, null, 'The cap message is not repeated');
+
+    // Dev login and the dev JWT secret: only on a developer's computer
+    const saved = { devLoginAllowed: config.devLoginAllowed };
+    try {
+      config.devLoginAllowed = false; // as on Railway / in the test copy
+      const refused = await api('POST', '/api/auth/dev-login', null, { userId: me.id });
+      assert.strictEqual(refused.status, 403, 'dev-login refused outside a developer computer');
+    } finally {
+      config.devLoginAllowed = saved.devLoginAllowed;
+    }
+
+    // Signing up cannot ask for the old "marketer" role
+    const initData = createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, { id: 990035003, first_name: 'Маркетолог' });
+    const signup = await api('POST', '/api/auth/telegram', null, { initData, role: 'marketer' });
+    assert.strictEqual(signup.status, 200);
+    assert.deepStrictEqual(authService.verifySessionToken(signup.body.token).roles, ['expert']);
+
+    // A number written in ADMIN_USERS is never given to a new person
+    const savedAdmins = config.adminUsers;
+    try {
+      // Half of all numbers (10000–54999) plus one written loosely ("sf 99999") are reserved
+      const reserved = [];
+      for (let n = 10000; n < 55000; n++) reserved.push(`SF-${n}`);
+      config.adminUsers = [...reserved, 'sf 99999'];
+      for (let i = 0; i < 200; i++) {
+        const code = supportService.randomSupportCode();
+        const n = Number(code.slice(3));
+        assert(n >= 55000 && n !== 99999, `${code} is reserved in ADMIN_USERS`);
+      }
+      config.adminUsers = ['SF-11111', '123456789', 'usr_nobody'];
+      assert.deepStrictEqual(await supportService.unknownAdminEntries(), ['SF-11111', '123456789', 'usr_nobody']);
+    } finally {
+      config.adminUsers = savedAdmins;
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
