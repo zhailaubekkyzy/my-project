@@ -14,6 +14,11 @@ const { mediaUrl } = require('./media-service');
 const analytics = require('./analytics-service');
 
 const DEFAULT_CLIENT_LIMIT = 40;
+const MAX_CLIENT_LIMIT = 500;
+// One person, all SI-sellers together: SI answers per 24 hours. Protects the OpenAI bill from
+// someone who makes SI-sellers only to chat with them for free; a real client never gets close.
+const DAILY_SI_REPLIES_PER_PERSON = 150;
+const DAILY_LIMIT_TEXT = 'На сегодня я ответил уже на очень много вопросов — давайте продолжим завтра. Если нужно срочно, нажмите «Связаться с человеком».';
 const LIMIT_TEXT = 'Я ответил на все вопросы, на которые могу. Чтобы продолжить, нажмите «Связаться с человеком» — эксперт ответит вам лично.';
 
 const newId = (prefix) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -133,6 +138,18 @@ async function setResponsible(client, responsible) {
   client.responsible_user_id = human ? responsible.userId || null : null;
 }
 
+// How many SI answers this person (as a client of any SI-seller) got in the last 24 hours
+async function siRepliesToday(personId) {
+  if (!personId) return 0;
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  const row = await db.get(
+    `SELECT COUNT(*) AS count FROM conversations
+     WHERE sender = 'ai' AND created_at >= ? AND client_id IN (SELECT id FROM clients WHERE external_client_id = ?)`,
+    [since, personId]
+  );
+  return Number(row && row.count) || 0;
+}
+
 async function history(projectId, clientId) {
   const rows = await db.all(
     'SELECT * FROM conversations WHERE project_id = ? AND client_id = ? ORDER BY created_at ASC, id ASC',
@@ -181,12 +198,16 @@ async function handleClientMessage(project, lead, text, voice = null) {
   }
 
   const settings = parseJson(project.custom_ai_settings);
-  const limit = Number(settings.clientLimit) || DEFAULT_CLIENT_LIMIT;
+  const limit = Math.min(MAX_CLIENT_LIMIT, Number(settings.clientLimit) || DEFAULT_CLIENT_LIMIT);
   const siCount = past.filter(m => m.sender === 'ai').length;
+  const lastSi = [...past].reverse().find(m => m.sender === 'ai');
   if (siCount >= limit) {
-    const lastSi = [...past].reverse().find(m => m.sender === 'ai');
     if (lastSi && lastSi.text === LIMIT_TEXT) return { message, reply: null, limitReached: true };
     return { message, reply: await saveMessage(lead, SI, LIMIT_TEXT), limitReached: true };
+  }
+  if (await siRepliesToday(lead.external_client_id) >= DAILY_SI_REPLIES_PER_PERSON) {
+    if (lastSi && lastSi.text === DAILY_LIMIT_TEXT) return { message, reply: null, limitReached: true };
+    return { message, reply: await saveMessage(lead, SI, DAILY_LIMIT_TEXT), limitReached: true };
   }
 
   // Search the SI-brain by this message plus the client's previous one (a follow-up like
@@ -512,6 +533,8 @@ async function setSiEnabled(client, enabled, member) {
 module.exports = {
   altOffersSettled: () => altOffersPending,
   LIMIT_TEXT,
+  DAILY_LIMIT_TEXT,
+  DAILY_SI_REPLIES_PER_PERSON,
   findOrCreateLead,
   leadForUser,
   activeProjectBySlug,

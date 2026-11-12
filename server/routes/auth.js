@@ -18,7 +18,7 @@ const db = require('../db');
  */
 router.post('/telegram', async (req, res, next) => {
   try {
-    const { initData, role } = req.body;
+    const { initData } = req.body;
 
     if (!initData) {
       return res.status(400).json({
@@ -52,7 +52,8 @@ router.post('/telegram', async (req, res, next) => {
     const knownBefore = await db.get(
       `SELECT user_id FROM auth_identities WHERE provider = 'telegram' AND provider_user_id = ?`, [String(verification.user.id)]
     );
-    const user = await authService.findOrCreateTelegramUser(verification.user, role || 'expert');
+    // Everyone signs up as an expert: the old "marketer" role is not given to new people
+    const user = await authService.findOrCreateTelegramUser(verification.user, 'expert');
     if (user.status === 'blocked') {
       supportService.setBlocked(user.id, true);
       return res.status(403).json(BLOCKED_RESPONSE);
@@ -121,7 +122,8 @@ router.get('/me', requireAuth, async (req, res, next) => {
  */
 router.post('/dev-login', async (req, res, next) => {
   try {
-    if (config.isProd) {
+    // Only on a developer's computer: never on Railway or in the test copy (APP_ENV=staging)
+    if (config.isProd || !config.devLoginAllowed) {
       return res.status(403).json({
         error: 'forbidden',
         message: 'Dev-логин строго запрещен в production окружении.'

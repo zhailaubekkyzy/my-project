@@ -41,6 +41,14 @@ const siEngine = require('./services/si-engine');
 const app = express();
 
 // Global Middleware
+// No "X-Powered-By: Express": do not tell a stranger what the server is built with
+app.disable('x-powered-by');
+// The same protective headers as the Cloudflare frontend (scripts/build-pages.js → _headers)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 app.use(compression());
 app.use(cors({
   // CORS_ORIGINS: comma-separated frontend origins allowed to call the API, e.g.
@@ -189,6 +197,10 @@ async function startServer(port = config.port) {
   const numbered = await supportService.backfillSupportCodes();
   if (numbered) console.log(`[SmartFlow] Support numbers given to ${numbered} users`);
   await supportService.refreshBlocked();
+  const unknownAdmins = await supportService.unknownAdminEntries();
+  if (unknownAdmins.length) {
+    console.warn(`[SmartFlow] ADMIN_USERS: nobody has ${unknownAdmins.join(', ')} — remove it from Railway Variables (safer: write your Telegram ID, digits only)`);
+  }
 
   scheduler.start();
   // A forgotten error somewhere must not stop the whole server: it goes to the Railway logs
