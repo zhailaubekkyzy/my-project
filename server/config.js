@@ -76,6 +76,11 @@ const config = {
   // PostHog Settings
   posthogApiKey: process.env.POSTHOG_API_KEY || '',
   posthogHost: process.env.POSTHOG_HOST || 'https://app.posthog.com',
+  // Amplitude: the same events as PostHog, both work at once (owner's decision 18 Nov.).
+  // AMPLITUDE_API_KEY = the project's API Key; AMPLITUDE_REGION = eu (default) or us — where the
+  // Amplitude organisation was created. Without the key nothing is sent.
+  amplitudeApiKey: (process.env.AMPLITUDE_API_KEY || '').trim(),
+  amplitudeRegion: /^us$/i.test((process.env.AMPLITUDE_REGION || '').trim()) ? 'us' : 'eu',
   // A client's time zone when the phone has not told it yet (minutes east of UTC; Almaty = 300).
   // Messages to clients (broadcasts, follow-ups) go only 9:00–21:00 by the client's time.
   defaultTzOffset: Number.isFinite(parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10)) ? parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10) : 300,
