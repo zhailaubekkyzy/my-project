@@ -298,9 +298,23 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
 - События шлёт **только сервер** (приложение по-прежнему говорит только с сервером). **Личных данных нет**: человек —
   шифр `p_…` (хэш внутреннего id, не Telegram id), без имён, ников, телефонов, текстов и сумм; в свойствах — только id
   SI-продавца/бизнеса/шага, виды и числа (`safeProps`). Профили людей в PostHog не создаются.
-- События: `app_opened` (вход), `si_chat_started`, `funnel_<тип>` — каждое событие журнала клиента (написал, оффер,
-  возражение, «Купить», записался `source: chat`, чек, купил, отказ, передан человеку, сценарий, шаг воронки…),
-  `buddy_message` (`voice`), `buddy_plans_added`, `review_created` (оценка), `people_message` (вид), `si_seller_created`.
+- **Список событий** (одинаково в PostHog и Амплитуде; свойство `app_env` — у всех). Названия — договор с графиками:
+  **без решения владелицы не переименовываем и не убираем** (см. `CLAUDE.md`, «Цифры: названия событий»).
+
+  | Событие | Когда | Свойства | Где в коде |
+  |---|---|---|---|
+  | `app_opened` | вход через Telegram | — | `server/routes/auth.js` |
+  | `link_opened` | вход по ссылке с меткой источника или приглашению | `kind`, `link_id`, `project_id`, `new_user` | `server/services/partner-service.js` |
+  | `si_seller_created` | эксперт создал SI-продавца | — | `server/routes/projects.js` |
+  | `si_chat_started` | SI-продавец написал первым в новый чат | `project_id`, `business_id` | `server/services/chat-service.js` |
+  | `alt_offers_shown` | над чатом показаны альтернативные SI-продавцы | `project_id`, `count` | `server/services/alt-offer-service.js` |
+  | `alt_offer_opened` | клиент открыл альтернативного SI-продавца | `from_project_id`, `project_id` | `server/routes/chat.js` |
+  | `buddy_message` | сообщение Бадди | `voice`, `limit_reached` | `server/services/buddy-service.js` |
+  | `buddy_plans_added` | Бадди записал планы | `count`, `with_reminder` | `server/services/buddy-service.js` |
+  | `people_message` | сообщение в личной переписке людей | `kind` | `server/services/people-service.js` |
+  | `broadcast_started` | эксперт запустил рассылку | `project_id`, `recipients` | `server/services/broadcast-service.js` |
+  | `review_created` | клиент оставил отзыв | `project_id`, `rating`, `with_text` | `server/services/review-service.js` |
+  | `funnel_<тип>` | запись журнала клиента; типы: `client_message`, `offer_sent`, `offer_answered`, `objection`, `buy_clicked`, `booked`, `meeting_moved`, `meeting_cancelled`, `receipt_sent`, `paid`, `refused`, `handed_to_human`, `human_replied`, `contact_shared`, `scenario`, `step_reached`, `broadcast`, `broadcasts_off` | `project_id`, `business_id`, `actor`; `source` (у `booked`, сейчас `chat`), `step_id` (у `step_reached`), `then` (у `scenario`) | `FUNNEL_EVENTS` в `server/services/analytics-service.js` |
 - Сбой PostHog или Амплитуды ничего не ломает; при перезапуске на Railway ожидающие события отправляются (SIGTERM).
 - Для сравнения «запись у Бадди / в чате»: событие `funnel_booked` со свойством `source` (сейчас всегда `chat`).
 
