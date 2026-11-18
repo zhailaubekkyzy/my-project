@@ -97,6 +97,8 @@ app.get('/api/health', async (req, res) => {
       },
       // true = the server sends product numbers to PostHog (POSTHOG_API_KEY is set)
       posthog: { configured: analytics.isConfigured(), host: config.posthogHost },
+      // true = the same numbers also go to Amplitude (AMPLITUDE_API_KEY is set); region eu / us
+      amplitude: { configured: analytics.isAmplitudeConfigured(), region: config.amplitudeRegion },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
@@ -195,7 +197,7 @@ async function startServer(port = config.port) {
   process.on('unhandledRejection', (err) => {
     console.error('[SmartFlow] Unhandled error (server keeps running):', err && err.message ? err.message : err);
   });
-  // Railway stops the old copy on every deploy: the waiting PostHog events are sent first
+  // Railway stops the old copy on every deploy: the waiting PostHog and Amplitude events are sent first
   process.once('SIGTERM', () => { analytics.flush().finally(() => process.exit(0)); });
 
   return new Promise((resolve) => {

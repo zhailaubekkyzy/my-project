@@ -2199,6 +2199,70 @@ async function runAllTests() {
     assert.strictEqual((await api('GET', '/api/health')).body.posthog.configured, false);
   });
 
+  await test('65. Амплитуда: те же события, что в PostHog, без личных данных; сбой Амплитуды ничего не ломает', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const batches = [];
+    let failNext = 0;
+    analytics._setAmplitudeSenderForTests(async (events) => {
+      if (failNext > 0) {
+        failNext--;
+        const err = new Error('Amplitude 503');
+        err.retry = true;
+        throw err;
+      }
+      batches.push(events);
+    });
+    const posthog = [];
+    analytics._setClientForTests({ capture: (e) => posthog.push(e) });
+    try {
+      const tg = { id: 700065, first_name: 'Динара', last_name: 'Тайнова', username: 'dinara_secret' };
+      const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg) });
+      assert.strictEqual(login.status, 200);
+      const token = login.body.token;
+      const user = await authService.findOrCreateTelegramUser(tg, 'expert');
+      await api('POST', `/api/chat/${projectA.slug}/start`, token);
+      await api('POST', `/api/chat/${projectA.slug}/messages`, token, { text: 'Мой номер +77019876543' });
+      await api('POST', `/api/chat/${projectA.slug}/events`, token, { type: 'buy_clicked' });
+
+      // Amplitude is down for a moment: nothing breaks, the events wait and go out later
+      failNext = 1;
+      await analytics.flush();
+      await analytics.flush();
+      const sent = batches.flat();
+      const names = sent.map(e => e.event_type);
+      for (const e of ['app_opened', 'si_chat_started', 'funnel_client_message', 'funnel_buy_clicked']) {
+        assert(names.includes(e), `${e} is sent to Amplitude`);
+      }
+      // The same events go to PostHog too
+      assert.deepStrictEqual(names.slice().sort(), posthog.map(e => e.event).sort(), 'Both get the same events');
+      assert.strictEqual(new Set(sent.map(e => e.insert_id)).size, sent.length, 'Every event has its own insert_id');
+
+      const all = JSON.stringify(sent);
+      for (const secret of ['Динара', 'Тайнова', 'dinara_secret', '700065', '+77019876543', user.id, '$process_person_profile']) {
+        assert(!all.includes(secret), `No personal data / PostHog-only fields: ${secret}`);
+      }
+      const buy = sent.find(e => e.event_type === 'funnel_buy_clicked');
+      assert.strictEqual(buy.user_id, analytics.personId(user.id), 'The same pseudonymous id as in PostHog');
+      assert.strictEqual(buy.event_properties.project_id, projectA.id);
+      assert.strictEqual(buy.event_properties.app_env, 'production');
+      assert(batches.every(b => b.length <= 20), 'Batches of at most 20');
+
+      // A broken key or region (4xx): the batch is dropped, nothing is retried forever, nothing throws
+      analytics._setAmplitudeSenderForTests(async () => { throw new Error('Amplitude 400'); });
+      analytics.capture('anything', user.id, { kind: 'x' });
+      await analytics.flush();
+    } finally {
+      analytics._setAmplitudeSenderForTests(null);
+      analytics._setClientForTests(null);
+    }
+    // Without AMPLITUDE_API_KEY (and in tests) nothing is sent
+    assert.strictEqual(analytics.isAmplitudeConfigured(), false);
+    analytics.capture('anything', 'usr_x', { name: 'x' });
+    await analytics.flush();
+    const health = (await api('GET', '/api/health')).body;
+    assert.deepStrictEqual(health.amplitude, { configured: false, region: 'eu' });
+  });
+
   await test('58. Рассылки: помощник готовит, владелец одобряет; не получают отказавшиеся и отписавшиеся; лимиты и ночь', async () => {
     const broadcastService = require('../server/services/broadcast-service');
     const mk = async (id, name) => {
