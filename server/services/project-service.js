@@ -4,6 +4,32 @@ const db = require('../db');
 const { mediaUrl } = require('./media-service');
 const businessService = require('./business-service');
 
+// One person may have at most this many SI-sellers (each one answers clients with OpenAI)
+const MAX_PROJECTS_PER_OWNER = 10;
+// "Лимит ответов SI на одного клиента": the same bounds as in the Office form, checked here too
+const CLIENT_LIMIT_MIN = 5;
+const CLIENT_LIMIT_MAX = 500;
+
+function projectLimitError() {
+  const err = new Error(`У вас уже ${MAX_PROJECTS_PER_OWNER} SI-продавцов — это максимум. Удалите или измените существующего.`);
+  err.status = 409;
+  err.code = 'TOO_MANY_SI_SELLERS';
+  err.name = 'bad_request';
+  return err;
+}
+
+/**
+ * Settings of an SI-seller as the expert sent them, with the reply limit kept within bounds
+ * (the phone limits it too, but a request can skip the phone).
+ */
+function limitAiSettings(settings) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return settings;
+  if (settings.clientLimit === undefined) return settings;
+  const n = parseInt(settings.clientLimit, 10);
+  const clientLimit = Number.isFinite(n) ? Math.max(CLIENT_LIMIT_MIN, Math.min(CLIENT_LIMIT_MAX, n)) : 40;
+  return { ...settings, clientLimit };
+}
+
 /**
  * Unified Access Control Verification for Project Actions
  * Actions:
@@ -160,6 +186,8 @@ async function getUserProjects(userId) {
  * Create a new expert project instance (optionally from a template)
  */
 async function createProject(userId, { name, templateId, niche, customAiSettings, pricingOptions }) {
+  const owned = await db.get('SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?', [userId]);
+  if (Number(owned && owned.count) >= MAX_PROJECTS_PER_OWNER) throw projectLimitError();
   const projectId = `proj_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   // Latin letters and digits only (Telegram start links allow [A-Za-z0-9_-]); a Cyrillic name leaves "si"
   const slugBase = (name || '')
@@ -173,7 +201,7 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
   if (templateId) {
     const tmpl = await db.get('SELECT * FROM funnel_templates WHERE id = ?', [templateId]);
     if (tmpl && !customAiSettings) {
-      templateCloneSettings = safeJsonParse(tmpl.ai_clone_settings);
+      templateCloneSettings = limitAiSettings(safeJsonParse(tmpl.ai_clone_settings));
     }
   }
 
@@ -307,6 +335,8 @@ function safeJsonParse(str, defaultVal = {}) {
 }
 
 module.exports = {
+  MAX_PROJECTS_PER_OWNER,
+  limitAiSettings,
   checkProjectAccess,
   getUserProjects,
   createProject,

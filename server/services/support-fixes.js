@@ -114,18 +114,22 @@ const FIXES = {
 
   consultant_listing: {
     title: 'Показать / скрыть SI-продавца в Маркетплейсе',
-    help: 'Жалоба на карточку (обман, неприемлемый текст) — скрыть. Владелец просит вернуть — показать. Ссылка SI-продавца продолжает работать.',
+    help: 'Жалоба на карточку (обман, неприемлемый текст) — скрыть: владелец сам вернуть уже не сможет. Владелец просит вернуть — показать. Ссылка SI-продавца продолжает работать.',
     async plan(user, { projectId, listed }) {
       const project = await ownProject(user, projectId);
       const want = Boolean(listed);
+      // Hidden by the team = not listed AND marked, so the owner cannot show it again by himself
+      const hiddenByStaff = Number(project.hidden_by_staff) === 1;
+      const done = want ? (project.is_listed && !hiddenByStaff) : (!project.is_listed && hiddenByStaff);
+      const now = project.is_listed ? 'показан' : (hiddenByStaff ? 'скрыт командой' : 'скрыт');
       return {
-        count: Boolean(project.is_listed) === want ? 0 : 1,
-        changes: [{ label: `«${project.name}» в Маркетплейсе`, before: project.is_listed ? 'показан' : 'скрыт', after: want ? 'показан' : 'скрыт' }]
+        count: done ? 0 : 1,
+        changes: [{ label: `«${project.name}» в Маркетплейсе`, before: now, after: want ? 'показан' : 'скрыт командой (владелец не вернёт сам)' }]
       };
     },
     async apply(user, { projectId, listed }) {
       const project = await ownProject(user, projectId);
-      await db.run('UPDATE projects SET is_listed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [listed ? 1 : 0, project.id]);
+      await db.run('UPDATE projects SET is_listed = ?, hidden_by_staff = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [listed ? 1 : 0, listed ? 0 : 1, project.id]);
     }
   },
 

@@ -35,7 +35,12 @@ router.post('/subscribe', async (req, res, next) => {
       return res.status(400).json({ error: 'bad_request', message: 'templateId обязателен' });
     }
 
-    const result = await subscriptionService.subscribeToTemplate(req.user.userId, templateId, customPaymentUrl);
+    // A payment link is kept only if it is a plain https:// address (never javascript: or similar)
+    const paymentUrl = String(customPaymentUrl || '').trim();
+    if (paymentUrl && !/^https:\/\/[^\s<>"']+$/i.test(paymentUrl)) {
+      return res.status(400).json({ error: 'bad_request', message: 'Ссылка на оплату должна начинаться с https://' });
+    }
+    const result = await subscriptionService.subscribeToTemplate(req.user.userId, templateId, paymentUrl || null);
     res.status(201).json({
       message: 'Подписка на воронку успешно активирована. Создан ваш персональный экземпляр проекта.',
       ...result
