@@ -110,6 +110,12 @@
     `;
   }
 
+  // Other people see someone's trust only when it is already high: a new expert's «Доверие 0%»
+  // reads to a client as "do not trust", though it only means "profile not filled yet".
+  // The person sees their own trust and what raises it in Профиль.
+  const TRUST_SHOWN_FROM = 50;
+  const showTrust = (trust) => Number(trust) >= TRUST_SHOWN_FROM;
+
   // ---------------- Consultant card (order from the structure document) ----------------
   function renderConsultant(route, state) {
     const c = findCard(state, route.id);
@@ -130,6 +136,7 @@
         <div class="text-sm font-bold text-ink leading-snug">${SF.esc(c.offer)}</div>
         <!-- 2. Description -->
         ${c.description ? `<p class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(c.description)}</p>` : ''}
+        ${c.priceLabel ? `<div class="text-lg font-extrabold text-ink">${SF.esc(c.priceLabel)}</div>` : ''}
         <div class="flex flex-wrap gap-1.5 text-[10px] font-semibold">
           <span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${c.category === 'warmup' ? 'Прогрев и заявки' : 'Продажи'}</span>
           ${c.trialDays ? `<span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${trialLabel(c)}</span>` : ''}
@@ -165,10 +172,11 @@
           <div class="text-[10px] text-muted uppercase tracking-wider">Автор</div>
           <div class="flex items-center gap-1 text-xs font-bold text-ink min-w-0"><span class="truncate">${SF.esc(c.author.name)}</span>${SF.partnerBadge(c.author.id, 14)}</div>
         </div>
+        ${showTrust(c.author.trust) ? `
         <div class="w-24">
           <div class="text-[10px] text-muted text-right">Доверие ${c.author.trust}%</div>
           ${SF.progressBar(c.author.trust)}
-        </div>
+        </div>` : ''}
       </button>
     `;
   }
@@ -232,10 +240,11 @@
         <div class="flex justify-center">${SF.avatar(p.photoUrl, { size: 88, kind: 'human', userId: p.partner ? p.id : null })}</div>
         <div class="text-lg font-extrabold text-ink">${SF.esc(p.displayName)}</div>
         ${pr.headline ? `<div class="text-xs text-brand font-semibold">${SF.esc(pr.headline)}</div>` : ''}
+        ${showTrust(p.trust) ? `
         <div class="max-w-[220px] mx-auto pt-1">
           <div class="text-[11px] text-muted mb-1">Доверие ${p.trust}%</div>
           ${SF.progressBar(p.trust)}
-        </div>
+        </div>` : ''}
         ${p.partner ? `<div class="pt-1">${SF.partnerMedal(p.partner.count, { size: 56 })}</div>` : ''}
         ${pr.offerButton ? `<button onclick="${pr.offerButton.consultantId ? `SF.actions.openChat('${SF.js(pr.offerButton.consultantId)}')` : `SF.openLink('${SF.js(pr.offerButton.url)}')`}" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-tiffany text-sm">${SF.esc(pr.offerButton.label)}</button>` : ''}
         ${p.id !== store().data.me.id ? `<button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="mt-2 w-full py-2.5 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i>Написать</button>` : ''}
@@ -282,6 +291,7 @@
           Оплата идёт напрямую автору по его ссылке. SmartFlow не принимает платежи и не берёт комиссию.
         </div>
         <button onclick="SF.openLink('${SF.js(c.paymentUrl)}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Перейти к оплате</button>
+        <div class="text-[11px] text-ink-2 leading-snug">После оплаты пришлите чек в чат с SI-продавцом — автор проверит оплату и откроет доступ.</div>
         <button onclick="SF.copyText('${SF.js(c.paymentUrl)}', 'Ссылка на оплату скопирована')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Скопировать ссылку на оплату</button>
       ` : `
         <div class="text-xs text-muted">Автор пока не добавил ссылку на оплату. Задайте вопрос SI-продавцу или свяжитесь с автором.</div>
