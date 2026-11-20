@@ -2792,6 +2792,18 @@ async function runAllTests() {
     }
   });
 
+  await test('67. Инструкция SI: не угадывает «подходит ли», только по теме, язык клиента, встречи без календаря', async () => {
+    const siEngine = require('../server/services/si-engine');
+    const project = { name: 'Тест', role_title: 'SI-помощник', custom_ai_settings: '{}', price_label: '45 000 ₸' };
+    const prompt = siEngine.buildSystemPrompt(project, 'Алия');
+    assert(/только если это прямо написано в сведениях/.test(prompt), 'No guessing about special cases');
+    assert(/Просьбы не по теме/.test(prompt), 'Stays on topic');
+    assert(/пишет по-английски — отвечай по-английски/.test(prompt), 'Answers in the client language');
+    assert(/время созвона сам не предлагай/.test(prompt), 'Without a calendar the SI does not offer a time');
+    const withCalendar = siEngine.buildSystemPrompt({ ...project, calendarEnabled: true }, 'Алия');
+    assert(!/время созвона сам не предлагай/.test(withCalendar) && /кнопка «Записаться»/.test(withCalendar), 'With a calendar — the booking button');
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
