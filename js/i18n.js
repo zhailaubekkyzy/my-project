@@ -63,6 +63,7 @@
     'Поделиться карточкой': 'Share card', 'Ответ автора:': 'Author’s reply:',
     'Пока нет отзывов. Оставить отзыв могут только клиенты, которые купили; видно только имя и первую букву фамилии.': 'No reviews yet. Only clients who bought can leave a review; only the first name and the first letter of the last name are shown.',
     'Оплата идёт напрямую автору по его ссылке. SmartFlow не принимает платежи и не берёт комиссию.': 'Payment goes directly to the author by their link. SmartFlow does not take payments or fees.',
+    'После оплаты пришлите чек в чат с SI-продавцом — автор проверит оплату и откроет доступ.': 'After paying, send the receipt in the chat with the SI-seller — the author will check the payment and open access.',
     'Перейти к оплате': 'Go to payment', 'Скопировать ссылку на оплату': 'Copy payment link',
     'Автор пока не добавил ссылку на оплату. Задайте вопрос SI-продавцу или свяжитесь с автором.': 'The author has not added a payment link yet. Ask the SI-seller or contact the author.',
     'SI-продавец': 'SI-seller', 'SI-продавцы': 'SI-sellers', 'SI-консультант': 'SI-consultant', 'SI-продавец не найден': 'SI-seller not found',

@@ -278,7 +278,11 @@
   // Chats with a new SI/expert message I have not opened yet
   function isUnread(state, chat) {
     const fromOther = /^\[(SI|Эксперт|Помощник)\]/.test(chat.lastMessage || '');
-    return fromOther && state.chats.seen[chat.slug] !== chat.lastActivity;
+    if (!fromOther) return false;
+    // The chat that is open on the screen right now is being read: no "1" on «Чаты» for it
+    const route = window.funnelStore && window.funnelStore.currentRoute('chats');
+    if (state.ui.tab === 'chats' && route && route.screen === 'chat' && route.slug === chat.slug) return false;
+    return state.chats.seen[chat.slug] !== chat.lastActivity;
   }
 
   const isMissing = (state, key) => Boolean(state.remote.missing && state.remote.missing[key]);
