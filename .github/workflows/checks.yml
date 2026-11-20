@@ -1,0 +1,80 @@
+# Automatic checks on every pull request and every merge into main.
+# Red = do not merge: something is broken. The owner sees the result on the pull request page.
+name: Проверки
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-sqlite:
+    name: Тесты (SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  tests-postgres:
+    name: Тесты (PostgreSQL, как на сервере)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: smartflow_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/smartflow_test
+          PGSSLMODE: disable
+
+  build:
+    name: Сборка для Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:pages
+        env:
+          SMARTFLOW_API_URL: https://example.up.railway.app
+      # css/tailwind.css and js/icons.js are kept in the repository: they must match the code
+      - name: Готовые файлы стилей и иконок обновлены
+        run: |
+          if ! git diff --quiet -- css/tailwind.css js/icons.js; then
+            echo "::error::css/tailwind.css или js/icons.js устарели — запустите npm run build и добавьте их в pull request"
+            git diff --stat -- css/tailwind.css js/icons.js
+            exit 1
+          fi
