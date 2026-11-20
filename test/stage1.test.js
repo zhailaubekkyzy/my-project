@@ -2604,6 +2604,8 @@ async function runAllTests() {
   await test('41. Миграция 007: старые данные переходят в бизнесы (SQLite-файл с данными до миграции)', async () => {
     const Database = require('better-sqlite3');
     const file = path.join(__dirname, '../data/test_migration_007.db');
+    // On PostgreSQL runs nothing else creates data/ (a fresh checkout, e.g. GitHub Actions)
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     if (fs.existsSync(file)) fs.unlinkSync(file);
     const mdb = new Database(file);
     const dir = path.join(__dirname, '../server/db/migrations');
