@@ -241,7 +241,7 @@
     showToast(kind === 'photo' ? 'Отправляю фото…' : kind === 'video' ? 'Отправляю видео…' : 'Отправляю голосовое…');
     try {
       await api().sendPersonFile(userId, kind, blob, seconds);
-      SF.askWriteAccess();
+      SF.askWriteAccess(null, { auto: true });
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
     } finally {
@@ -398,7 +398,7 @@
     }
     try {
       await api().sendPersonMessage(userId, text);
-      SF.askWriteAccess(); // so the bot can tell about the answer
+      SF.askWriteAccess(null, { auto: true }); // so the bot can tell about the answer
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
     } finally {
@@ -753,6 +753,8 @@
     SF.scrollToBottom('chat-scroll');
     try {
       const res = await api().sendChatMessage(slug, text);
+      // So the bot can tell the client about the expert's answer, a meeting, a follow-up
+      SF.askWriteAccess(null, { auto: true });
       SF.data.invalidate(`messages:${slug}`);
       SF.data.invalidate('chats');
       await SF.data.chatMessages(slug);
@@ -1022,6 +1024,7 @@
     SF.scrollToBottom('chat-scroll');
     try {
       await api().uploadVoice(slug, result.blob, Math.min(result.seconds, VOICE_MAX));
+      SF.askWriteAccess(null, { auto: true });
       SF.data.invalidate(`messages:${slug}`);
       SF.data.invalidate('chats');
       await SF.data.chatMessages(slug);
