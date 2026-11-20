@@ -109,7 +109,7 @@
     analytics: (projectId) => ensure(`analytics:${projectId}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getProjectAnalytics(projectId);
-      store().setRemote(`analytics.${projectId}`, res.live || {});
+      store().setRemote(`analytics.${projectId}`, { ...(res.live || {}), entries: res.entries || {}, cardViews: res.cardViews || 0 });
     }, 15000),
 
     clientMessages: (projectId, clientId) => ensure(`clientMessages:${clientId}`, async () => {

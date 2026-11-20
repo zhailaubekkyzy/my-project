@@ -2837,6 +2837,93 @@ async function runAllTests() {
     await db.run(`DELETE FROM projects WHERE owner_id = ?`, [owner.id]);
   });
 
+  await test('68. Карточка: режим цены, кнопка эксперта, вход клиента, покупка с карточки видна эксперту', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const siEngine = require('../server/services/si-engine');
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e) });
+    try {
+      const expertTg = { id: 680001, first_name: 'Карточка' };
+      const expertToken = await tokenFor(expertTg);
+      const created = await api('POST', '/api/projects', expertToken, { name: 'card test' });
+      const pid = created.body.id;
+      // Not in the Marketplace, price on request, own button «Записаться на консультацию»
+      const upd = await api('PUT', `/api/projects/${pid}`, expertToken, {
+        offer: 'Разбор вашей ситуации', price_mode: 'on_request', cta_kind: 'book', cta_label: '', is_listed: false
+      });
+      assert.strictEqual(upd.status, 200);
+      const bad = await api('PUT', `/api/projects/${pid}`, expertToken, { price_mode: 'whatever', cta_kind: 'hack' });
+      assert.strictEqual(bad.status, 200);
+      let card = (await api('GET', `/api/marketplace/consultants/${pid}`, expertToken)).body.consultant;
+      assert.ok(card, 'An unlisted card opens by its link');
+      assert.strictEqual(card.priceMode, 'fixed', 'Unknown price mode → fixed');
+      assert.deepStrictEqual(card.cta, { kind: 'buy', label: 'Купить' }, 'Unknown button → «Купить»');
+      await api('PUT', `/api/projects/${pid}`, expertToken, { price_mode: 'on_request', cta_kind: 'book' });
+      card = (await api('GET', `/api/marketplace/consultants/${pid}`, expertToken)).body.consultant;
+      assert.strictEqual(card.priceMode, 'on_request');
+      assert.deepStrictEqual(card.cta, { kind: 'book', label: 'Записаться на консультацию' });
+      const list = (await api('GET', '/api/marketplace', expertToken)).body.consultants;
+      assert(!list.some(c => c.id === pid), 'Not in the Marketplace list');
+
+      // The SI does not name a price «по запросу»; from the card it greets by the button
+      const proj = await db.get('SELECT * FROM projects WHERE id = ?', [pid]);
+      assert(/Сумму не называй/.test(siEngine.buildSystemPrompt(proj, 'Эксперт')));
+      assert(/нажал кнопку «Записаться на консультацию»/.test(siEngine.openerTask({ clientEntry: 'card', cardCta: card.cta })));
+      assert(/открыл чат по вашей ссылке/.test(siEngine.openerTask({ clientEntry: 'link' })));
+
+      // A client opens the card twice and presses the button: counted, becomes a client from the card
+      const clientTg = { id: 680002, first_name: 'Покупатель' };
+      const clientToken = await tokenFor(clientTg);
+      const slug = proj.slug;
+      await api('POST', `/api/chat/${slug}/card`, clientToken, { action: 'open' });
+      await api('POST', `/api/chat/${slug}/card`, clientToken, { action: 'open' });
+      const cta = await api('POST', `/api/chat/${slug}/card`, clientToken, { action: 'cta' });
+      assert.strictEqual(cta.body.recorded, true);
+      const lead = await db.get('SELECT * FROM clients WHERE id = ?', [cta.body.clientId]);
+      assert.strictEqual(lead.entry, 'card');
+      const ev = await db.all('SELECT type, data FROM client_events WHERE client_id = ?', [lead.id]);
+      assert(ev.some(e => e.type === 'card_cta' && JSON.parse(e.data).cta === 'book'), 'The button is in the journal');
+      assert(!ev.some(e => e.type === 'buy_clicked'), '«Записаться» is not «Купить»');
+
+      // «Купить» on the card: the expert sees who pressed it; the chat then offers «Отправить чек»
+      await api('PUT', `/api/projects/${pid}`, expertToken, { cta_kind: 'buy', price_mode: 'fixed', price_label: '10 000 ₸', payment_url: 'https://pay.example.com/x' });
+      const buyerToken = await tokenFor({ id: 680003, first_name: 'Купила' });
+      const buy = await api('POST', `/api/chat/${slug}/card`, buyerToken, { action: 'cta' });
+      const buyer = await db.get('SELECT * FROM clients WHERE id = ?', [buy.body.clientId]);
+      assert.strictEqual(buyer.entry, 'card');
+      const buyEv = await db.get(`SELECT data FROM client_events WHERE client_id = ? AND type = 'buy_clicked'`, [buyer.id]);
+      assert.strictEqual(JSON.parse(buyEv.data).source, 'card');
+      const thread = await api('GET', `/api/chat/${slug}/messages`, buyerToken);
+      assert.strictEqual(thread.body.tools.receipt, true, 'The chat offers «Отправить чек»');
+
+      // A client by the chat link: entry 'link'; the owner pressing their own button is not a client
+      const linkToken = await tokenFor({ id: 680004, first_name: 'По ссылке' });
+      await api('POST', `/api/chat/${slug}/start`, linkToken);
+      assert.strictEqual((await db.get(`SELECT entry FROM clients WHERE project_id = ? AND name = 'По ссылке'`, [pid])).entry, 'link');
+      assert.strictEqual((await api('POST', `/api/chat/${slug}/card`, expertToken, { action: 'cta' })).body.recorded, false);
+
+      // The expert's numbers: by entry and card views (the owner's own views not counted)
+      await api('POST', `/api/chat/${slug}/card`, expertToken, { action: 'open' });
+      const a = (await api('GET', `/api/projects/${pid}/analytics`, expertToken)).body;
+      assert.deepStrictEqual(a.entries.card, { clients: 2, bought: 0 });
+      assert.deepStrictEqual(a.entries.link, { clients: 1, bought: 0 });
+      assert.strictEqual(a.cardViews, 1, 'One person opened the card (twice)');
+
+      // Our numbers: the same events, no personal data
+      const names = sent.map(e => e.event);
+      for (const e of ['card_opened', 'card_cta_clicked', 'funnel_buy_clicked', 'si_chat_started']) assert(names.includes(e), `${e} is sent`);
+      assert.strictEqual(sent.find(e => e.event === 'funnel_buy_clicked' && e.properties.project_id === pid).properties.source, 'card');
+      assert.strictEqual(sent.filter(e => e.event === 'si_chat_started').pop().properties.entry, 'link');
+      assert(!JSON.stringify(sent).includes('Покупатель'), 'No names in the numbers');
+
+      // Hidden by the team: the card does not open even by its link
+      await db.run('UPDATE projects SET hidden_by_staff = 1 WHERE id = ?', [pid]);
+      assert.strictEqual((await api('GET', `/api/marketplace/consultants/${pid}`, clientToken)).status, 404);
+    } finally {
+      analytics._setClientForTests(null);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

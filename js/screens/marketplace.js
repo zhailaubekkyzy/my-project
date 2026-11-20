@@ -55,6 +55,13 @@
       </button>`;
   }
 
+  // The price as the expert set it: a sum, «Бесплатно» or «Цена по запросу»
+  function priceText(c) {
+    if (c.priceMode === 'free') return 'Бесплатно';
+    if (c.priceMode === 'on_request') return 'Цена по запросу';
+    return c.priceLabel || '';
+  }
+
   function card(c) {
     return `
       <button onclick="SF.push('consultant', { id: '${SF.js(c.id)}' })" class="w-full glass-card-3d p-3.5 text-left space-y-2">
@@ -71,7 +78,7 @@
         </div>
         <div class="text-xs font-semibold text-ink leading-snug">${SF.esc(c.offer)}</div>
         <div class="flex items-center justify-between text-[11px] gap-2">
-          <span class="text-brand font-bold truncate">${SF.esc(c.priceLabel)}</span>
+          <span class="text-brand font-bold truncate">${SF.esc(priceText(c))}</span>
           <span class="text-muted whitespace-nowrap">${trialLabel(c)}</span>
         </div>
       </button>`;
@@ -116,6 +123,36 @@
   const TRUST_SHOWN_FROM = 50;
   const showTrust = (trust) => Number(trust) >= TRUST_SHOWN_FROM;
 
+  // The card button the expert chose (owner's decision 20 Nov.): «Купить» opens payment next to
+  // «Спросить»; any other button («Получить бесплатно», «Записаться…», «Узнать цену», own words)
+  // opens the chat where the SI already knows why the person came.
+  function cardButtons(c) {
+    const cta = c.cta || { kind: 'buy', label: 'Купить' };
+    if (cta.kind === 'buy') {
+      return `
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="SF.actions.openChat('${SF.js(c.slug)}', { entry: 'card' })" class="py-3 rounded-2xl btn-3d-red text-sm flex items-center justify-center gap-1.5">
+          <i data-lucide="message-circle" class="w-4 h-4"></i> Спросить
+        </button>
+        <button onclick="SF.actions.cardCta('${SF.js(c.id)}')" class="py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5 ${c.paymentUrl ? '' : 'opacity-60'}">
+          <i data-lucide="shopping-bag" class="w-4 h-4"></i> ${SF.esc(cta.label)}
+        </button>
+      </div>`;
+    }
+    return `
+      <button onclick="SF.actions.cardCta('${SF.js(c.id)}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
+        <i data-lucide="message-circle" class="w-4 h-4"></i> ${SF.esc(cta.label)}
+      </button>`;
+  }
+
+  // The person opened a card: counted once per screen visit (for the expert's numbers and ours)
+  const cardOpened = {};
+  function countCardOpen(c) {
+    if (!c || cardOpened[c.id] || !SF.data.signedIn()) return;
+    cardOpened[c.id] = true;
+    window.smartFlowApi.cardEvent(c.slug, 'open').catch(() => {});
+  }
+
   // ---------------- Consultant card (order from the structure document) ----------------
   function renderConsultant(route, state) {
     const c = findCard(state, route.id);
@@ -123,6 +160,7 @@
       return SF.emptyState('assistant', 'Карточка не найдена', 'Возможно, автор снял SI-продавца с витрины.');
     }
     if (!c) return '<div class="text-xs text-muted">Загружаю…</div>';
+    countCardOpen(c);
     return `
       <div class="glass-card-3d p-4 space-y-3 border-[var(--si-bubble-line)]">
         <div class="flex items-center gap-3">
@@ -136,7 +174,7 @@
         <div class="text-sm font-bold text-ink leading-snug">${SF.esc(c.offer)}</div>
         <!-- 2. Description -->
         ${c.description ? `<p class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(c.description)}</p>` : ''}
-        ${c.priceLabel ? `<div class="text-lg font-extrabold text-ink">${SF.esc(c.priceLabel)}</div>` : ''}
+        ${priceText(c) ? `<div class="text-lg font-extrabold text-ink">${SF.esc(priceText(c))}</div>` : ''}
         <div class="flex flex-wrap gap-1.5 text-[10px] font-semibold">
           <span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${c.category === 'warmup' ? 'Прогрев и заявки' : 'Продажи'}</span>
           ${c.trialDays ? `<span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${trialLabel(c)}</span>` : ''}
@@ -153,14 +191,7 @@
       ${renderReviews(c, state)}
 
       <!-- 5. Buttons -->
-      <div class="grid grid-cols-2 gap-2">
-        <button onclick="SF.actions.openChat('${SF.js(c.slug)}')" class="py-3 rounded-2xl btn-3d-red text-sm flex items-center justify-center gap-1.5">
-          <i data-lucide="message-circle" class="w-4 h-4"></i> Спросить
-        </button>
-        <button onclick="SF.actions.openBuy('${SF.js(c.id)}')" class="py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5 ${c.paymentUrl ? '' : 'opacity-60'}">
-          <i data-lucide="shopping-bag" class="w-4 h-4"></i> Купить
-        </button>
-      </div>
+      ${cardButtons(c)}
       <button onclick="SF.copyText('${startLink('C_' + SF.js(c.id))}', 'Ссылка на карточку скопирована')" class="w-full py-2 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
         <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться карточкой
       </button>
@@ -275,6 +306,16 @@
     store().notify();
   };
 
+  // The card button: the person becomes the expert's client (a purchase from the card is not invisible)
+  SF.actions.cardCta = (id) => {
+    const c = findCard(store().data, id);
+    if (!c) return;
+    if (SF.data.signedIn()) window.smartFlowApi.cardEvent(c.slug, 'cta').catch(() => {});
+    const kind = (c.cta && c.cta.kind) || 'buy';
+    if (kind === 'buy') SF.actions.openBuy(id);
+    else SF.actions.openChat(c.slug, { entry: 'card' });
+  };
+
   SF.actions.openBuy = (id) => {
     const c = findCard(store().data, id);
     if (!c) return;
@@ -284,7 +325,7 @@
         <button onclick="SF.closeModal()" class="text-muted text-lg leading-none" aria-label="Закрыть">&times;</button>
       </div>
       <div class="text-sm font-semibold text-ink">${SF.esc(c.offer)}</div>
-      ${c.priceLabel ? `<div class="text-2xl font-extrabold text-ink">${SF.esc(c.priceLabel)}</div>` : ''}
+      ${priceText(c) ? `<div class="text-2xl font-extrabold text-ink">${SF.esc(priceText(c))}</div>` : ''}
       ${c.trialDays ? `<div class="text-[11px] text-muted">${trialLabel(c)}</div>` : ''}
       ${c.paymentUrl ? `
         <div class="text-[11px] text-muted bg-sunken border border-line rounded-xl p-2.5 leading-snug">
@@ -292,6 +333,7 @@
         </div>
         <button onclick="SF.openLink('${SF.js(c.paymentUrl)}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Перейти к оплате</button>
         <div class="text-[11px] text-ink-2 leading-snug">После оплаты пришлите чек в чат с SI-продавцом — автор проверит оплату и откроет доступ.</div>
+        <button onclick="SF.closeModal(); SF.actions.openChat('${SF.js(c.slug)}', { entry: 'card' })" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">Я оплатил(а) — отправить чек</button>
         <button onclick="SF.copyText('${SF.js(c.paymentUrl)}', 'Ссылка на оплату скопирована')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Скопировать ссылку на оплату</button>
       ` : `
         <div class="text-xs text-muted">Автор пока не добавил ссылку на оплату. Задайте вопрос SI-продавцу или свяжитесь с автором.</div>

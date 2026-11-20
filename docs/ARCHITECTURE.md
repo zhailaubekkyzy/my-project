@@ -252,6 +252,35 @@ OpenAI — честный ответ «нажмите «Связаться с ч
 - Панель поддержки → «Партнёры»: кто приводит людей (лучшие сверху), куда ведут его ссылки и сколько с каждой пришло,
   стали клиентами, купили. PostHog: `link_opened`.
 
+## Карточка и два входа (20 нояб.)
+
+Решение владелицы: клиенты приходят к SI-продавцу двумя путями, а эксперт сам решает, кому что отправить.
+- **Ссылка на чат** (`?startapp=<slug>`, в том числе с меткой источника) — для холодных: SI пишет первым и ведёт по шагам.
+- **Карточка** (Маркетплейс или её ссылка `C_<id>`) — для тёплых: оффер, цена и кнопка, которую выбрал эксперт.
+  Карточка открывается по ссылке, даже если SI-продавец не показан в Маркетплейсе (своя прогретая группа);
+  скрытая командой (`hidden_by_staff`) не открывается нигде.
+- **Цена** (`projects.price_mode`): `fixed` (сумма `price_label`), `free` («Бесплатно»), `on_request` («Цена по запросу» —
+  SI сумму не называет и не угадывает).
+- **Кнопка** (`projects.cta_kind`, свой текст — `cta_label`): `buy` «Купить» (окно оплаты + «Спросить»), `free` «Получить бесплатно»,
+  `book` «Записаться на консультацию», `price` «Узнать цену», `ask` «Задать вопрос» — всё, кроме `buy`, открывает чат.
+- **Покупка с карточки видна эксперту:** кнопка делает человека клиентом (`clients.entry = 'card'`), в журнал пишется
+  `card_cta` (и `buy_clicked` с `source: card`); в окне оплаты — «Я оплатил(а) — отправить чек» → чат с кнопкой «Отправить чек».
+- **SI знает вход:** с карточки — коротко здоровается и сразу помогает с тем, ради чего нажата кнопка (`openerTask` в `si-engine.js`);
+  по ссылке — начинает разговор с нуля.
+- **Цифры эксперта** (Офис → SI-продавец → «Аналитика»): «Открыли карточку» (`card_views`, без самого эксперта) и
+  «Откуда пришли клиенты» — с карточки / по ссылке на чат / по ссылкам с меткой, у каждого «купили».
+- Настройки цены и кнопки в Офисе — под флагом `card-cta` (`FEATURES=card-cta:beta` + `BETA_USERS`, потом `card-cta:all`);
+  без флага карточка как раньше («Купить»), а подсчёт входов, покупка с карточки и «Я оплатил(а)» работают у всех.
+- Миграция 024: `projects.price_mode`, `cta_kind`, `cta_label`, `clients.entry`, таблица `card_views` (RLS).
+
+## Готовые воронки для экспертов (решено 20 нояб., не сделано)
+
+- Отдельно от Маркетплейса клиентов: **внутри Офиса**, клиенты туда не попадают.
+- Уровни: простой SI по задаче словами (бесплатно, по умолчанию) → 4 стартовых шаблона SmartFlow по цели
+  («Записать на консультацию», «Продать курс», «Собрать заявки», «Выдать бесплатный материал»; на практике поправим) →
+  платные воронки маркетологов под нишу.
+- Маркетолог получает оплату по своей ссылке (позже — через SmartFlow). Публикация — только после проверки командой на безопасность.
+
 ## Альтернативный оффер над чатом
 
 `server/services/alt-offer-service.js`, миграция 019. Решение владелицы 15 окт.: «наша задача — решить проблему
@@ -306,7 +335,9 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
   | `app_opened` | вход через Telegram | — | `server/routes/auth.js` |
   | `link_opened` | вход по ссылке с меткой источника или приглашению | `kind`, `link_id`, `project_id`, `new_user` | `server/services/partner-service.js` |
   | `si_seller_created` | эксперт создал SI-продавца | — | `server/routes/projects.js` |
-  | `si_chat_started` | SI-продавец написал первым в новый чат | `project_id`, `business_id` | `server/services/chat-service.js` |
+  | `si_chat_started` | SI-продавец написал первым в новый чат | `project_id`, `business_id`, `entry` (`card` / `link` / `source`, с 20 нояб.) | `server/services/chat-service.js` |
+  | `card_opened` | человек открыл карточку SI-продавца (с 20 нояб.) | `project_id`, `own` (эксперт смотрит свою) | `server/routes/chat.js` |
+  | `card_cta_clicked` | нажал кнопку на карточке (с 20 нояб.) | `project_id`, `cta` (`buy` / `free` / `book` / `price` / `ask`) | `server/routes/chat.js` |
   | `alt_offers_shown` | над чатом показаны альтернативные SI-продавцы | `project_id`, `count` | `server/services/alt-offer-service.js` |
   | `alt_offer_opened` | клиент открыл альтернативного SI-продавца | `from_project_id`, `project_id` | `server/routes/chat.js` |
   | `buddy_message` | сообщение Бадди | `voice`, `limit_reached` | `server/services/buddy-service.js` |
@@ -314,7 +345,7 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
   | `people_message` | сообщение в личной переписке людей | `kind` | `server/services/people-service.js` |
   | `broadcast_started` | эксперт запустил рассылку | `project_id`, `recipients` | `server/services/broadcast-service.js` |
   | `review_created` | клиент оставил отзыв | `project_id`, `rating`, `with_text` | `server/services/review-service.js` |
-  | `funnel_<тип>` | запись журнала клиента; типы: `client_message`, `offer_sent`, `offer_answered`, `objection`, `buy_clicked`, `booked`, `meeting_moved`, `meeting_cancelled`, `receipt_sent`, `paid`, `refused`, `handed_to_human`, `human_replied`, `contact_shared`, `scenario`, `step_reached`, `broadcast`, `broadcasts_off` | `project_id`, `business_id`, `actor`; `source` (у `booked`, сейчас `chat`), `step_id` (у `step_reached`), `then` (у `scenario`) | `FUNNEL_EVENTS` в `server/services/analytics-service.js` |
+  | `funnel_<тип>` | запись журнала клиента; типы: `client_message`, `offer_sent`, `offer_answered`, `objection`, `buy_clicked`, `booked`, `meeting_moved`, `meeting_cancelled`, `receipt_sent`, `paid`, `refused`, `handed_to_human`, `human_replied`, `contact_shared`, `scenario`, `step_reached`, `broadcast`, `broadcasts_off` | `project_id`, `business_id`, `actor`; `source` (у `booked` — сейчас `chat`; у `buy_clicked` — `card` или `chat`, с 20 нояб.), `step_id` (у `step_reached`), `then` (у `scenario`) | `FUNNEL_EVENTS` в `server/services/analytics-service.js` |
 - Сбой PostHog или Амплитуды ничего не ломает; при перезапуске на Railway ожидающие события отправляются (SIGTERM).
 - Для сравнения «запись у Бадди / в чате»: событие `funnel_booked` со свойством `source` (сейчас всегда `chat`).
 

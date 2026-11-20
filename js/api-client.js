@@ -482,8 +482,19 @@
     },
 
     // First visit by the consultant's link: the SI writes first
-    async startChat(slug) {
-      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/start`, { method: 'POST' });
+    async startChat(slug, entry = null) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/start`, {
+        method: 'POST',
+        body: JSON.stringify(entry ? { entry } : {})
+      });
+    },
+
+    // The Marketplace card: 'open' (opened) or 'cta' (pressed its button)
+    async cardEvent(slug, action) {
+      return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/card`, {
+        method: 'POST',
+        body: JSON.stringify({ action })
+      });
     },
 
     async sendChatMessage(slug, text) {

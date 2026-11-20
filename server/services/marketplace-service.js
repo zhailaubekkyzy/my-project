@@ -6,6 +6,19 @@ const { mediaUrl } = require('./media-service');
 const profileService = require('./profile-service');
 const partnerService = require('./partner-service');
 
+// The card's price mode and button (owner's decisions 20 Nov.): the expert chooses both for each SI-seller
+const PRICE_MODES = ['fixed', 'free', 'on_request'];
+const CTA_KINDS = ['buy', 'free', 'book', 'price', 'ask'];
+const CTA_LABELS = {
+  buy: 'Купить',
+  free: 'Получить бесплатно',
+  book: 'Записаться на консультацию',
+  price: 'Узнать цену',
+  ask: 'Задать вопрос'
+};
+const priceModeOf = (row) => (PRICE_MODES.includes(row.price_mode) ? row.price_mode : 'fixed');
+const ctaKindOf = (row) => (CTA_KINDS.includes(row.cta_kind) ? row.cta_kind : 'buy');
+
 // How many people came by the owner's links (partner-service): partners' SI-sellers go first
 const BROUGHT_SQL = `(SELECT COUNT(*) FROM users bu JOIN tracked_links bl ON bl.id = bu.referred_by_link WHERE bl.owner_user_id = p.owner_id)`;
 
@@ -37,6 +50,10 @@ function toCard(row) {
     offer: row.offer || '',
     description: row.description || '',
     priceLabel: row.price_label || '',
+    // 'fixed' — priceLabel; 'free' — «Бесплатно»; 'on_request' — «Цена по запросу»
+    priceMode: priceModeOf(row),
+    // The card button: what it says and what it does ('buy' opens payment, the others open the chat)
+    cta: { kind: ctaKindOf(row), label: (row.cta_label || '').trim() || CTA_LABELS[ctaKindOf(row)] },
     paymentUrl: row.payment_url || null,
     trialDays: Number(row.trial_days) || 0,
     isListed: Boolean(row.is_listed),
@@ -66,11 +83,14 @@ async function listConsultants({ category } = {}) {
   return rows.map(toCard);
 }
 
-// A card by id or slug: listed ones for everybody; an unlisted one only by its own link (slug)
+// A card by id (its link C_…) or slug. Not only listed ones: an expert may send the card of an SI-seller
+// that is not in the Marketplace to their own warm audience (owner's decision 20 Nov.). Never one the
+// support team hid after a complaint, and only with an offer (an empty card shows nothing).
 async function getCard({ id, slug }) {
+  const visible = `p.status = 'active' AND COALESCE(p.hidden_by_staff, 0) = 0`;
   const row = id
-    ? await db.get(`${CARD_SQL} WHERE p.id = ? AND p.status = 'active' AND p.is_listed = 1`, [id])
-    : await db.get(`${CARD_SQL} WHERE p.slug = ? AND p.status = 'active'`, [slug]);
+    ? await db.get(`${CARD_SQL} WHERE p.id = ? AND ${visible} AND COALESCE(p.offer, '') <> ''`, [id])
+    : await db.get(`${CARD_SQL} WHERE p.slug = ? AND ${visible}`, [slug]);
   return row ? toCard(row) : null;
 }
 
@@ -96,6 +116,11 @@ async function getPublicProfile(userId) {
 }
 
 module.exports = {
+  PRICE_MODES,
+  CTA_KINDS,
+  CTA_LABELS,
+  priceModeOf,
+  ctaKindOf,
   listConsultants,
   getCard,
   getPublicProfile

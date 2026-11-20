@@ -723,11 +723,13 @@
   // ---------------- Actions ----------------
   // First visit: the SI greets the person (once per chat)
   const started = {};
+  // How the chat was opened: 'card' from the Marketplace card (the SI greets accordingly)
+  const entryOf = {};
   async function startChat(slug) {
     if (started[slug] || !SF.data.signedIn()) return;
     started[slug] = true;
     try {
-      const res = await api().startChat(slug);
+      const res = await api().startChat(slug, entryOf[slug] || null);
       store().setRemote(`messages.${slug}`, { ...(store().data.remote.messages[slug] || {}), messages: res.messages || [] });
       SF.data.invalidate('chats');
       SF.data.myChats();
@@ -736,7 +738,10 @@
     }
   }
 
-  SF.actions.openChat = (slug) => SF.openIn('chats', 'chat', { slug });
+  SF.actions.openChat = (slug, { entry } = {}) => {
+    if (entry) entryOf[slug] = entry;
+    SF.openIn('chats', 'chat', { slug });
+  };
 
   SF.actions.sendChat = async (e, slug) => {
     e.preventDefault();

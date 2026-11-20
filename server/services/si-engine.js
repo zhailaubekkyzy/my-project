@@ -66,7 +66,13 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
   if (project.description) lines.push(`Описание: ${project.description}`);
   if (project.niche) lines.push(`Ниша: ${project.niche}`);
   // Only the price the expert typed on the card (old auto-filled tariffs are never used)
-  if (project.price_label) lines.push(`Цена: ${project.price_label}`);
+  if (project.price_mode === 'free') {
+    lines.push('Цена: бесплатно.');
+  } else if (project.price_mode === 'on_request') {
+    lines.push('Цена: зависит от ситуации и запроса клиента. Сумму не называй и не угадывай — предложи сначала разобраться в его ситуации или обсудить с экспертом.');
+  } else if (project.price_label) {
+    lines.push(`Цена: ${project.price_label}`);
+  }
   if (project.trial_days) lines.push(`Пробный период: ${project.trial_days} дн.`);
   if (project.payment_url) {
     lines.push(
@@ -119,6 +125,12 @@ function fallbackReply(project, userText) {
 
 // First message when a person opens the consultant's link (without OpenAI)
 function fallbackOpener(project) {
+  // From the card with «Купить»: thanks and what to do after paying
+  if (project.clientEntry === 'card' && project.cardCta && project.cardCta.kind === 'buy') {
+    return project.clientLang === 'en'
+      ? 'Hello! Thank you for choosing this 🙂 After paying, please send the receipt with the «Send receipt» button here in the chat.'
+      : 'Здравствуйте! Спасибо, что выбрали 🙂 После оплаты пришлите, пожалуйста, чек кнопкой «Отправить чек» здесь в чате.';
+  }
   if (project.clientLang === 'en') {
     const what = project.offer ? ` ${String(project.offer).replace(/[.!]+$/, '')} — that\u2019s what I help with.` : '';
     return `Hello! So glad you stopped by 🙂${what} What matters most to you right now?`;
@@ -159,16 +171,35 @@ async function callOpenAI(messages, extra = {}) {
 /**
  * The SI starts the conversation: a warm hello, what it helps with, one easy question.
  */
+// What the client wanted when they pressed the card button: the SI starts right there
+const CARD_INTENT = {
+  buy: 'уже перешёл к оплате с карточки: поблагодари за выбор и попроси прислать чек кнопкой «Отправить чек» здесь в чате, как только оплатит. Не предлагай нажать «Купить» ещё раз',
+  free: 'хочет получить бесплатное: скажи, что сейчас поможешь получить, и задай один короткий вопрос, если без него не обойтись',
+  book: 'хочет записаться на консультацию: помоги записаться и спроси, что важно обсудить',
+  price: 'хочет узнать цену: если цена есть в сведениях — назови; если цена зависит от ситуации — скажи об этом и задай один вопрос, чтобы понять его ситуацию',
+  ask: 'хочет задать вопрос: пригласи спросить'
+};
+
+function openerTask(project) {
+  // Came from the Marketplace card: already saw the offer and the price — do not retell them
+  if (project.clientEntry === 'card' && project.cardCta) {
+    const intent = CARD_INTENT[project.cardCta.kind] || CARD_INTENT.ask;
+    return `человек открыл чат с вашей карточки: он уже видел оффер и цену и нажал кнопку «${project.cardCta.label}» — он ${intent}. ` +
+      'Не пересказывайте оффер заново. Поздоровайтесь коротко и сразу помогите с этим.';
+  }
+  return 'человек только что открыл чат по вашей ссылке и ещё ничего не написал. Начните разговор первым: тепло поздоровайтесь, ' +
+    'в одном предложении скажите, чем можете помочь, и задайте один простой вопрос о его ситуации.';
+}
+
 async function generateOpener({ project, expertName }) {
   if (!isConfigured()) return { text: fallbackOpener(project), source: 'fallback' };
   const text = await callOpenAI([
     { role: 'system', content: buildSystemPrompt(project, expertName) },
     {
       role: 'user',
-      content: '(Служебно: человек только что открыл чат по вашей ссылке и ещё ничего не написал. ' +
+      content: `(Служебно: ${openerTask(project)} ` +
         (project.clientLang === 'en' ? 'Приложение у него на английском — напишите по-английски. ' : '') +
-        'Начните разговор первым: тепло поздоровайтесь, в одном предложении скажите, чем можете помочь, ' +
-        'и задайте один простой вопрос о его ситуации. Не упоминайте эту служебную пометку.)'
+        'Не упоминайте эту служебную пометку.)'
     }
   ]);
   return text ? { text, source: 'openai' } : { text: fallbackOpener(project), source: 'fallback' };
@@ -392,6 +423,7 @@ async function isOffer({ project, text }) {
 }
 
 module.exports = {
+  openerTask,
   callOpenAI,
   analyzeTurn,
   contextMatches,

@@ -866,6 +866,33 @@
     `;
   }
 
+  // The price mode and the card button: each expert chooses for their goal and situation (owner's decision 20 Nov.)
+  const PRICE_MODES = [['fixed', 'Фиксированная цена'], ['free', 'Бесплатно'], ['on_request', 'Цена по запросу — зависит от ситуации']];
+  const CTA_KINDS = [
+    ['buy', 'Купить', 'открывает оплату по вашей ссылке'],
+    ['free', 'Получить бесплатно', 'открывает чат: SI выдаёт бесплатное'],
+    ['book', 'Записаться на консультацию', 'открывает чат: SI помогает записаться'],
+    ['price', 'Узнать цену', 'открывает чат: SI называет цену или узнаёт ситуацию'],
+    ['ask', 'Задать вопрос', 'открывает чат с SI']
+  ];
+  function cardOfferFields(c) {
+    const select = (name, options, value) => `
+      <select name="${name}" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+        ${options.map(([v, label]) => `<option value="${v}" ${value === v ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>`;
+    return `
+      <label class="block space-y-1">
+        <span class="font-semibold text-ink-2">Цена</span>
+        ${select('priceMode', PRICE_MODES, c.priceMode || 'fixed')}
+      </label>
+      ${field('priceLabel', 'Сумма (для фиксированной цены)', c.priceLabel, { placeholder: 'Например: 25 000 ₸', max: 80 })}
+      <label class="block space-y-1">
+        <span class="font-semibold text-ink-2">Кнопка на карточке</span>
+        ${select('ctaKind', CTA_KINDS.map(([v, label, what]) => [v, `${label} — ${what}`]), c.ctaKind || 'buy')}
+      </label>
+      ${field('ctaLabel', 'Свой текст кнопки (необязательно)', c.ctaLabel, { placeholder: 'Например: Хочу на разбор', max: 40, hint: 'Холодным людям отправляйте ссылку на чат, прогретым — ссылку на карточку. Карточку можно отправить по ссылке, даже если SI-продавец не показан в Маркетплейсе.' })}`;
+  }
+
   function renderMethodology(c, route = {}) {
     return `
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
@@ -873,7 +900,7 @@
           ${SF.sectionTitle('store', 'Карточка в Маркетплейсе')}
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
-          ${field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
+          ${SF.feature('card-cta') ? cardOfferFields(c) : field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
           ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого SI-продавца. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
           ${field('accessUrl', 'Ссылка на доступ после оплаты (необязательно)', c.accessUrl, { type: 'url', placeholder: 'https://... (курс, закрытый канал)', max: 300, hint: 'Клиент получит её, только когда вы или помощник подтвердите его чек. SI эту ссылку не знает и сам не выдаёт.' })}
           <div class="grid grid-cols-2 gap-2">
@@ -1063,6 +1090,23 @@
     `;
   }
 
+  // Two ways in: how many clients came by each and how many bought (owner's decision 20 Nov.)
+  function renderEntries(a) {
+    const e = a.entries || {};
+    const row = (label, v) => v && v.clients ? `
+      <div class="flex items-center justify-between gap-2 py-1.5 border-t border-line first:border-0">
+        <span class="text-ink-2">${label}</span>
+        <span class="font-bold text-ink whitespace-nowrap">${v.clients} <span class="text-faint font-normal">· купили ${v.bought}</span></span>
+      </div>` : '';
+    const rows = row('С карточки', e.card) + row('По ссылке на чат', e.link) + row('По ссылкам с меткой', e.source) + row('Раньше (до 20 нояб.)', e.old);
+    return `
+      <div class="glass-card-3d p-4 space-y-1 text-xs">
+        ${SF.sectionTitle('route', 'Откуда пришли клиенты')}
+        <div class="text-muted">Открыли карточку: <span class="font-bold text-ink">${a.cardViews || 0}</span> чел.</div>
+        ${rows || '<div class="text-muted">Клиентов пока нет.</div>'}
+      </div>`;
+  }
+
   function renderAnalytics(c, state) {
     const a = state.remote.analytics[c.id];
     if (!a) return '<div class="text-xs text-muted">Загружаю…</div>';
@@ -1080,6 +1124,7 @@
         ${tile('Просили человека', a.humanRequests || 0)}
         ${tile('Ждут ответа', a.waiting || 0)}
       </div>
+      ${renderEntries(a)}
       <div class="text-[10px] text-faint px-1">Только настоящие цифры этого SI-продавца. Оплаты идут вам напрямую, поэтому продажи здесь пока не считаются. Советы SI по воронке появятся позже.</div>
       ${renderOwnerReviews(c, state)}
     `;
@@ -1412,6 +1457,7 @@
         offer: f.offer.value.trim(),
         description: f.description.value.trim(),
         price_label: f.priceLabel.value.trim(),
+        ...(f.priceMode ? { price_mode: f.priceMode.value, cta_kind: f.ctaKind.value, cta_label: f.ctaLabel.value.trim() } : {}),
         payment_url: paymentUrl,
         access_url: accessUrl,
         category: f.category.value,
