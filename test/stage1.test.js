@@ -147,8 +147,10 @@ async function runAllTests() {
   await test('06. Сохранение данных после повторного входа', async () => {
     // Retrieve project created for Expert A
     const projectsBefore = await projectService.getUserProjects(expertA_InternalId);
-    assert(projectsBefore.owned.length > 0, 'Expert A should have an automatically provisioned project');
-    const projectA = projectsBefore.owned[0];
+    // Sign-in creates no SI-seller (an empty one confused experts and broke some first sign-ins):
+    // the expert creates it in the Office
+    assert.strictEqual(projectsBefore.owned.length, 0, 'Sign-in alone creates no SI-seller');
+    const projectA = await projectService.createProject(expertA_InternalId, { name: 'Voronka Alekseya' });
 
     // Expert A customizes project
     await projectService.updateProject(projectA.id, {
@@ -172,8 +174,7 @@ async function runAllTests() {
     expertB_InternalId = userB.id;
     assert.notStrictEqual(expertA_InternalId, expertB_InternalId, 'Expert A and B must have different internal IDs');
 
-    const projectsB = await projectService.getUserProjects(expertB_InternalId);
-    const projectB = projectsB.owned[0];
+    const projectB = await projectService.createProject(expertB_InternalId, { name: 'Voronka B' });
 
     // Expert A tries to access Expert B's project settings
     const checkRead = await projectService.checkProjectAccess(expertA_InternalId, projectB.id, 'funnel:read');
@@ -2802,6 +2803,36 @@ async function runAllTests() {
     assert(/время созвона сам не предлагай/.test(prompt), 'Without a calendar the SI does not offer a time');
     const withCalendar = siEngine.buildSystemPrompt({ ...project, calendarEnabled: true }, 'Алия');
     assert(!/время созвона сам не предлагай/.test(withCalendar) && /кнопка «Записаться»/.test(withCalendar), 'With a calendar — the booking button');
+  });
+
+  await test('66. Вход: без лишнего SI-продавца; люди без @ника с одинаковыми 4 цифрами входят с первого раза', async () => {
+    // Two people without a @username whose Telegram ids end with the same 4 digits
+    for (const id of [31005678, 41005678]) {
+      const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, { id, first_name: 'Без ника' }) });
+      assert.strictEqual(login.status, 200, `First sign-in of ${id} works`);
+      assert.strictEqual(login.body.projects.owned.length, 0, 'No SI-seller is created at sign-in');
+    }
+
+    // Migration 023: only untouched empty "Проект: Имя" SI-sellers of the old sign-in are removed
+    const owner = await authService.findOrCreateTelegramUser({ id: 51005678, first_name: 'Старый вход' }, 'expert');
+    const makeOld = async (id, slug) => db.run(
+      `INSERT INTO projects (id, owner_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
+       VALUES (?, ?, NULL, ?, ?, 'active', 'Экспертные услуги и консалтинг', '{}', '[]', '{}', 0)`,
+      [id, owner.id, 'Проект: Старый вход', slug]);
+    await makeOld('proj_old_empty', 'old-empty-sales');
+    await makeOld('proj_old_client', 'old-client-sales');
+    await makeOld('proj_old_edited', 'old-edited-sales');
+    await db.run(`INSERT INTO clients (id, project_id, external_client_id, name, status) VALUES ('cl_old_023', 'proj_old_client', 'usr_someone', 'Клиент', 'new')`);
+    await db.run(`UPDATE projects SET updated_at = '2030-01-01 00:00:00' WHERE id = 'proj_old_edited'`);
+
+    const sql = fs.readFileSync(path.join(__dirname, '../server/db/migrations/023_remove_empty_auto_projects.sql'), 'utf8');
+    await db.exec(sql);
+    const left = (await db.all(`SELECT id FROM projects WHERE owner_id = ? ORDER BY id`, [owner.id])).map(r => r.id);
+    assert.deepStrictEqual(left, ['proj_old_client', 'proj_old_edited'], 'Only the untouched empty one is removed');
+    // Real SI-sellers of other tests are untouched
+    assert((await db.get(`SELECT COUNT(*) AS n FROM projects WHERE name NOT LIKE 'Проект: %'`)).n > 0);
+    await db.run(`DELETE FROM clients WHERE id = 'cl_old_023'`);
+    await db.run(`DELETE FROM projects WHERE owner_id = ?`, [owner.id]);
   });
 
   await new Promise(resolve => httpServer.close(resolve));

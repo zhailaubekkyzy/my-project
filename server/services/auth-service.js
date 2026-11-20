@@ -134,32 +134,10 @@ async function findOrCreateTelegramUser(tgUser, requestedRole = 'expert') {
       [subId, internalUserId, trialEndsAt, trialEndsAt]
     );
 
-    // If expert, create initial project instance
-    const projectId = `proj_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-    const slug = (username ? `${username}-sales` : `expert-${telegramIdStr.slice(-4)}-sales`).toLowerCase();
-
-    await db.run(
-      `INSERT INTO projects (id, owner_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
-       VALUES (?, ?, NULL, ?, ?, 'active', ?, ?, ?, ?, 0)`,
-      [
-        projectId,
-        internalUserId,
-        `Проект: ${displayName}`,
-        slug,
-        'Экспертные услуги и консалтинг',
-        JSON.stringify({
-          systemRole: `SI-консультант и ассистент эксперта ${displayName}`,
-          tone: 'экспертный, заботливый, конвертирующий',
-          targetAudience: 'Целевые клиенты и подписчики',
-          objectionsHandling: {
-            дорого: 'Инвестиции в продукт окупаются за счет системного результата и персонального подхода',
-            нет_времени: 'Формат гибкий и адаптирован под занятых людей'
-          }
-        }),
-        JSON.stringify([]), // no made-up prices: the expert sets the price on the card
-        JSON.stringify({ traffic: 0, leads: 0, qualified: 0, bookings: 0, cr: 0, revenueRub: 0, savedHours: 0 })
-      ]
-    );
+    // No SI-seller is created here: it appears only when the person creates one in the Office.
+    // (Before 20 Nov. every sign-up got an empty "Проект: Имя": it confused experts, could be opened by
+    // clients, and its link from the last 4 digits of the Telegram id broke the first sign-in of some
+    // people without a @username. Migration 023 removes the untouched ones.)
 
     user = await db.get('SELECT * FROM users WHERE id = ?', [internalUserId]);
   }

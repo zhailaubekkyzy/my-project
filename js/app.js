@@ -88,14 +88,26 @@ function loadNonCriticalScripts() {
 }
 
 // The bot may write to a person only with their permission. Telegram shows a one-tap
-// "Allow messages" prompt; asked when notifications start to matter (Office, "Связаться с человеком").
-SF.askWriteAccess = function (onResult) {
+// "Allow messages" prompt; asked when notifications start to matter (Office, "Связаться с человеком"),
+// and after the person's message to an SI-seller, Buddy or a person — otherwise the answer, a reminder
+// or a follow-up would never reach their Telegram.
+// { auto: true }: asked by the app itself (after sending a message) — at most once in 3 days on this
+// device, so a person who said "no" is not asked after every message. A tap on «Включить» always asks.
+const WRITE_ASK_KEY = 'sf_write_ask_at';
+const WRITE_ASK_EVERY_MS = 3 * 24 * 3600 * 1000;
+SF.askWriteAccess = function (onResult, { auto = false } = {}) {
   const tg = window.Telegram?.WebApp;
   try {
     if (!tg || !tg.initData) return;
     if (tg.initDataUnsafe?.user?.allows_write_to_pm) {
       if (onResult) onResult(true);
       return;
+    }
+    if (auto) {
+      let last = 0;
+      try { last = Number(localStorage.getItem(WRITE_ASK_KEY)) || 0; } catch (e) {}
+      if (Date.now() - last < WRITE_ASK_EVERY_MS) return;
+      try { localStorage.setItem(WRITE_ASK_KEY, String(Date.now())); } catch (e) {}
     }
     if (typeof tg.requestWriteAccess === 'function') {
       tg.requestWriteAccess((allowed) => {
