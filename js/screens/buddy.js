@@ -303,6 +303,8 @@
       if (res && res.calendarChanged) {
         SF.data.invalidate('buddyCalendar');
         loadDays(0);
+        // A plan or a reminder: it reaches the phone only if the bot may write
+        SF.askWriteAccess(null, { auto: true });
       }
     } catch (err) {
       SF.showToast(SF.withErrorCode(err.message || 'Голосовое не отправилось. Попробуйте ещё раз', err));
@@ -393,6 +395,8 @@
       if (res && res.calendarChanged) {
         SF.data.invalidate('buddyCalendar');
         loadDays(0);
+        // A plan or a reminder: it reaches the phone only if the bot may write
+        SF.askWriteAccess(null, { auto: true });
       }
     } catch (err) {
       input.value = text;
