@@ -36,6 +36,7 @@ const EVENTS = {
   offer_answered: 'Ответил на оффер',
   objection: 'Возражение',
   buy_clicked: 'Нажал «Купить»',
+  card_cta: 'Нажал кнопку на карточке',
   booked: 'Записался',
   meeting_moved: 'Перенёс встречу',
   meeting_cancelled: 'Встреча отменена',

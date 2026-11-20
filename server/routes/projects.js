@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const projectService = require('../services/project-service');
+const marketplaceService = require('../services/marketplace-service');
 const funnelService = require('../services/funnel-service');
 const reviewService = require('../services/review-service');
 const analytics = require('../services/analytics-service');
@@ -75,6 +76,14 @@ function readCardFields(body, project) {
   if (body.trial_days !== undefined) {
     fields.trial_days = Math.max(0, Math.min(60, parseInt(body.trial_days, 10) || 0));
   }
+  // Price mode and the card button (the expert chooses for each SI-seller)
+  if (body.price_mode !== undefined) {
+    fields.price_mode = marketplaceService.PRICE_MODES.includes(body.price_mode) ? body.price_mode : 'fixed';
+  }
+  if (body.cta_kind !== undefined) {
+    fields.cta_kind = marketplaceService.CTA_KINDS.includes(body.cta_kind) ? body.cta_kind : 'buy';
+  }
+  if (body.cta_label !== undefined) fields.cta_label = cleanText(body.cta_label, 40) || null;
   if (body.category !== undefined) {
     fields.category = body.category === 'warmup' ? 'warmup' : 'sales';
   }
@@ -191,13 +200,25 @@ router.get('/:projectId/analytics', requireProjectPermission('analytics:read'), 
   const humanRequests = await count('SELECT COUNT(*) as count FROM direct_inquiries WHERE project_id = ?', [p.id]);
   const waiting = await count(`SELECT COUNT(*) as count FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [p.id]);
 
+  // Two ways in (owner's decision 20 Nov.): how many clients came by each and how many bought.
+  // 'old' — clients from before the entry was remembered (24th migration)
+  const entryRows = await db.all(
+    `SELECT COALESCE(entry, 'old') AS entry, COUNT(*) AS clients,
+            SUM(CASE WHEN funnel_status = 'bought' THEN 1 ELSE 0 END) AS bought
+     FROM clients WHERE project_id = ? GROUP BY COALESCE(entry, 'old')`, [p.id]);
+  const entries = {};
+  for (const r of entryRows) entries[r.entry] = { clients: Number(r.clients) || 0, bought: Number(r.bought) || 0 };
+  const cardViews = await count('SELECT COUNT(*) as count FROM card_views WHERE project_id = ? AND user_id <> ?', [p.id, p.owner_id]);
+
   res.json({
     stats: {
       ...stats,
       totalLeadsInDb: clients,
       activeHumanInquiries: waiting
     },
-    live: { clients, talked, clientMessages, siReplies, humanRequests, waiting }
+    live: { clients, talked, clientMessages, siReplies, humanRequests, waiting },
+    entries,
+    cardViews
   });
 });
 

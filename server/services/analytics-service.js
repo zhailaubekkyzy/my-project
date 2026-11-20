@@ -185,7 +185,7 @@ function funnelEvent(client, type, actorType, data) {
     business_id: client.business_id || '',
     actor: actorType,
     // Where a meeting was booked: the chat with the SI-seller for now (later maybe Buddy)
-    source: type === 'booked' ? ((data && data.source) || 'chat') : undefined,
+    source: type === 'booked' || type === 'buy_clicked' ? ((data && data.source) || 'chat') : undefined,
     step_id: type === 'step_reached' && data ? data.stepId : undefined,
     then: type === 'scenario' && data ? data.then : undefined
   });

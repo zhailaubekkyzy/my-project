@@ -69,7 +69,11 @@ async function findOrCreateLead(project, { clientId, name, username, avatarUrl, 
 }
 
 // The signed-in person as a client of this consultant (external id = their SmartFlow user id)
-async function leadForUser(project, userId, { create = true } = {}) {
+// How the client came: 'card' (the Marketplace card or its link), 'link' (the chat link), 'source'
+// (a link with a source label — set by partner-service). Kept on the client from the first visit.
+const ENTRIES = ['card', 'link'];
+
+async function leadForUser(project, userId, { create = true, entry = null } = {}) {
   const existing = await db.get(
     'SELECT * FROM clients WHERE project_id = ? AND external_client_id = ?',
     [project.id, userId]
@@ -83,7 +87,9 @@ async function leadForUser(project, userId, { create = true } = {}) {
     avatarUrl: user ? (mediaUrl(user.photo_media_id) || user.avatar_url) : null
   });
   // The link with a source this person opened for THIS SI-seller (first one) gets the client
-  await require('./partner-service').attributeClient(project, lead, userId);
+  const sourceLink = await require('./partner-service').attributeClient(project, lead, userId);
+  lead.entry = sourceLink ? 'source' : (ENTRIES.includes(entry) ? entry : 'link');
+  await db.run('UPDATE clients SET entry = ? WHERE id = ? AND entry IS NULL', [lead.entry, lead.id]);
   return lead;
 }
 
@@ -306,6 +312,8 @@ async function clientEvent(project, client, type, actor, data = null) {
   if (data && data.objection) saved = { objection: data.objection };
   if (data && data.condition) saved = { condition: data.condition };
   if (data && data.stepId) saved = { stepId: data.stepId, title: data.title || '', ...(data.materialOf ? { materialOf: data.materialOf } : {}) };
+  // Where «Купить» was pressed: 'card' (the Marketplace card) or the chat
+  if (data && data.source) saved = { ...(saved || {}), source: data.source };
   const stepBefore = client.step_id;
   const status = await funnelService.recordEvent(client, type, actor, saved);
   if (ACTION_WORDS[type]) await matchActionConditions(project, client, ACTION_WORDS[type]);
@@ -442,11 +450,17 @@ async function startConversation(project, lead) {
   const past = await history(project.id, lead.id);
   if (past.length) return null;
   const clientLang = await require('./i18n').langOfClient(lead);
-  const result = await siEngine.generateOpener({ project: { ...project, clientStepId: lead.step_id, clientLang }, expertName: await expertNameOf(project) });
+  const marketplace = require('./marketplace-service');
+  const kind = marketplace.ctaKindOf(project);
+  const cardCta = { kind, label: (project.cta_label || '').trim() || marketplace.CTA_LABELS[kind] };
+  const result = await siEngine.generateOpener({
+    project: { ...project, clientStepId: lead.step_id, clientLang, clientEntry: lead.entry, cardCta },
+    expertName: await expertNameOf(project)
+  });
   // Another request may have started the chat meanwhile: keep a single opener
   if ((await history(project.id, lead.id)).length) return null;
   const opener = await saveMessage(lead, SI, result.text);
-  analytics.capture('si_chat_started', lead.external_client_id, { project_id: project.id, business_id: lead.business_id || '' });
+  analytics.capture('si_chat_started', lead.external_client_id, { project_id: project.id, business_id: lead.business_id || '', entry: lead.entry || 'link' });
   // The material of the first step of the funnel, right after the hello
   const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
   if (steps[0] && steps[0].material && !(await materialSent(lead, steps[0].id))) {

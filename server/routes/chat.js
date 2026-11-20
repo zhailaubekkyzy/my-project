@@ -118,9 +118,51 @@ router.post('/:slug/start', async (req, res, next) => {
   try {
     const project = await loadConsultant(req, res);
     if (!project) return;
-    const lead = await chatService.leadForUser(project, req.user.userId);
+    // entry: 'card' when the chat was opened from the Marketplace card (the SI greets accordingly)
+    const lead = await chatService.leadForUser(project, req.user.userId, { entry: req.body && req.body.entry });
     const opener = await chatService.startConversation(project, lead);
     res.status(opener ? 201 : 200).json({ opener, messages: await chatService.history(project.id, lead.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/chat/:slug/card  { action: 'open' | 'cta' }
+ * The Marketplace card of this SI-seller: «open» — the person opened it (counted once per person for
+ * the expert, every open for our numbers); «cta» — pressed the card button. The button makes the person
+ * a client of the expert (entry 'card'), so a purchase from the card is not invisible: the expert sees
+ * who pressed «Купить», and the chat then offers «Отправить чек».
+ */
+router.post('/:slug/card', async (req, res, next) => {
+  try {
+    const project = await loadConsultant(req, res);
+    if (!project) return;
+    const action = String(req.body?.action || '');
+    const marketplace = require('../services/marketplace-service');
+    if (action === 'open') {
+      const updated = await db.run(
+        'UPDATE card_views SET views = views + 1, last_at = CURRENT_TIMESTAMP WHERE project_id = ? AND user_id = ?',
+        [project.id, req.user.userId]
+      );
+      if (!updated.changes) {
+        await db.run('INSERT INTO card_views (project_id, user_id) VALUES (?, ?)', [project.id, req.user.userId]).catch(() => {});
+      }
+      analytics.capture('card_opened', req.user.userId, { project_id: project.id, own: project.owner_id === req.user.userId });
+      return res.json({ recorded: true });
+    }
+    if (action === 'cta') {
+      // The owner looking at their own card is not a client
+      if (project.owner_id === req.user.userId) return res.json({ recorded: false });
+      const kind = marketplace.ctaKindOf(project);
+      const lead = await chatService.leadForUser(project, req.user.userId, { entry: 'card' });
+      await require('../services/funnel-service').recordEvent(lead, 'card_cta', { type: 'client' },
+        { cta: kind, label: (project.cta_label || '').trim() || marketplace.CTA_LABELS[kind] });
+      if (kind === 'buy') await chatService.clientEvent(project, lead, 'buy_clicked', { type: 'client' }, { source: 'card' });
+      analytics.capture('card_cta_clicked', req.user.userId, { project_id: project.id, cta: kind });
+      return res.json({ recorded: true, clientId: lead.id });
+    }
+    res.status(400).json({ error: 'bad_request', message: 'Неизвестное действие' });
   } catch (err) {
     next(err);
   }
