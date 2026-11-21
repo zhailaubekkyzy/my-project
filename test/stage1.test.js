@@ -2971,6 +2971,43 @@ async function runAllTests() {
     assert.deepStrictEqual(a.entries, {}, 'The test chat is not in the numbers by entry');
   });
 
+  await test('70. Короткая ссылка SI-продавца: свой адрес, старая ссылка продолжает работать, чужой адрес не занять', async () => {
+    const aToken = await tokenFor({ id: 700101, first_name: 'Эксперт', last_name: 'Первый' });
+    const bToken = await tokenFor({ id: 700102, first_name: 'Эксперт', last_name: 'Второй' });
+    const a = (await api('POST', '/api/projects', aToken, { name: 'short link a' })).body;
+    const b = (await api('POST', '/api/projects', bToken, { name: 'short link b' })).body;
+    const oldSlug = a.slug;
+    await api('PUT', `/api/projects/${a.id}`, aToken, { offer: 'Оффер для ссылки' });
+
+    for (const bad of ['ab', 'Тест', '1abc', 'with space', 'a__b', 'a--b', '-abc', 'x'.repeat(33)]) {
+      assert.strictEqual((await api('PUT', `/api/projects/${a.id}`, aToken, { slug: bad })).status, 400, `«${bad}» is refused`);
+    }
+    const ok = await api('PUT', `/api/projects/${a.id}`, aToken, { slug: 'Expert-Nutri' });
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body.slug, 'expert-nutri', 'Lowercase');
+    assert.strictEqual((await db.get('SELECT slug FROM projects WHERE id = ?', [a.id])).slug, 'expert-nutri');
+
+    // The old link still opens the same SI-seller: chat, card, public page
+    const clientToken = await tokenFor({ id: 700103, first_name: 'Клиент', last_name: 'Тестовый' });
+    const start = await api('POST', `/api/chat/${oldSlug}/start`, clientToken);
+    assert.strictEqual(start.status, 201, 'Chat by the old address');
+    assert.strictEqual((await db.get('SELECT project_id FROM clients WHERE external_client_id = (SELECT user_id FROM auth_identities WHERE provider_user_id = ?)', ['700103'])).project_id, a.id);
+    assert.strictEqual((await api('GET', `/api/chat/${oldSlug}`, clientToken)).body.consultant.slug, 'expert-nutri', 'The card by the old address shows the new one');
+    assert.strictEqual((await api('GET', `/api/public/funnels/${oldSlug}`)).status, 200);
+    assert.strictEqual((await api('POST', `/api/chat/expert-nutri/start`, clientToken)).status, 200, 'The new address: the same chat');
+
+    // Nobody takes another expert's address, current or old
+    assert.strictEqual((await api('PUT', `/api/projects/${b.id}`, bToken, { slug: 'expert-nutri' })).status, 409);
+    assert.strictEqual((await api('PUT', `/api/projects/${b.id}`, bToken, { slug: oldSlug })).status, 409);
+    // Not someone else's SI-seller at all
+    assert.strictEqual((await api('PUT', `/api/projects/${a.id}`, bToken, { slug: 'hijack' })).status, 403);
+
+    // Back to its own old address: allowed, and the second address now leads there too
+    assert.strictEqual((await api('PUT', `/api/projects/${a.id}`, aToken, { slug: oldSlug })).status, 200);
+    assert.strictEqual((await api('POST', `/api/chat/expert-nutri/start`, clientToken)).status, 200, 'expert-nutri now an old address');
+    assert.strictEqual((await db.get('SELECT COUNT(*) AS n FROM project_slug_aliases WHERE slug = ?', [oldSlug])).n, 0);
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

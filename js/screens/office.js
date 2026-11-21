@@ -981,6 +981,7 @@
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
         <div class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('store', 'Карточка в Маркетплейсе')}
+          ${field('slug', 'Адрес ссылки — латиницей', c.slug, { placeholder: 'Например: aliya-nutri', max: 32, hint: 'Короткий и понятный адрес для Instagram и рассылок. Старая ссылка продолжит работать.' })}
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
           ${SF.feature('card-cta') ? cardOfferFields(c) : field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
@@ -1567,6 +1568,7 @@
       await api().updateProject(id, {
         offer: f.offer.value.trim(),
         description: f.description.value.trim(),
+        ...(f.slug && f.slug.value.trim().toLowerCase() !== (store().findOfficeConsultant(id) || {}).slug ? { slug: f.slug.value.trim().toLowerCase() } : {}),
         price_label: f.priceLabel.value.trim(),
         ...(f.priceMode ? { price_mode: f.priceMode.value, cta_kind: f.ctaKind.value, cta_label: f.ctaLabel.value.trim() } : {}),
         payment_url: paymentUrl,

@@ -294,6 +294,8 @@ function renderApp(state) {
     content = renderScreenError(SF.reportAppError(err, `render ${tab}/${route.screen}`));
   }
   const canGoBack = stack.length > 1;
+  // Conversations fill the screen down to the input (on tall phones and iPad the input stayed mid-screen)
+  const isChatScreen = state.ui.tab === 'chats' && ['chat', 'person'].includes(route.screen);
 
   container.innerHTML = `
     ${state.auth?.status === 'expired' ? renderSessionExpired() : ''}
@@ -315,7 +317,7 @@ function renderApp(state) {
           </button>
         </header>
 
-        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3.5" id="screen-body">
+        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3.5 ${isChatScreen ? 'flex flex-col' : ''}" id="screen-body">
           ${content}
         </div>
 
