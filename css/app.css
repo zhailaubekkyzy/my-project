@@ -466,3 +466,10 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--c-faint));
 }
+
+/* A conversation takes the free height of the screen; the input stays at the bottom
+   (#screen-body becomes a column on chat screens, js/app.js). Never smaller than a few messages. */
+.chat-fill {
+  flex: 1 1 0;
+  min-height: 240px;
+}

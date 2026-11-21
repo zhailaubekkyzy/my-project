@@ -295,7 +295,7 @@ async function getPublicProjectBySlug(slug) {
      FROM projects p
      JOIN users u ON p.owner_id = u.id
      WHERE p.slug = ? AND p.status = 'active'`,
-    [slug]
+    [await require('./slug-service').canonical(slug)]
   );
 
   if (!project) return null;

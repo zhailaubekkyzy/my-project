@@ -96,7 +96,10 @@ async function leadForUser(project, userId, { create = true, entry = null } = {}
 }
 
 async function activeProjectBySlug(slug) {
-  return db.get('SELECT * FROM projects WHERE slug = ? AND status = ?', [slug, 'active']);
+  // An old address of the SI-seller (the expert changed the link) still opens it
+  const current = await require('./slug-service').canonical(slug);
+  if (!current) return null;
+  return db.get('SELECT * FROM projects WHERE slug = ? AND status = ?', [current, 'active']);
 }
 
 async function expertNameOf(project) {

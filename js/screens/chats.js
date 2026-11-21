@@ -332,7 +332,7 @@
           </details>` : ''}
       </div>
 
-      <div class="glass-card-3d p-3 flex flex-col space-y-2 min-h-[300px] max-h-[460px] overflow-y-auto" id="chat-scroll">
+      <div class="glass-card-3d p-3 flex flex-col space-y-2 chat-fill overflow-y-auto" id="chat-scroll">
         ${!data.messages.length ? `<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите ${name} первым — например, поздоровайтесь и расскажите, чем вы занимаетесь 🙂</div>` : ''}
         ${data.messages.map(m => personMessage(m, p.id)).join('')}
       </div>
@@ -625,17 +625,18 @@
       ${buyBanner(state, slug, consultant, messages)}
       ${altOffers(slug, thread)}
 
-      <div class="glass-card-3d p-3 border-[var(--si-bubble-line)] flex items-center justify-between gap-2">
-        <button onclick="${consultant?.isListed ? `SF.openIn('marketplace', 'consultant', { id: '${SF.js(consultant.id)}' })` : ''}" class="flex items-center gap-2.5 min-w-0 text-left">
+      <div class="glass-card-3d p-3 border-[var(--si-bubble-line)] flex items-center gap-2.5">
+        <button onclick="${consultant?.isListed ? `SF.openIn('marketplace', 'consultant', { id: '${SF.js(consultant.id)}' })` : ''}" class="flex-shrink-0" aria-label="Карточка SI-продавца">
           ${SF.avatar(consultant?.photoUrl, { size: 40, kind: 'si' })}
-          <span class="min-w-0">
-            <span class="block text-xs font-bold text-ink truncate">${SF.esc(consultant?.name || '')}</span>
-            <span class="block text-[10px] text-faint">${SF.esc(consultant?.roleTitle || 'SI-консультант')}${consultant?.author?.name ? ` · ${SF.esc(consultant.author.name)}` : ''}</span>
-          </span>
         </button>
-        <button onclick="SF.actions.requestHuman('${SF.js(slug)}')" class="px-2.5 py-1.5 rounded-xl btn-3d-tiffany text-[11px] flex items-center gap-1 flex-shrink-0">
-          <i data-lucide="user" class="w-3.5 h-3.5"></i><span>Связаться с человеком</span>
-        </button>
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs font-bold text-ink truncate">${SF.esc(consultant?.name || '')}</span>
+          <span class="block text-[10px] text-faint truncate">${SF.esc(consultant?.roleTitle || 'SI-консультант')}${consultant?.author?.name ? ` · ${SF.esc(consultant.author.name)}` : ''}</span>
+          ${thread?.siPaused ? '' : `
+          <button onclick="SF.actions.requestHuman('${SF.js(slug)}')" class="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-brand">
+            <i data-lucide="user" class="w-3 h-3"></i><span>Связаться с человеком</span>
+          </button>`}
+        </span>
       </div>
 
       ${thread?.siPaused ? `
@@ -643,7 +644,7 @@
           👤 Эксперт скоро ответит вам лично прямо здесь.
         </div>` : ''}
 
-      <div class="glass-card-3d p-3 flex flex-col space-y-2.5 min-h-[320px] max-h-[460px] overflow-y-auto" id="chat-scroll">
+      <div class="glass-card-3d p-3 flex flex-col space-y-2.5 chat-fill overflow-y-auto" id="chat-scroll">
         ${messages.map(m => bubble(m, consultant, slug)).join('')}
         <div id="si-typing" class="${messages.length ? 'hidden' : ''} flex items-end gap-1.5">
           <img src="${SF.photoSrc(consultant?.photoUrl, SF.MASCOTS.consultant)}" alt="" class="mascot-avatar object-cover" />
@@ -699,7 +700,7 @@
           <div class="text-[10px] text-faint">Жалобы, предложения и вопросы</div>
         </div>
       </div>
-      <div class="glass-card-3d p-3 flex flex-col space-y-2.5 min-h-[280px] max-h-[460px] overflow-y-auto" id="chat-scroll">
+      <div class="glass-card-3d p-3 flex flex-col space-y-2.5 chat-fill overflow-y-auto" id="chat-scroll">
         ${assistantMessages(state).map(m => {
           if (m.sender === 'me') return `<div class="flex justify-end"><div class="chat-bubble-human">${SF.formatChatMarkdown(m.text)}</div></div>`;
           if (m.sender === 'team') {

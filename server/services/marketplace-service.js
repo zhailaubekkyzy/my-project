@@ -90,7 +90,7 @@ async function getCard({ id, slug }) {
   const visible = `p.status = 'active' AND COALESCE(p.hidden_by_staff, 0) = 0`;
   const row = id
     ? await db.get(`${CARD_SQL} WHERE p.id = ? AND ${visible} AND COALESCE(p.offer, '') <> ''`, [id])
-    : await db.get(`${CARD_SQL} WHERE p.slug = ? AND ${visible}`, [slug]);
+    : await db.get(`${CARD_SQL} WHERE p.slug = ? AND ${visible}`, [await require('./slug-service').canonical(slug)]);
   return row ? toCard(row) : null;
 }
 

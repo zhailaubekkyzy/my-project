@@ -4,6 +4,7 @@ const router = express.Router();
 const projectService = require('../services/project-service');
 const marketplaceService = require('../services/marketplace-service');
 const quickStart = require('../services/quick-start');
+const slugService = require('../services/slug-service');
 const funnelService = require('../services/funnel-service');
 const reviewService = require('../services/review-service');
 const analytics = require('../services/analytics-service');
@@ -186,6 +187,16 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     const { name, niche, custom_ai_settings, pricing_options, role_title } = req.body;
     const card = readCardFields(req.body, req.project);
     if (card.error) return res.status(card.status || 400).json({ error: card.status === 403 ? 'forbidden' : 'bad_request', message: card.error });
+
+    // The short link («aliya-nutri»): the old address keeps working (slug-service)
+    if (req.body.slug !== undefined) {
+      try {
+        req.project.slug = await slugService.change(req.project, req.body.slug);
+      } catch (err) {
+        if (err instanceof slugService.SlugError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+        throw err;
+      }
+    }
 
     // "If…, then…" scenarios are part of the methodology: only known conditions and actions are kept
     let aiSettings = projectService.limitAiSettings(custom_ai_settings);
