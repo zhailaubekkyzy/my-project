@@ -12,6 +12,7 @@ const funnelService = require('./funnel-service');
 const partnerService = require('./partner-service');
 const analytics = require('./analytics-service');
 const { mediaUrl } = require('./media-service');
+const { settingsOf } = require('./ai-settings');
 
 const PARTNER_BONUS = 15;
 
@@ -33,7 +34,7 @@ function parseJson(str, fallback = {}) {
  * steps of the funnel, the description, price and payment link, real reviews, the SI-brain.
  */
 function qualityScore(row) {
-  const s = parseJson(row.custom_ai_settings);
+  const s = settingsOf(row);
   const scenarios = funnelService.normalizeScenarios(s.scenarios);
   const closing = scenarios.filter(sc => sc.when === 'objection' || sc.when === 'custom').length;
   const steps = funnelService.normalizeSteps(s.steps).length;
@@ -63,7 +64,7 @@ const CANDIDATE_SQL = `
 
 // What a candidate offers and how it handles doubts, in short (for the choice and for word matching)
 function summary(row) {
-  const s = parseJson(row.custom_ai_settings);
+  const s = settingsOf(row);
   const scenarios = funnelService.normalizeScenarios(s.scenarios)
     .filter(sc => sc.when === 'objection' || sc.when === 'custom')
     .map(sc => [sc.words, sc.condition, sc.text].filter(Boolean).join(' → '))

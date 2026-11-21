@@ -221,6 +221,7 @@ SF.openIn = (tab, screen, params = {}) => {
 //   R_<code>        → an invitation to SmartFlow (Профиль → «Пригласить»): Buddy
 //   F_<funnelId>    → a ready-made funnel in the Office (the team's decision for its author)
 //   FREVIEW         → funnels waiting for the team's review (support panel)
+//   FSALES          → «Мои воронки»: purchases of my funnels waiting for my confirmation
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
@@ -244,6 +245,8 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'office', { section: 'calendar' });
   } else if (param === 'ADMIN') {
     SF.openIn('profile', 'admin');
+  } else if (param === 'FSALES') {
+    SF.openIn('marketplace', 'office-funnels', { view: 'mine' });
   } else if (param === 'FREVIEW') {
     SF.openIn('profile', 'admin-funnels');
   } else if (param.startsWith('F_')) {

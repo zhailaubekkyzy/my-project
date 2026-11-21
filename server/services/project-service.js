@@ -122,8 +122,18 @@ function normalizeRoleTitle(value) {
  * Project row as returned to the Mini App (JSON fields parsed, photo URL resolved).
  */
 function decorateProject(p) {
+  // The connected ready-made funnel: its name and steps only — the marketer's texts never leave the server
+  const { funnel_settings: funnelSettings, funnel_until: funnelUntil, funnel_purchase_id: funnelPurchaseId, ...rest } = p;
+  const funnelActive = require('./ai-settings').funnelOn(p);
   return {
-    ...p,
+    ...rest,
+    ready_funnel: funnelPurchaseId ? {
+      purchaseId: funnelPurchaseId,
+      active: funnelActive,
+      until: funnelUntil || null,
+      title: safeJsonParse(funnelSettings).title || '',
+      steps: (safeJsonParse(funnelSettings).steps || []).map(st => ({ id: st.id, title: st.title }))
+    } : null,
     custom_ai_settings: safeJsonParse(p.custom_ai_settings),
     pricing_options: safeJsonParse(p.pricing_options),
     stats: safeJsonParse(p.stats),

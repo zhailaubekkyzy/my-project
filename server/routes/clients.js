@@ -8,6 +8,7 @@ const projectService = require('../services/project-service');
 const chatService = require('../services/chat-service');
 const funnelService = require('../services/funnel-service');
 const receiptService = require('../services/receipt-service');
+const { settingsOf } = require('../services/ai-settings');
 
 router.use(requireAuth);
 
@@ -67,7 +68,7 @@ router.get('/:clientId', requireProjectPermission('conversations:read'), async (
     }
 
     // Steps of the funnel (titles only: the assistant sees where the client is, not the settings)
-    const steps = funnelService.normalizeSteps(projectService.safeJsonParse(req.project.custom_ai_settings).steps);
+    const steps = funnelService.normalizeSteps(settingsOf(req.project).steps);
     res.json({
       ...toClientCard(client, req.projectRole),
       steps: steps.map(s => ({ id: s.id, title: s.title })),
@@ -127,7 +128,7 @@ router.post('/:clientId/step', requireProjectPermission('conversations:write'), 
   try {
     const client = await db.get('SELECT * FROM clients WHERE id = ? AND project_id = ?', [req.params.clientId, req.project.id]);
     if (!client) return res.status(404).json({ error: 'not_found', message: 'Клиент не найден в данном проекте' });
-    const steps = funnelService.normalizeSteps(projectService.safeJsonParse(req.project.custom_ai_settings).steps);
+    const steps = funnelService.normalizeSteps(settingsOf(req.project).steps);
     const stepId = String(req.body?.stepId || '');
     if (!steps.some(s => s.id === stepId)) return res.status(400).json({ error: 'bad_request', message: 'Такого шага нет' });
     const member = memberOf(req);

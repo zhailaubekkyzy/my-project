@@ -419,7 +419,14 @@
       get: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`),
       submit: (data) => apiFetch('/api/ready-funnels', { method: 'POST', body: JSON.stringify(data) }),
       update: (id, data) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }),
-      withdraw: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      withdraw: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      // Part 2: buying (the expert), confirming (the marketer), connecting to an SI-seller
+      purchases: () => apiFetch('/api/ready-funnels/purchases'),
+      buy: (id, note) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/buy`, { method: 'POST', body: JSON.stringify({ note }) }),
+      decide: (pid, decision, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
+      endPercent: (pid, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/end`, { method: 'POST', body: JSON.stringify({ reason }) }),
+      apply: (pid, projectId, materials) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/apply`, { method: 'POST', body: JSON.stringify({ projectId, materials }) }),
+      detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' })
     },
 
     // Marketplace and public profiles (no login needed)

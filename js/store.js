@@ -323,7 +323,9 @@ class Store {
         paymentUrl: p.payment_url || '',
         accessUrl: p.access_url || '',
         trialDays: Number(p.trial_days) || 0,
-        isListed: Boolean(p.is_listed)
+        isListed: Boolean(p.is_listed),
+        // A ready-made funnel connected to this SI-seller: its name and steps only
+        readyFunnel: p.ready_funnel || null
       };
     }).concat(assisted);
   }

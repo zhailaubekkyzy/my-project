@@ -6,6 +6,7 @@
 // Without an OpenAI key (or if OpenAI fails) the reply is an honest fallback, not made-up text.
 const config = require('../config');
 const { scenarioPromptLines, stepPromptLines } = require('./funnel-service');
+const { settingsOf } = require('./ai-settings');
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const HISTORY_LIMIT = 20;
@@ -30,7 +31,7 @@ function isConfigured() {
  * Instructions for the model, built only from data the owner entered.
  */
 function buildSystemPrompt(project, expertName, knowledge = []) {
-  const s = parseJson(project.custom_ai_settings);
+  const s = settingsOf(project);
   const role = project.role_title || 'SI-консультант';
   const lines = [
     `Ты — ${role} «${project.name}», помощник эксперта ${expertName || ''} в SmartFlow.`,

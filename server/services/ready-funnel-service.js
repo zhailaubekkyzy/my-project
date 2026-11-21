@@ -67,7 +67,7 @@ const SELECT = `
   LEFT JOIN users u ON u.id = f.author_id`;
 
 /**
- * view: 'public' (the catalogue — no texts, no payment link yet: buying comes in part 2),
+ * view: 'public' (the catalogue — no texts; the author's payment link to buy),
  *       'author' (their own: status and the team's note), 'staff' (everything, for the review).
  */
 function toFunnel(row, view = 'public') {
@@ -88,7 +88,9 @@ function toFunnel(row, view = 'public') {
       name: authorName(row),
       photoUrl: mediaUrl(row.author_photo_media_id) || row.author_avatar_url || null
     },
-    publishedAt: row.status === 'published' ? (row.reviewed_at || row.submitted_at) : null
+    publishedAt: row.status === 'published' ? (row.reviewed_at || row.submitted_at) : null,
+    // The author's own link: the expert pays by it (part 2); the marketer confirms the payment
+    paymentUrl: row.payment_url || null
   };
   if (view === 'author' || view === 'staff') {
     Object.assign(result, {
@@ -96,8 +98,7 @@ function toFunnel(row, view = 'public') {
       reviewNote: row.review_note || '',
       reviewedAt: row.reviewed_at || null,
       submittedAt: row.submitted_at,
-      sourceProjectId: row.source_project_id || null,
-      paymentUrl: row.payment_url || null
+      sourceProjectId: row.source_project_id || null
     });
   }
   if (view === 'staff') {
@@ -222,6 +223,12 @@ async function getForUser(userId, id) {
   return null;
 }
 
+// A funnel someone bought stays visible to them even if it was later taken down (they own it)
+async function getBought(id) {
+  const row = await getRow(id);
+  return row ? { ...toFunnel(row, 'public'), paymentUrl: null, unpublished: row.status !== 'published' } : null;
+}
+
 // ---------- The team ----------
 async function listForStaff(status = 'review') {
   const filter = STATUSES.includes(status) ? status : 'review';
@@ -281,6 +288,7 @@ module.exports = {
   listMine,
   catalogue,
   getForUser,
+  getBought,
   listForStaff,
   countForReview,
   getForStaff,

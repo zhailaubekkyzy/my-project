@@ -977,8 +977,22 @@
       ${field('ctaLabel', 'Свой текст кнопки (необязательно)', c.ctaLabel, { placeholder: 'Например: Хочу на разбор', max: 40, hint: 'Холодным людям отправляйте ссылку на чат, прогретым — ссылку на карточку. Карточку можно отправить по ссылке, даже если SI-продавец не показан в Маркетплейсе.' })}`;
   }
 
-  function renderMethodology(c, route = {}) {
+  // A ready-made funnel connected to the SI-seller: the SI follows it, the own methodology waits
+  function readyFunnelNote(c) {
+    const f = c.readyFunnel;
+    if (!f) return '';
     return `
+      <div class="glass-card-3d p-3.5 space-y-1.5 text-xs border border-[#81D8D0]">
+        <div class="font-bold text-ink flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4 text-brand"></i>${f.active ? 'Подключена готовая воронка' : 'Готовая воронка не продлена'} «${SF.esc(f.title)}»</div>
+        <div class="text-[11px] text-ink-2 leading-snug">${f.active
+          ? `SI ведёт клиентов по её шагам: ${f.steps.map(st => SF.esc(st.title)).join(' → ')}. Ваши цель, инструкции, шаги и сценарии ниже сохранены и снова заработают, если отключить воронку${f.until ? ' или не продлить оплату' : ''}.`
+          : 'Оплаченный месяц закончился — SI снова работает по вашей методологии ниже. Оплатите следующий месяц, чтобы вернуть воронку.'}</div>
+        <button type="button" onclick="SF.push('office-funnels', { view: 'bought' })" class="text-[11px] text-brand font-semibold">Купленные воронки →</button>
+      </div>`;
+  }
+
+  function renderMethodology(c, route = {}) {
+    return `${readyFunnelNote(c)}
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
         <div class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('store', 'Карточка в Маркетплейсе')}

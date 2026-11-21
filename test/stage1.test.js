@@ -3080,7 +3080,8 @@ async function runAllTests() {
       const settings = JSON.parse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [own.id])).custom_ai_settings);
       assert(!shown.includes(settings.instructions), 'The instructions are not shown');
       assert(!shown.includes(settings.scenarios[0].text), 'Scenario texts are not shown');
-      assert(!shown.includes('snapshot') && !shown.includes('paymentUrl'), 'No snapshot and no payment link before buying');
+      assert(!shown.includes('snapshot'), 'No snapshot');
+      assert(shown.includes('https://pay.example.com/funnel'), 'The author\'s payment link is there to buy');
       assert.strictEqual((await api('GET', '/api/ready-funnels?q=курса', expertToken)).body.funnels.length, 1);
       assert.strictEqual((await api('GET', '/api/ready-funnels?q=йога', expertToken)).body.funnels.length, 0);
 
@@ -3101,6 +3102,146 @@ async function runAllTests() {
       const names = sent.map(e => e.event);
       for (const e of ['ready_funnel_submitted', 'ready_funnel_reviewed', 'ready_funnel_catalog_opened', 'ready_funnel_viewed', 'ready_funnel_withdrawn']) assert(names.includes(e), `${e} is sent`);
       assert(!JSON.stringify(sent).includes('Продажа курса'), 'No titles in the numbers');
+    } finally {
+      analytics._setClientForTests(null);
+      Object.assign(config, saved);
+    }
+  });
+
+  await test('72. Готовые воронки: покупка, подтверждение маркетологом, подключение, подписка по месяцам, процент', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const siEngine = require('../server/services/si-engine');
+    const { settingsOf } = require('../server/services/ai-settings');
+    const saved = { features: config.features, adminUsers: config.adminUsers };
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
+    try {
+      config.features = ['funnels:all'];
+      const teamTg = { id: 720009, first_name: 'Команда', last_name: 'Тестовая' };
+      config.adminUsers = [String(teamTg.id)];
+      const teamToken = await tokenFor(teamTg);
+      const mkToken = await tokenFor({ id: 720001, first_name: 'Маркетолог', last_name: 'Тестовый' });
+      const exToken = await tokenFor({ id: 720002, first_name: 'Эксперт', last_name: 'Тестовый' });
+      const otherToken = await tokenFor({ id: 720003, first_name: 'Другой', last_name: 'Тестовый' });
+
+      // The marketer's SI-seller: the free-material template has a material on step 1
+      const src = (await api('POST', '/api/projects/quick-start', mkToken, { goal: 'free', about: 'маркетолог', offer: 'Гайд', link: 'https://marketer.example.com/guide' })).body;
+      const srcSettings = JSON.parse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [src.id])).custom_ai_settings);
+      const publish = async (title, priceType, priceLabel, paymentUrl) => {
+        const f = (await api('POST', '/api/ready-funnels', mkToken, { projectId: src.id, title, niche: 'Коучинг', description: 'Описание', result: 'Результат', priceType, priceLabel, paymentUrl })).body.funnel;
+        await api('POST', `/api/admin/funnels/${f.id}/decision`, teamToken, { decision: 'approve' });
+        return f;
+      };
+      const once = await publish('Разовая', 'once', '15 000 ₸', 'https://pay.example.com/once');
+      const monthly = await publish('Подписка', 'monthly', '5 000 ₸ в месяц', 'https://pay.example.com/month');
+      const percent = await publish('Процент', 'percent', '10% с продаж', '');
+
+      // --- One-time payment ---
+      const buy = (fid, note, token = exToken) => api('POST', `/api/ready-funnels/${fid}/buy`, token, { note });
+      assert.strictEqual((await buy(once.id, '')).status, 400, 'Say how you paid');
+      assert.strictEqual((await buy(once.id, 'Kaspi', mkToken)).status, 400, 'Not one’s own funnel');
+      const bought = await buy(once.id, 'Kaspi 21.11, 15 000');
+      assert.strictEqual(bought.status, 201);
+      const pid = bought.body.purchase.id;
+      assert.strictEqual(bought.body.purchase.status, 'pending');
+      assert.strictEqual((await buy(once.id, 'ещё раз')).status, 409);
+
+      const own = (await api('POST', '/api/projects', exToken, { name: 'expert si' })).body;
+      await api('PUT', `/api/projects/${own.id}`, exToken, { custom_ai_settings: { goal: 'моя цель', instructions: 'Мои инструкции эксперта' } });
+      const applyTo = (purchaseId, projectId, materials = {}, token = exToken) => api('POST', `/api/ready-funnels/purchases/${purchaseId}/apply`, token, { projectId, materials });
+      assert.strictEqual((await applyTo(pid, own.id)).status, 400, 'Not before the marketer confirms');
+
+      const decide = (purchaseId, decision, reason, token = mkToken) => api('POST', `/api/ready-funnels/purchases/${purchaseId}/decision`, token, { decision, reason });
+      assert.strictEqual((await decide(pid, 'confirm', '', otherToken)).status, 404, 'Only the author confirms');
+      assert.strictEqual((await decide(pid, 'decline', '')).status, 400, 'A reason to decline');
+      const sales = (await api('GET', '/api/ready-funnels/purchases', mkToken)).body;
+      assert.strictEqual(sales.waiting, 1);
+      assert.strictEqual(sales.sales[0].note, 'Kaspi 21.11, 15 000');
+      assert.strictEqual((await decide(pid, 'confirm')).status, 200);
+      assert.strictEqual((await decide(pid, 'confirm')).status, 409);
+
+      // Connect: only to one's own SI-seller; the expert's own material instead of the marketer's
+      const stranger = (await api('POST', '/api/projects', otherToken, { name: 'not mine' })).body;
+      assert.strictEqual((await applyTo(pid, stranger.id)).status, 404);
+      const stepWithMaterial = srcSettings.steps.find(st => st.material).id;
+      const applied = await applyTo(pid, own.id, { [stepWithMaterial]: 'https://expert.example.com/my-guide' });
+      assert.strictEqual(applied.status, 200);
+      assert.strictEqual(applied.body.purchase.connectedTo.projectId, own.id);
+      let row = await db.get('SELECT * FROM projects WHERE id = ?', [own.id]);
+      const prompt = siEngine.buildSystemPrompt(row, 'Эксперт');
+      assert(prompt.includes(srcSettings.instructions), 'The SI follows the funnel');
+      assert(!prompt.includes('Мои инструкции эксперта'), 'Not the own instructions while the funnel is on');
+      assert(!row.funnel_settings.includes('marketer.example.com'), 'The marketer’s material is not sent to the expert’s clients');
+      assert(row.funnel_settings.includes('https://expert.example.com/my-guide'));
+      // The phone never gets the marketer's texts: only the name and the steps
+      const list = JSON.stringify((await api('GET', '/api/projects', exToken)).body);
+      assert(!list.includes(srcSettings.instructions), 'No funnel instructions in the Office');
+      assert(!list.includes('funnel_settings'));
+      const mine = (await api('GET', '/api/projects', exToken)).body.owned.find(p => p.id === own.id);
+      assert.strictEqual(mine.ready_funnel.title, 'Разовая');
+      assert.strictEqual(mine.ready_funnel.active, true);
+      assert.strictEqual(mine.custom_ai_settings.instructions, 'Мои инструкции эксперта', 'The own methodology stays as it was');
+      const page = JSON.stringify((await api('GET', `/api/ready-funnels/${once.id}`, exToken)).body);
+      assert(!page.includes(srcSettings.instructions) && page.includes('"connectedTo"'));
+
+      // Off → the own methodology again
+      assert.strictEqual((await api('POST', `/api/ready-funnels/purchases/${pid}/detach`, exToken)).status, 200);
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [own.id]);
+      assert.strictEqual(settingsOf(row).instructions, 'Мои инструкции эксперта');
+
+      // --- Monthly: works until the end of the paid month, then the own methodology by itself ---
+      const mp = (await buy(monthly.id, 'Перевод 21.11')).body.purchase.id;
+      await decide(mp, 'confirm');
+      await applyTo(mp, own.id);
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [own.id]);
+      assert.strictEqual(settingsOf(row).instructions, srcSettings.instructions);
+      const until = new Date(row.funnel_until instanceof Date ? row.funnel_until : `${String(row.funnel_until).replace(' ', 'T')}Z`);
+      assert(until - Date.now() > 29 * 86400000 && until - Date.now() < 31 * 86400000, 'Paid for 30 days');
+      await db.run(`UPDATE funnel_purchases SET paid_until = ? WHERE id = ?`, ['2020-01-01 00:00:00', mp]);
+      await db.run(`UPDATE projects SET funnel_until = ? WHERE id = ?`, ['2020-01-01 00:00:00', own.id]);
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [own.id]);
+      assert.strictEqual(settingsOf(row).instructions, 'Мои инструкции эксперта', 'Not renewed → the own methodology');
+      assert.strictEqual((await api('GET', '/api/projects', exToken)).body.owned.find(p => p.id === own.id).ready_funnel.active, false);
+      // The next month: the expert says they paid, the marketer confirms → on again
+      const renew = await buy(monthly.id, 'Оплатила декабрь');
+      assert.strictEqual(renew.body.purchase.renewalRequested, true);
+      assert.strictEqual((await decide(mp, 'confirm')).status, 200);
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [own.id]);
+      assert.strictEqual(settingsOf(row).instructions, srcSettings.instructions, 'Renewed → the funnel again');
+
+      // --- Percent: connect on terms, the marketer sees the sales ---
+      const pp = await buy(percent.id, '');
+      assert.strictEqual(pp.status, 201, 'A percentage needs no payment note');
+      await decide(pp.body.purchase.id, 'confirm');
+      const second = (await api('POST', '/api/projects', exToken, { name: 'second si' })).body;
+      await applyTo(pp.body.purchase.id, second.id);
+      const clientToken = await tokenFor({ id: 720004, first_name: 'Клиент', last_name: 'Тестовый' });
+      const secondRow = await db.get('SELECT * FROM projects WHERE id = ?', [second.id]);
+      await api('POST', `/api/chat/${secondRow.slug}/start`, clientToken);
+      const client = await db.get('SELECT * FROM clients WHERE project_id = ?', [second.id]);
+      await db.run(
+        `INSERT INTO client_events (id, business_id, project_id, client_id, type, actor_type) VALUES (?, ?, ?, ?, 'paid', 'owner')`,
+        ['evt_test_72', client.business_id, second.id, client.id]
+      );
+      const report = (await api('GET', '/api/ready-funnels/purchases', mkToken)).body.sales.find(x => x.id === pp.body.purchase.id);
+      assert.deepStrictEqual([report.numbers.clients, report.numbers.sales], [1, 1], 'The marketer sees the sales on the funnel');
+      assert(!JSON.stringify(report).includes('Клиент Тестовый'), 'No client names for the marketer');
+      assert.strictEqual((await api('POST', `/api/ready-funnels/purchases/${mp}/end`, mkToken, { reason: 'x' })).status, 400, 'Only a percentage is stopped');
+      assert.strictEqual((await api('POST', `/api/ready-funnels/purchases/${pp.body.purchase.id}/end`, mkToken, { reason: 'Нет оплаты процента' })).status, 200);
+      assert.strictEqual((await db.get('SELECT funnel_purchase_id FROM projects WHERE id = ?', [second.id])).funnel_purchase_id, null);
+
+      // Catalogue: real numbers only — experts using it, no share below 30 clients
+      const cat = (await api('GET', '/api/ready-funnels', otherToken)).body.funnels;
+      const m = cat.find(f => f.id === monthly.id);
+      assert.deepStrictEqual(m.results, { experts: 1, salesShare: null });
+      // A bought funnel taken down stays visible to its buyer
+      await api('POST', `/api/admin/funnels/${once.id}/decision`, teamToken, { decision: 'hide', note: 'Проверка' });
+      assert.strictEqual((await api('GET', `/api/ready-funnels/${once.id}`, exToken)).status, 200);
+      assert.strictEqual((await api('GET', `/api/ready-funnels/${once.id}`, otherToken)).status, 404);
+
+      const names = sent.map(e => e.event);
+      for (const e of ['ready_funnel_purchase_requested', 'ready_funnel_purchase_decided', 'ready_funnel_applied', 'ready_funnel_detached', 'ready_funnel_percent_ended']) assert(names.includes(e), `${e} is sent`);
+      assert(!JSON.stringify(sent).includes('Kaspi'), 'No payment notes in the numbers');
     } finally {
       analytics._setClientForTests(null);
       Object.assign(config, saved);
