@@ -117,7 +117,12 @@
     return SF.formatChatMarkdown(m.text);
   }
 
+  // Shades of the people in the group shown now: by the order of members, so up to 7 never share one
+  let tones = new Map();
+  const toneOf = (userId) => tones.get(userId) || SF.personTone(userId);
+
   function groupMessage(groupId, m) {
+    const tone = m.mine ? '' : toneOf(m.sender.id);
     const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
     const menu = m.deleted ? '' : `onclick="SF.actions.groupMessageMenu('${SF.js(groupId)}', '${SF.js(m.id)}')"`;
     if (m.kind === 'video' && m.fileId && !m.deleted) {
@@ -127,7 +132,7 @@
         <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
           ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
           <div class="flex flex-col items-center">
-            ${m.mine ? '' : `<div class="text-[10px] font-bold text-brand self-start">${SF.esc(m.sender.displayName)}</div>`}
+            ${m.mine ? '' : `<div class="text-[10px] font-bold person-name ${tone} self-start">${SF.esc(m.sender.displayName)}</div>`}
             <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
               class="w-40 h-40 rounded-full object-cover bg-sunken border-2 ${m.mine ? 'border-[#81D8D0]' : 'border-line'}"></video>
             <button ${menu} class="text-[9px] text-faint mt-0.5">🎥 0:${String(m.seconds || 0).padStart(2, '0')} · ${msgTime(m.createdAt)} · ···</button>
@@ -139,8 +144,8 @@
       <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
         ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
         <div class="max-w-[80%] min-w-0">
-          <div ${menu} class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'} ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
-            ${m.mine ? '' : `<div class="text-[10px] font-bold text-brand ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>`}
+          <div ${menu} class="${m.mine ? 'chat-bubble-mine' : `chat-bubble-person ${tone}`} ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
+            ${m.mine ? '' : `<div class="text-[10px] font-bold person-name ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>`}
             ${quoteBlock(m.replyTo, m.mine)}
             ${messageBody(groupId, m)}
             <div class="${m.kind === 'photo' ? 'px-1' : ''}">${time}</div>
@@ -469,6 +474,7 @@
     const canRecord = window.sfMedia && window.sfMedia.canRecord();
     if (visit.groupId !== groupId) startVisit(groupId);
     takeMarks(groupId, data);
+    tones = new Map(data.members.map((x, i) => [x.id, SF.personTone(x.id, i)]));
     // «Новые сообщения»: before the first message from others after where I stopped
     const firstNew = visit.newFrom ? data.messages.find(m => !m.mine && m.createdAt > visit.newFrom) : null;
         return `

@@ -11,6 +11,8 @@
 //  - reactions: no notification (owner's decision); inside the group marks on the right lead to where
 //    someone reacted to my message or mentioned me (@name or a reply to my message);
 //  - new messages: one notification per unread run, «Без звука» turns them off; a mention always comes;
+//    group notifications go to the phone only, not to Buddy (owner's decision 21 Nov.) — in the app they
+//    are seen in «Чаты» (the number on the tab, the dot and marks in the list and inside the group);
 //  - someone who blocked me in a private conversation cannot be invited by me;
 //  - the only SI here: «Кратко» — a short summary of what I missed, from where I stopped (unread_from),
 //    on request only; its own model GROUP_SUMMARY_MODEL and daily limit, not tied to Buddy.
@@ -186,7 +188,7 @@ async function inviteUsers(meId, group, userIds) {
     await notifyService.notifyUser(
       userId,
       { ru: `👥 ${me.displayName} приглашает вас в группу «${group.name}» в SmartFlow.`, en: `👥 ${me.displayName} invites you to the group «${group.name}» in SmartFlow.` },
-      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}` }
+      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}`, buddy: false }
     );
   }
   if (invited.length) await touch(group.id);
@@ -546,7 +548,7 @@ async function send(meId, groupId, rawText, file = null, replyTo = null, mention
       mentioned.includes(userId)
         ? { ru: `👥 «${group.name}»: ${me.displayName} упомянул(а) вас.`, en: `👥 «${group.name}»: ${me.displayName} mentioned you.` }
         : { ru: `👥 «${group.name}»: ${me.displayName} ответил(а) на ваше сообщение.`, en: `👥 «${group.name}»: ${me.displayName} replied to your message.` },
-      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}` }
+      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}`, buddy: false }
     );
   }
   for (const m of others) {
@@ -555,7 +557,7 @@ async function send(meId, groupId, rawText, file = null, replyTo = null, mention
     await notifyService.notifyUser(
       m.user_id,
       { ru: `👥 «${group.name}»: новое сообщение от ${me.displayName}.`, en: `👥 «${group.name}»: a new message from ${me.displayName}.` },
-      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}` }
+      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}`, buddy: false }
     );
   }
   return { messageId: id };

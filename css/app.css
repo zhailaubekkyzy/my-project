@@ -364,6 +364,51 @@ body {
   max-width: 85%;
 }
 
+/* People's conversations (private and groups), owner's decision 21 Nov.: my messages are the deep Tiffany;
+   every other person has a shade of their own, so nobody is confused in a group. No red (it is SI's)
+   and no Tiffany (it is mine). Shades: .person-tone-0 … -6 (SF.personTone in js/ui.js). */
+.chat-bubble-mine {
+  padding: 11px 15px;
+  line-height: 1.5;
+  font-size: 13.5px;
+  color: rgb(var(--c-ink));
+  box-shadow: var(--shadow-soft);
+  background: var(--human-bubble-strong);
+  border: 1px solid var(--sf-tiffany);
+  border-radius: 18px 18px 6px 18px;
+  max-width: 85%;
+}
+
+.chat-bubble-person {
+  padding: 11px 15px;
+  line-height: 1.5;
+  font-size: 13.5px;
+  color: rgb(var(--c-ink));
+  box-shadow: var(--shadow-soft);
+  background: var(--pb, var(--human-bubble));
+  border: 1px solid var(--pb-line, var(--human-bubble-line));
+  border-radius: 18px 18px 18px 6px;
+  max-width: 85%;
+}
+
+.person-name { color: var(--pb-name, var(--sf-tiffany-deep)); }
+
+.person-tone-0 { --pb: #eaf4fd; --pb-line: #b9dbf5; --pb-name: #2f6f9f; } /* sky */
+.person-tone-1 { --pb: #f1edfd; --pb-line: #d5c9f7; --pb-name: #6b52b8; } /* lavender */
+.person-tone-2 { --pb: #fdf5e4; --pb-line: #f1d9a3; --pb-name: #8a5d0c; } /* amber */
+.person-tone-3 { --pb: #eef7e6; --pb-line: #c9e5b0; --pb-name: #47731f; } /* green */
+.person-tone-4 { --pb: #e9edfb; --pb-line: #c3cdf2; --pb-name: #3f51a8; } /* indigo */
+.person-tone-5 { --pb: #f4f1ec; --pb-line: #ddd3c3; --pb-name: #75603f; } /* sand */
+.person-tone-6 { --pb: #f7ecf5; --pb-line: #e6c6e0; --pb-name: #8a3d7c; } /* plum */
+
+:root[data-theme="dark"] .person-tone-0 { --pb: #10263a; --pb-line: #24486a; --pb-name: #8cc4ee; }
+:root[data-theme="dark"] .person-tone-1 { --pb: #211a3a; --pb-line: #3f3370; --pb-name: #b9a7f2; }
+:root[data-theme="dark"] .person-tone-2 { --pb: #33270f; --pb-line: #5f4a1c; --pb-name: #e9c46f; }
+:root[data-theme="dark"] .person-tone-3 { --pb: #1a2a12; --pb-line: #34501f; --pb-name: #a6d27e; }
+:root[data-theme="dark"] .person-tone-4 { --pb: #161d38; --pb-line: #2f3b6c; --pb-name: #a5b2ef; }
+:root[data-theme="dark"] .person-tone-5 { --pb: #262119; --pb-line: #4a3f30; --pb-name: #d3bd9c; }
+:root[data-theme="dark"] .person-tone-6 { --pb: #2e1729; --pb-line: #57304f; --pb-name: #e0a6d4; }
+
 /* Voice message */
 .audio-voice-box {
   background: var(--human-bubble);

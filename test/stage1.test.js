@@ -3268,6 +3268,10 @@ async function runAllTests() {
     analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
     const realFetch = global.fetch;
     const originalKey = config.openaiApiKey;
+    const notifyService = require('../server/services/notify-service');
+    const phoneSent = [];
+    const recorder = { name: 'test-phone', send: async (userId, { text, startParam }) => { phoneSent.push({ userId, text, start_param: startParam }); return true; } };
+    notifyService.CHANNELS.push(recorder);
     try {
       const owner = await tokenFor({ id: 730001, first_name: 'Айгуль', last_name: 'Группа' });
       const bob = await tokenFor({ id: 730002, first_name: 'Бахыт', last_name: 'Группа' });
@@ -3275,7 +3279,8 @@ async function runAllTests() {
       const outsider = await tokenFor({ id: 730004, first_name: 'Чужой', last_name: 'Группа' });
       const idOf = async (token) => (await api('GET', '/api/me/profile', token)).body.user.id;
       const [ownerId, bobId, catId] = [await idOf(owner), await idOf(bob), await idOf(cat)];
-      const notes = async (userId) => (await db.all('SELECT text, start_param FROM notifications WHERE user_id = ? ORDER BY created_at, id', [userId]));
+      // Group notifications go to the phone only (a recording channel here), never to Buddy
+      const notes = async (userId) => phoneSent.filter(n => n.userId === userId);
 
       assert.strictEqual((await api('POST', '/api/groups', owner, { name: '   ' })).status, 400, 'A name is needed');
       // Cat blocked the owner in a private conversation: the owner cannot invite her
@@ -3285,7 +3290,7 @@ async function runAllTests() {
       assert.strictEqual(created.status, 201);
       assert.strictEqual(created.body.invited, 1, 'Only Bob is invited');
       const gid = created.body.groupId;
-      assert((await notes(bobId)).some(n => n.start_param === `G_${gid}` && n.text.includes('приглашает')), 'Bob is told in Buddy');
+      assert((await notes(bobId)).some(n => n.start_param === `G_${gid}` && n.text.includes('приглашает')), 'Bob is told on the phone');
 
       // Invited: sees the invitation only, cannot write
       const invited = await api('GET', `/api/groups/${gid}`, bob);
@@ -3393,6 +3398,8 @@ async function runAllTests() {
       assert.strictEqual((await api('GET', `/api/groups/${gid}`, bob)).body.group.role, 'owner');
       assert.strictEqual((await api('GET', '/api/groups', owner)).body.groups.length, 0);
 
+      const inBuddy = await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE SUBSTR(start_param, 1, 2) = 'G_'`);
+      assert.strictEqual(Number(inBuddy.n), 0, 'Nothing from groups goes to Buddy');
       const names = sent.map(e => e.event);
       for (const e of ['group_created', 'group_joined', 'group_message', 'group_reaction', 'group_summary']) assert(names.includes(e), `Event ${e}`);
       assert(!JSON.stringify(sent).includes('Йога'), 'No group names or texts in the numbers');
@@ -3400,6 +3407,7 @@ async function runAllTests() {
       global.fetch = realFetch;
       config.openaiApiKey = originalKey;
       analytics._setClientForTests(null);
+      notifyService.CHANNELS.splice(notifyService.CHANNELS.indexOf(recorder), 1);
     }
   });
 

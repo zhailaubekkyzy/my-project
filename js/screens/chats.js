@@ -158,6 +158,8 @@
   const filePath = (userId, fileId) => `/api/people/${encodeURIComponent(userId)}/files/${encodeURIComponent(fileId)}`;
 
   function personMessage(m, userId) {
+    // Mine — the deep Tiffany; the other person — their own shade (owner's decision 21 Nov.)
+    const bubbleClass = m.mine ? 'chat-bubble-mine' : `chat-bubble-person ${SF.personTone(userId)}`;
     const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
     const side = m.mine ? 'justify-end' : 'justify-start';
     const path = m.fileId ? filePath(userId, m.fileId) : '';
@@ -175,7 +177,7 @@
     if (m.kind === 'photo' && m.fileId) {
       return `
         <div class="flex ${side}">
-          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'} !p-1">
+          <div class="${bubbleClass} !p-1">
             <img data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} alt="Фото" onclick="SF.actions.openPhoto(this)" class="rounded-xl max-w-[220px] max-h-[280px] min-w-[80px] min-h-[80px] object-cover bg-sunken" />
             <div class="px-1">${time}</div>
           </div>
@@ -184,12 +186,12 @@
     if (m.kind === 'voice' && m.fileId) {
       return `
         <div class="flex ${side}">
-          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
+          <div class="${bubbleClass}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
         </div>`;
     }
     return `
       <div class="flex ${side}">
-        <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.formatChatMarkdown(m.text)}${time}</div>
+        <div class="${bubbleClass}">${SF.formatChatMarkdown(m.text)}${time}</div>
       </div>`;
   }
 
