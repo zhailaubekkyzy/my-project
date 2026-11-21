@@ -13,6 +13,8 @@ const scheduler = require('../services/scheduler-service');
 const telegramBot = require('../services/telegram-bot');
 const siEngine = require('../services/si-engine');
 const { mediaUrl } = require('../services/media-service');
+const readyFunnels = require('../services/ready-funnel-service');
+const analytics = require('../services/analytics-service');
 
 const { parseJson, displayNameOf } = supportService;
 const FEEDBACK_STATUSES = ['new', 'in_progress', 'done'];
@@ -56,6 +58,7 @@ router.get('/overview', async (req, res, next) => {
         new: await count(`SELECT COUNT(*) AS count FROM feedback WHERE status = 'new'`),
         inProgress: await count(`SELECT COUNT(*) AS count FROM feedback WHERE status = 'in_progress'`)
       },
+      funnelsToReview: await readyFunnels.countForReview(),
       errors24h: await count('SELECT COUNT(*) AS count FROM error_log WHERE created_at >= ?', [supportService.hoursAgo(24)]),
       users: {
         total: await count('SELECT COUNT(*) AS count FROM users WHERE is_demo = 0'),
@@ -451,6 +454,53 @@ router.get('/actions', async (req, res, next) => {
     );
     res.json({ actions: rows.map(toAction) });
   } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------
+// Ready-made funnels from marketers: the team approves each one before experts see it
+// (owner's decision 21 Nov.). The team sees everything: instructions, scenarios, step materials.
+// ---------------------------------------------------------------
+router.get('/funnels', async (req, res, next) => {
+  try {
+    res.json({ funnels: await readyFunnels.listForStaff(String(req.query.status || 'review')) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/funnels/:id', async (req, res, next) => {
+  try {
+    const funnel = await readyFunnels.getForStaff(req.params.id);
+    if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Воронка не найдена' });
+    res.json({ funnel });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const FUNNEL_DECISION_TEXT = {
+  approve: (f) => `✅ Ваша воронка «${f.title}» прошла проверку команды SmartFlow и опубликована: эксперты видят её в Офисе → «Готовые воронки».`,
+  reject: (f, note) => `Воронка «${f.title}» пока не прошла проверку команды SmartFlow.\n\nПричина: ${note}\n\nИсправьте и отправьте снова: Офис → «Готовые воронки» → «Мои воронки».`,
+  hide: (f, note) => `Воронка «${f.title}» снята с публикации командой SmartFlow.\n\nПричина: ${note}\n\nИсправьте и отправьте на проверку снова: Офис → «Готовые воронки» → «Мои воронки».`
+};
+
+/** POST /api/admin/funnels/:id/decision { decision: approve|reject|hide, note } */
+router.post('/funnels/:id/decision', async (req, res, next) => {
+  try {
+    const decision = String((req.body || {}).decision || '');
+    const { before, after } = await readyFunnels.decide(req.staff.userId, req.params.id, decision, (req.body || {}).note);
+    await supportService.logAction(req.staff.userId, before.author_id, `funnel_${decision}`, {
+      funnelId: before.id, title: before.title, from: before.status, to: after.status, note: after.review_note || ''
+    });
+    analytics.capture('ready_funnel_reviewed', before.author_id, { funnel_id: before.id, decision, price_type: before.price_type });
+    const text = FUNNEL_DECISION_TEXT[decision](before, after.review_note || '');
+    telegramBot.notifyUser(before.author_id, text, { buttonText: 'Открыть воронку', startParam: `F_${before.id}` })
+      .catch(err => console.warn('[SmartFlow Funnels] author not notified:', err.message));
+    res.json({ funnel: readyFunnels.toFunnel(after, 'staff') });
+  } catch (err) {
+    if (err instanceof readyFunnels.FunnelError) return res.status(err.status).json({ error: err.code, message: err.message });
     next(err);
   }
 });

@@ -196,6 +196,7 @@
       <button onclick="SF.push('office-create')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
         <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-продавца
       </button>
+      ${SF.funnels ? SF.funnels.officeEntry() : ''}
       ${assistedBlock}
       <div class="space-y-2.5">
         ${list.map(c => `
@@ -830,7 +831,7 @@
     if (c.assisting) return renderAssistedConsultant(c, state);
     const tab = route.tab || 'methodology';
     let body = '';
-    if (tab === 'methodology') body = renderMethodology(c, route) + renderConsultantBrain(c, state);
+    if (tab === 'methodology') body = renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
     if (tab === 'analytics') body = renderAnalytics(c, state);
     if (tab === 'income') body = renderClients(c, state);
     if (tab === 'broadcasts') body = renderBroadcasts(c, state);
@@ -2233,10 +2234,13 @@
     broadcastField: (projectId, field, value) => { broadcastDraft(projectId)[field] = value; },
     thenHints: THEN_HINTS,
     title(route) {
+      if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.title(route);
       return TITLES[route.screen] || 'Офис';
     },
     render(route, state) {
       if (route.screen === 'office') return renderOffice(route, state);
+      // Ready-made funnels (js/screens/funnels.js): for anyone with an open Office
+      if (SF.funnels && SF.funnels.owns(route.screen)) return store().isBusinessActive() ? SF.funnels.render(route, state) : renderTerms();
       if (route.screen === 'office-create' && !store().isBusinessActive()) return renderTerms();
       if (!store().isBusinessActive() && !store().isAssistant()) return renderTerms();
       if (route.screen === 'office-create') return renderCreate(route);
@@ -2249,6 +2253,7 @@
       // New or removed assistant roles show up without reopening the app
       SF.data.officeLists();
       if (!store().isBusinessActive() && !store().isAssistant()) return;
+      if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.afterRender(route, state);
       if (route.screen === 'office') {
         SF.data.allInquiries();
         if (route.section === 'brain') SF.data.brain();
