@@ -24,6 +24,7 @@ const funnelService = require('./funnel-service');
 const chatService = require('./chat-service');
 const broadcastService = require('./broadcast-service');
 const { sqlTime } = require('./scheduler-service');
+const { settingsOf } = require('./ai-settings');
 
 const LATE_WINDOW_MINUTES = 3 * 24 * 60;
 const MAX_ACTIONS_PER_RUN = 50;
@@ -140,7 +141,7 @@ async function act(project, client, scenario, scenarios) {
   await funnelService.recordEvent(client, 'scenario', { type: 'system' }, { scenarioId: scenario.id, then: scenario.then, minutes: scenario.minutes });
   const branch = (scenario.after === 'text' && `после «${scenario.afterText}»`) || funnelService.SILENT_AFTER[scenario.after]
     || `после сценария «${funnelService.scenarioName(scenarios.find(s => s.id === scenario.after))}»`;
-  const step = scenario.step && funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps).find(s => s.id === scenario.step);
+  const step = scenario.step && funnelService.normalizeSteps(settingsOf(project).steps).find(s => s.id === scenario.step);
   const silence = `молчит ${funnelService.minutesLabel(scenario.minutes)} ${branch}${step ? ` (шаг «${step.title}»)` : ''}`;
   if (writesToClient(scenario.then)) {
     const text = scenario.then === 'send_text'
@@ -179,13 +180,13 @@ async function act(project, client, scenario, scenarios) {
  */
 async function runSilentScenarios(now = new Date()) {
   const projects = await db.all(
-    `SELECT * FROM projects WHERE status = 'active' AND is_demo = 0 AND custom_ai_settings LIKE ?`,
-    ['%"silent"%']
+    `SELECT * FROM projects WHERE status = 'active' AND is_demo = 0 AND (custom_ai_settings LIKE ? OR funnel_settings LIKE ?)`,
+    ['%"silent"%', '%"silent"%']
   );
   let checked = 0;
   let fired = 0;
   for (const project of projects) {
-    const settings = parseJson(project.custom_ai_settings);
+    const settings = settingsOf(project);
     const all = funnelService.normalizeScenarios(settings.scenarios);
     const scenarios = all.filter(s => s.when === 'silent').sort((a, b) => a.minutes - b.minutes);
     if (!scenarios.length) continue;

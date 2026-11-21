@@ -5,8 +5,9 @@
 //   office-funnel         — one funnel: description, steps, result, price, author
 //   office-funnel-publish — publish (or change) a funnel from one's own SI-seller
 // Before buying an expert sees the description, the steps and the result — never the marketer's
-// instructions and scenario texts (the server does not send them). Buying comes in part 2:
-// for now the expert writes to the author inside SmartFlow.
+// instructions and scenario texts (the server does not send them).
+// Part 2: «Я оплатил(а)» by the author's link (or «Подключить» on a percentage) → the author confirms
+// in «Мои воронки» → the expert connects the funnel to their SI-seller («Купленные»).
 
 (function (window) {
   const SF = window.SF;
@@ -74,6 +75,13 @@
       </li>`).join('')}</ol>`;
   }
 
+  // Real numbers only: experts who use it now; the share of buyers once there are 30+ clients
+  function resultsLine(r) {
+    if (!r || !r.experts) return '';
+    const who = `Используют ${r.experts} ${plural(r.experts, 'эксперт', 'эксперта', 'экспертов')}`;
+    return r.salesShare !== null && r.salesShare !== undefined ? `${who} · купили ${r.salesShare}% клиентов` : who;
+  }
+
   function funnelCard(f, { mine = false } = {}) {
     const status = mine && STATUS[f.status];
     return `
@@ -84,6 +92,7 @@
         </span>
         ${f.result ? `<span class="block text-[11px] text-ink-2 leading-snug line-clamp-2">${esc(f.result)}</span>` : ''}
         <span class="block text-[11px] text-muted">${f.steps.map(st => esc(st.title)).join(' → ')}</span>
+        ${!mine && resultsLine(f.results) ? `<span class="block text-[11px] text-brand">${resultsLine(f.results)}</span>` : ''}
         <span class="flex items-center justify-between gap-2 text-[11px]">
           ${mine ? `<span class="font-semibold ${status ? status.cls : 'text-muted'}">${status ? status.label : ''}</span>` : author(f, 22)}
           <span class="text-right">${priceLine(f)}</span>
@@ -93,14 +102,18 @@
 
   // ---------------- Catalogue and «Мои воронки» ----------------
   function renderList(route) {
-    const view = route.view === 'mine' ? 'mine' : 'catalog';
+    const view = ['mine', 'bought'].includes(route.view) ? route.view : 'catalog';
+    const waitingSales = (cache.purchases && cache.purchases.waiting) || 0;
     const tabs = `
-      <div class="grid grid-cols-2 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
-        ${[{ id: 'catalog', label: 'Каталог', icon: 'layout-grid' }, { id: 'mine', label: 'Мои воронки', icon: 'pen-line' }].map(({ id, label, icon }) => `
-          <button onclick="SF.patch({ view: '${id}' })" class="py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 ${view === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
-            <i data-lucide="${icon}" class="w-4 h-4"></i>${label}</button>`).join('')}
+      <div class="grid grid-cols-3 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
+        ${[{ id: 'catalog', label: 'Каталог', icon: 'layout-grid' }, { id: 'bought', label: 'Купленные', icon: 'shopping-bag' }, { id: 'mine', label: 'Мои воронки', icon: 'pen-line' }].map(({ id, label, icon }) => `
+          <button onclick="SF.patch({ view: '${id}' })" class="relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 ${view === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+            <i data-lucide="${icon}" class="w-4 h-4"></i>${label}
+            ${id === 'mine' && waitingSales ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingSales}</span>` : ''}</button>`).join('')}
       </div>`;
-    return tabs + (view === 'mine' ? renderMine() : renderCatalog(route));
+    if (view === 'mine') return tabs + renderMine();
+    if (view === 'bought') return tabs + renderBought();
+    return tabs + renderCatalog(route);
   }
 
   function catalogKey(route) {
@@ -146,7 +159,87 @@
       </div>`;
     if (!data) return publish + how + waiting('mine');
     const list = data.funnels.length ? data.funnels.map(f => funnelCard(f, { mine: true })).join('') : '';
-    return `${publish}${list ? `<div class="space-y-2.5">${list}</div>` : ''}${how}`;
+    return `${renderSales()}${publish}${list ? `<div class="space-y-2.5">${list}</div>` : ''}${how}`;
+  }
+
+  // ---------------- The author: who bought my funnels ----------------
+  function renderSales() {
+    const sales = (cache.purchases && cache.purchases.sales) || [];
+    if (!sales.length) return '';
+    const waiting = sales.filter(p => p.status === 'pending' || (p.status === 'active' && p.renewalRequested));
+    const active = sales.filter(p => p.status === 'active');
+    const ended = sales.filter(p => p.status === 'ended');
+    const who = (p) => `<span class="flex items-center gap-2 min-w-0">${SF.avatar(p.expert.photoUrl, { size: 28, userId: p.expert.id })}
+      <span class="min-w-0"><span class="block text-xs font-semibold text-ink truncate">${esc(p.expert.name)}</span>
+      <span class="block text-[10px] text-muted truncate">«${esc(p.funnelTitle)}» · ${esc(p.priceLabel)}</span></span></span>`;
+    const numbers = (p) => p.numbers
+      ? `<div class="text-[11px] text-ink-2">С подключения: новых клиентов ${p.numbers.clients}, продаж ${p.numbers.sales}</div>`
+      : `<div class="text-[11px] text-muted">${p.status === 'active' ? 'Эксперт ещё не подключил воронку к SI-продавцу' : ''}</div>`;
+    const waitingHtml = waiting.map(p => {
+      const renewal = p.status === 'active';
+      const what = p.priceType === 'percent' ? 'Хочет подключить на ваших условиях' : (renewal ? 'Оплатил(а) следующий месяц' : 'Оплатил(а) воронку');
+      const note = renewal ? p.renewalNote : p.note;
+      return `
+        <div class="glass-card-3d p-3.5 space-y-2 text-xs border border-[#81D8D0]">
+          ${who(p)}
+          <div class="text-ink-2 font-semibold">${what}</div>
+          ${note ? `<div class="p-2.5 rounded-xl bg-sunken border border-line text-ink-2 leading-snug"><span class="text-muted">Как оплатил(а):</span> ${esc(note)}</div>` : ''}
+          ${p.priceType !== 'percent' ? '<div class="text-[11px] text-muted">Проверьте поступление на свой счёт, потом подтвердите.</div>' : ''}
+          <input id="sale-reason-${esc(p.id)}" maxlength="300" placeholder="Причина, если не подтверждаете (эксперт увидит)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="SF.funnels.decide('${SF.js(p.id)}', 'confirm')" class="py-2.5 rounded-xl btn-3d-tiffany text-xs">${p.priceType === 'percent' ? 'Согласен(на)' : 'Оплата пришла'}</button>
+            <button onclick="SF.funnels.decide('${SF.js(p.id)}', 'decline')" class="py-2.5 rounded-xl btn-3d-dark text-xs">${p.priceType === 'percent' ? 'Отказать' : 'Не пришла'}</button>
+          </div>
+          <button onclick="SF.openIn('chats', 'person', { id: '${SF.js(p.expert.id)}' })" class="text-[11px] text-brand font-semibold">Написать эксперту →</button>
+        </div>`;
+    }).join('');
+    const activeHtml = active.filter(p => !(p.renewalRequested)).map(p => `
+      <div class="glass-card-3d p-3.5 space-y-1.5 text-xs">
+        ${who(p)}
+        <div class="text-[11px] ${p.expired ? 'text-si' : 'text-emerald-500'} font-semibold">${p.expired ? 'Месяц не продлён' : p.priceType === 'monthly' && p.paidUntil ? `Оплачено до ${fmtDay(p.paidUntil)}` : 'Работает'}</div>
+        ${numbers(p)}
+        ${p.priceType === 'percent' ? `
+          <input id="sale-reason-${esc(p.id)}" maxlength="300" placeholder="Причина, если отключаете (эксперт увидит)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
+          <button onclick="SF.funnels.endPercent('${SF.js(p.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-[11px]">Отключить — процент не оплачен</button>` : ''}
+      </div>`).join('');
+    return `
+      ${SF.sectionTitle('wallet', 'Продажи моих воронок')}
+      ${waitingHtml}
+      ${activeHtml}
+      ${ended.length ? `<div class="text-[11px] text-muted px-1">Отключено: ${ended.length}</div>` : ''}`;
+  }
+
+  // ---------------- The expert: funnels I bought ----------------
+  const PURCHASE_STATUS = (p) => {
+    if (p.status === 'pending') return { label: p.priceType === 'percent' ? 'Ждём согласия автора' : 'Ждём, когда автор подтвердит оплату', cls: 'text-brand' };
+    if (p.status === 'declined') return { label: 'Автор не подтвердил', cls: 'text-si' };
+    if (p.status === 'ended') return { label: 'Отключена автором', cls: 'text-si' };
+    if (p.expired) return { label: 'Месяц не продлён', cls: 'text-si' };
+    if (p.connectedTo) return { label: `Подключена к «${esc(p.connectedTo.name)}»`, cls: 'text-emerald-500' };
+    return { label: 'Оплачена — подключите к SI-продавцу', cls: 'text-brand' };
+  };
+
+  function renderBought() {
+    const data = cache.purchases;
+    if (!data) return waiting('purchases');
+    if (!data.bought.length) {
+      return SF.emptyState('consultant', 'Пока нет купленных воронок', 'Выберите воронку в каталоге: оплатите по ссылке автора, он подтвердит — и вы подключите её к своему SI-продавцу.');
+    }
+    return `<div class="space-y-2.5">${data.bought.map(p => {
+      const st = PURCHASE_STATUS(p);
+      return `
+        <button onclick="SF.push('office-funnel', { id: '${SF.js(p.funnelId)}' })" class="w-full glass-card-3d p-3.5 text-left space-y-1">
+          <span class="block text-sm font-bold text-ink">${esc(p.funnelTitle)}</span>
+          <span class="block text-[11px] text-muted">${esc(p.marketerName)} · ${esc(p.priceLabel)}</span>
+          <span class="block text-[11px] font-semibold ${st.cls}">${st.label}</span>
+        </button>`;
+    }).join('')}</div>`;
+  }
+
+  function fmtDay(value) {
+    const str = String(value || '');
+    const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(str) ? `${str.replace(' ', 'T')}Z` : str);
+    return isNaN(d) ? '' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
   }
 
   // ---------------- One funnel ----------------
@@ -167,11 +260,7 @@
         </div>
         <div class="text-[10px] text-faint">После изменения воронка снова уходит на проверку.</div>
       </div>` : '';
-    const contact = mine ? '' : `
-      <div class="glass-card-3d p-3.5 space-y-2 text-xs">
-        <div class="text-ink-2 leading-snug">Покупка воронки прямо в SmartFlow — скоро. Пока напишите автору здесь, в SmartFlow: он расскажет подробнее и пришлёт ссылку на оплату.</div>
-        <button onclick="SF.funnels.contact('${SF.js(f.id)}')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i> Написать автору</button>
-      </div>`;
+    const contact = mine ? '' : renderBuy(f);
     return `
       ${ownerBlock}
       <div class="glass-card-3d p-4 space-y-3">
@@ -191,12 +280,81 @@
         ${SF.sectionTitle('target', 'Результат')}
         <div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${esc(f.result)}</div>
         <div class="text-[10px] text-faint">Так описывает автор; команда SmartFlow проверила, что обещания честные.</div>
+        ${resultsLine(f.results) ? `<div class="text-[11px] text-brand font-semibold">${resultsLine(f.results)} (настоящие цифры SmartFlow)</div>` : ''}
       </div>
       <div class="glass-card-3d p-4 flex items-center justify-between gap-2 text-xs">
         <span class="text-muted">Стоимость</span><span class="text-right">${priceLine(f)}</span>
       </div>
       ${contact}
     `;
+  }
+
+  // ---------------- Buying and connecting (the expert) ----------------
+  function renderBuy(f) {
+    const p = f.myPurchase;
+    const writeAuthor = `<button onclick="SF.funnels.contact('${SF.js(f.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i> Написать автору</button>`;
+    const percent = f.priceType === 'percent';
+    const payForm = (title, button) => `
+      <div class="glass-card-3d p-4 space-y-2.5 text-xs">
+        ${SF.sectionTitle('wallet', title)}
+        ${percent ? `
+          <div class="text-ink-2 leading-snug">Условия автора: <b>${esc(f.priceLabel)}</b>. Автор будет видеть, сколько клиентов и продаж у вашего SI-продавца на этой воронке (без имён клиентов), и договорится с вами об оплате.</div>
+          <button onclick="SF.funnels.buy('${SF.js(f.id)}')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">${button}</button>` : `
+          <div class="text-ink-2 leading-snug">1. Оплатите автору по его ссылке — деньги идут ему напрямую.</div>
+          ${f.paymentUrl ? `<button onclick="SF.openLink('${SF.js(f.paymentUrl)}')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="external-link" class="w-4 h-4"></i> Оплатить ${esc(f.priceLabel)}</button>` : ''}
+          <div class="text-ink-2 leading-snug">2. Напишите, как и когда оплатили, и нажмите «Я оплатил(а)». Автор проверит поступление и подтвердит.</div>
+          <input id="buy-note-${esc(f.id)}" maxlength="300" placeholder="Например: Kaspi, 21 ноября, с карты на имя Айгерим" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
+          <button onclick="SF.funnels.buy('${SF.js(f.id)}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">${button}</button>
+          <div class="text-[10px] text-faint">Скриншот чека можно отправить автору в переписке.</div>`}
+        ${writeAuthor}
+      </div>`;
+    if (!p || p.status === 'declined' || p.status === 'ended') {
+      const again = p ? `<div class="glass-card-3d p-3.5 text-xs space-y-1"><div class="font-semibold text-si">${p.status === 'ended' ? 'Автор отключил воронку' : 'Автор не подтвердил'}</div>${p.reason ? `<div class="text-ink-2">Причина: ${esc(p.reason)}</div>` : ''}</div>` : '';
+      return again + payForm(percent ? 'Подключить' : 'Купить', percent ? 'Подключить на этих условиях' : 'Я оплатил(а)');
+    }
+    if (p.status === 'pending') {
+      return `<div class="glass-card-3d p-4 space-y-2 text-xs">
+        <div class="font-bold text-brand">${percent ? 'Ждём согласия автора' : 'Ждём, когда автор подтвердит оплату'}</div>
+        <div class="text-[11px] text-ink-2">Мы сообщим у Бадди и в Telegram. Обычно это занимает до дня.</div>
+        ${writeAuthor}
+      </div>`;
+    }
+    // Active: the month, connecting to an SI-seller, own materials
+    const consultants = store().data.office.consultants.filter(c => !c.assisting);
+    const chosen = (p.connectedTo && p.connectedTo.projectId) || (consultants[0] && consultants[0].id);
+    const material = p.steps.filter(st => st.needsMaterial);
+    const month = p.priceType === 'monthly' ? `
+      <div class="text-[11px] ${p.expired ? 'text-si' : 'text-ink-2'}">${p.expired ? 'Оплаченный месяц закончился — SI вернулся к вашей методологии.' : `Оплачено до ${fmtDay(p.paidUntil)}. Не продлите — SI сам вернётся к вашей методологии.`}</div>
+      ${p.renewalRequested ? '<div class="text-[11px] text-brand">Ждём, когда автор подтвердит оплату следующего месяца.</div>' : `
+        <div class="space-y-1.5 pt-1">
+          <div class="text-[11px] text-ink-2">Оплатили следующий месяц? ${f.paymentUrl ? `<button onclick="SF.openLink('${SF.js(f.paymentUrl)}')" class="text-brand font-semibold">Ссылка на оплату</button>` : ''}</div>
+          <input id="buy-note-${esc(f.id)}" maxlength="300" placeholder="Как и когда оплатили" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
+          <button onclick="SF.funnels.buy('${SF.js(f.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-[11px]">Я оплатил(а) следующий месяц</button>
+        </div>`}` : '';
+    const connect = p.expired ? '' : consultants.length ? `
+      <form onsubmit="SF.funnels.apply(event, '${SF.js(p.id)}')" class="space-y-2.5">
+        <label class="block space-y-1">
+          <span class="font-semibold text-ink-2">К какому SI-продавцу подключить</span>
+          <select name="projectId" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            ${consultants.map(c => `<option value="${esc(c.id)}" ${c.id === chosen ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+          </select>
+        </label>
+        ${material.length ? `<div class="text-[11px] text-ink-2 leading-snug">На этих шагах клиент получает материал — добавьте свой (ссылку или текст). Без него SI просто проведёт шаг словами.</div>
+          ${material.map(st => `<label class="block space-y-1"><span class="font-semibold text-ink-2">${esc(st.title)}</span>
+            <input name="m_${esc(st.id)}" maxlength="1000" value="${esc((p.materials || {})[st.id] || '')}" placeholder="https://… или текст" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" /></label>`).join('')}` : ''}
+        <div class="text-[11px] text-muted leading-snug">Оффер, цена, кнопка и SI-мозг остаются вашими. Ваша методология сохранится и снова заработает, если отключить воронку.</div>
+        <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">${p.connectedTo ? 'Сохранить' : 'Подключить'}</button>
+        ${p.connectedTo ? `<button type="button" onclick="SF.funnels.detach('${SF.js(p.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Отключить от «${esc(p.connectedTo.name)}»</button>` : ''}
+      </form>` : '<div class="text-[11px] text-muted">Сначала создайте SI-продавца в Офисе — к нему подключится воронка.</div>';
+    const nums = p.numbers ? `<div class="text-[11px] text-ink-2">С подключения: новых клиентов ${p.numbers.clients}, продаж ${p.numbers.sales}${percent ? ' — эти же цифры видит автор' : ''}</div>` : '';
+    return `
+      <div class="glass-card-3d p-4 space-y-2.5 text-xs">
+        ${SF.sectionTitle('check-circle', p.connectedTo ? `Подключена к «${esc(p.connectedTo.name)}»` : 'Воронка ваша')}
+        ${month}
+        ${nums}
+        ${connect}
+        ${writeAuthor}
+      </div>`;
   }
 
   function plural(n, one, few, many) {
@@ -301,6 +459,81 @@
     }
   }
 
+  async function buy(funnelId) {
+    const input = document.getElementById(`buy-note-${funnelId}`);
+    try {
+      await api().readyFunnels.buy(funnelId, input ? input.value.trim() : '');
+      refresh();
+      showToast('Отправили автору — он подтвердит');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
+  async function decide(pid, decision) {
+    const reason = ((document.getElementById(`sale-reason-${pid}`) || {}).value || '').trim();
+    if (decision === 'decline' && !reason) {
+      showToast('Напишите причину — эксперт её увидит');
+      return;
+    }
+    try {
+      await api().readyFunnels.decide(pid, decision, reason);
+      refresh();
+      showToast(decision === 'confirm' ? 'Подтверждено — эксперт может подключить воронку' : 'Эксперт получит причину');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
+  async function endPercent(pid) {
+    const reason = ((document.getElementById(`sale-reason-${pid}`) || {}).value || '').trim();
+    if (!reason) {
+      showToast('Напишите причину — эксперт её увидит');
+      return;
+    }
+    if (!window.confirm('Отключить воронку у эксперта? Его SI-продавец вернётся к своей методологии.')) return;
+    try {
+      await api().readyFunnels.endPercent(pid, reason);
+      refresh();
+      showToast('Воронка отключена');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
+  async function apply(event, pid) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const materials = {};
+    for (const [k, v] of form.entries()) if (k.startsWith('m_')) materials[k.slice(2)] = String(v).trim();
+    const button = event.target.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      await api().readyFunnels.apply(pid, String(form.get('projectId') || ''), materials);
+      refresh();
+      SF.data.invalidate('office');
+      SF.data.officeLists && SF.data.officeLists(true);
+      showToast('Готово: SI-продавец ведёт клиентов по воронке');
+    } catch (err) {
+      showToast(err.message || 'Не получилось подключить');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function detach(pid) {
+    if (!window.confirm('Отключить воронку? SI-продавец вернётся к вашей методологии.')) return;
+    try {
+      await api().readyFunnels.detach(pid);
+      refresh();
+      SF.data.invalidate('office');
+      SF.data.officeLists && SF.data.officeLists(true);
+      showToast('Отключено — SI работает по вашей методологии');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
   function contact(id) {
     const f = cache[`one:${id}`];
     if (!f) return;
@@ -368,6 +601,7 @@
       const a = api().readyFunnels;
       if (route.screen === 'office-funnels') {
         load('mine', () => a.mine());
+        load('purchases', () => a.purchases());
         if (route.view !== 'mine') load(catalogKey(route), () => a.catalogue(route.q || '', route.niche || ''));
       } else if (route.screen === 'office-funnel' || (route.screen === 'office-funnel-publish' && route.id)) {
         load(`one:${route.id}`, async () => (await a.get(route.id)).funnel);
@@ -376,6 +610,11 @@
     },
     refresh,
     submit,
+    buy,
+    decide,
+    endPercent,
+    apply,
+    detach,
     withdraw,
     contact,
     search,

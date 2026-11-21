@@ -12,6 +12,7 @@ const funnelService = require('./funnel-service');
 const calendarService = require('./calendar-service');
 const { mediaUrl } = require('./media-service');
 const analytics = require('./analytics-service');
+const { settingsOf } = require('./ai-settings');
 
 const DEFAULT_CLIENT_LIMIT = 40;
 const MAX_CLIENT_LIMIT = 500;
@@ -208,7 +209,7 @@ async function handleClientMessage(project, lead, text, voice = null) {
     return { message, reply: null, paused: true };
   }
 
-  const settings = parseJson(project.custom_ai_settings);
+  const settings = settingsOf(project);
   const limit = Math.min(MAX_CLIENT_LIMIT, Number(settings.clientLimit) || DEFAULT_CLIENT_LIMIT);
   const siCount = past.filter(m => m.sender === 'ai').length;
   const lastSi = [...past].reverse().find(m => m.sender === 'ai');
@@ -253,7 +254,7 @@ let altOffersPending = Promise.resolve([]);
 async function analyze(project, lead, past, text) {
   try {
     const lastOther = [...past].reverse().find(m => m.sender !== 'client');
-    const settings = parseJson(project.custom_ai_settings);
+    const settings = settingsOf(project);
     // Only the conditions of the client's step; the steps to see whether the client moved forward
     const conditions = funnelService.customConditions(settings.scenarios, settings.steps, lead.step_id);
     const steps = activeFunnel(lead) ? funnelService.stepsForAnalysis(settings.steps, lead) : null;
@@ -284,13 +285,13 @@ async function applyAnalysis(project, lead, analysis, text) {
       await clientEvent(project, lead, 'refused', CLIENT);
     }
     if (analysis.matched && analysis.matched.length) {
-      const own = funnelService.customConditions(parseJson(project.custom_ai_settings).scenarios);
+      const own = funnelService.customConditions(settingsOf(project).scenarios);
       const texts = own.filter(c => analysis.matched.includes(c.id)).map(c => c.text);
       if (texts.length) await clientEvent(project, lead, 'condition', CLIENT, { matched: analysis.matched, condition: texts.join('; ') });
     }
     // Last: the message was said on the client's step; after it the client goes on to the next one
     if (Number.isInteger(analysis.stepIndex) && activeFunnel(lead)) {
-      const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+      const steps = funnelService.normalizeSteps(settingsOf(project).steps);
       if (steps[analysis.stepIndex] && analysis.stepIndex > funnelService.stepIndexOf(steps, lead.step_id)) {
         await moveToStep(project, lead, steps[analysis.stepIndex].id, SI, { sendMaterial: true });
       }
@@ -322,7 +323,7 @@ async function clientEvent(project, client, type, actor, data = null) {
   const stepBefore = client.step_id;
   const status = await funnelService.recordEvent(client, type, actor, saved);
   if (ACTION_WORDS[type]) await matchActionConditions(project, client, ACTION_WORDS[type]);
-  const settings = parseJson(project.custom_ai_settings);
+  const settings = settingsOf(project);
   // A scenario "только на шаге …" works on the step where the client was when it happened
   const scenarios = funnelService.normalizeScenarios(settings.scenarios)
     .filter(sc => sc.then !== 'si_says' && funnelService.scenarioMatches(sc, type, data || {})
@@ -391,7 +392,7 @@ async function chatTools(project, lead, messages) {
 // The expert's own conditions (and "шаг пройден, когда…") may be about buttons too:
 // the press is checked like a message
 async function matchActionConditions(project, client, words) {
-  const settings = parseJson(project.custom_ai_settings);
+  const settings = settingsOf(project);
   const conditions = funnelService.customConditions(settings.scenarios, settings.steps, client.step_id);
   const steps = activeFunnel(client) ? funnelService.stepsForAnalysis(settings.steps, client) : null;
   if (!conditions.length && !steps) return;
@@ -422,7 +423,7 @@ function activeFunnel(client) {
  * once per step for this client. A person moving a client by hand sends no material.
  */
 async function moveToStep(project, client, stepId, actor, { sendMaterial = false } = {}) {
-  const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+  const steps = funnelService.normalizeSteps(settingsOf(project).steps);
   const step = steps.find(s => s.id === stepId);
   if (!step || (client.step_id || (steps[0] && steps[0].id)) === stepId) return null;
   const material = sendMaterial && step.material && !(await materialSent(client, step.id));
@@ -467,7 +468,7 @@ async function startConversation(project, lead) {
   const opener = await saveMessage(lead, SI, result.text);
   analytics.capture('si_chat_started', lead.external_client_id, { project_id: project.id, business_id: lead.business_id || '', entry: lead.entry || 'link' });
   // The material of the first step of the funnel, right after the hello
-  const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+  const steps = funnelService.normalizeSteps(settingsOf(project).steps);
   if (steps[0] && steps[0].material && !(await materialSent(lead, steps[0].id))) {
     await funnelService.recordEvent(lead, 'step_reached', SI, { stepId: steps[0].id, title: steps[0].title, materialOf: steps[0].id });
     await saveMessage(lead, SI, steps[0].material);

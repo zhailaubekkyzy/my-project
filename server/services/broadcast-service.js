@@ -19,6 +19,7 @@ const funnelService = require('./funnel-service');
 const businessService = require('./business-service');
 const analytics = require('./analytics-service');
 const config = require('../config');
+const { settingsOf } = require('./ai-settings');
 
 const MAX_TEXT = 1000;
 const MAX_REQUEST = 500;
@@ -81,7 +82,7 @@ async function audienceClients(project, audience, limit = 5000) {
   }
   if (audience.stepIds.length) {
     // The first step also holds clients without a step (or with a deleted one)
-    const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+    const steps = funnelService.normalizeSteps(settingsOf(project).steps);
     const first = steps[0] && steps[0].id;
     const others = steps.slice(1).map(s => s.id);
     const parts = [`c.step_id IN (${audience.stepIds.map(() => '?').join(', ')})`];
@@ -110,7 +111,7 @@ async function audienceClients(project, audience, limit = 5000) {
  * How many would get it and the first names (for the expert's preview).
  */
 async function preview(project, rawAudience) {
-  const audience = normalizeAudience(rawAudience, parseJson(project.custom_ai_settings).steps);
+  const audience = normalizeAudience(rawAudience, settingsOf(project).steps);
   const clients = await audienceClients(project, audience);
   return { audience, count: clients.length, sample: clients.slice(0, 5).map(c => c.name || 'Клиент') };
 }
@@ -122,7 +123,7 @@ async function planFromWords(project, request) {
   const words = clean(request, MAX_REQUEST);
   if (!words) throw new BroadcastError('Напишите словами, кому и что отправить.', 400, 'EMPTY');
   if (!siEngine.isConfigured()) return null;
-  const steps = funnelService.normalizeSteps(parseJson(project.custom_ai_settings).steps);
+  const steps = funnelService.normalizeSteps(settingsOf(project).steps);
   const answer = await siEngine.callOpenAI([
     {
       role: 'system',
@@ -198,7 +199,7 @@ async function checkLimits(projectId, now = new Date()) {
  */
 async function start(project, broadcast, ownerId, now = new Date()) {
   await checkLimits(project.id, now);
-  const audience = normalizeAudience(parseJson(broadcast.audience), parseJson(project.custom_ai_settings).steps);
+  const audience = normalizeAudience(parseJson(broadcast.audience), settingsOf(project).steps);
   const clients = await audienceClients(project, audience);
   if (!clients.length) throw new BroadcastError('Под эти условия сейчас не подходит ни один клиент.', 400, 'NOBODY');
   // Taken by this request only (a double tap must not start it twice)
@@ -221,7 +222,7 @@ async function start(project, broadcast, ownerId, now = new Date()) {
 async function create(project, member, { request, audience, text, send = false }, now = new Date()) {
   const body = clean(text, MAX_TEXT);
   if (!body) throw new BroadcastError('Напишите текст рассылки.', 400, 'EMPTY_TEXT');
-  const normalized = normalizeAudience(audience, parseJson(project.custom_ai_settings).steps);
+  const normalized = normalizeAudience(audience, settingsOf(project).steps);
   const assistant = member.role === 'assistant';
   const id = `bct_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   await db.run(

@@ -10,6 +10,8 @@ const analytics = require('../services/analytics-service');
 const supportService = require('../services/support-service');
 const telegramBot = require('../services/telegram-bot');
 const funnels = require('../services/ready-funnel-service');
+const purchases = require('../services/funnel-purchase-service');
+const db = require('../db');
 
 router.use(requireAuth);
 
@@ -28,7 +30,7 @@ function handle(fn) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof funnels.FunnelError) return res.status(err.status).json({ error: err.code, message: err.message });
+      if (err instanceof funnels.FunnelError || err instanceof purchases.PurchaseError) return res.status(err.status).json({ error: err.code, message: err.message });
       next(err);
     }
   };
@@ -50,6 +52,8 @@ async function tellTeam(funnel, isUpdate) {
 /** GET /api/ready-funnels?q=&niche= — the catalogue: published funnels */
 router.get('/', handle(async (req, res) => {
   const result = await funnels.catalogue({ q: req.query.q, niche: req.query.niche });
+  const results = await purchases.resultsFor(result.funnels.map(f => f.id));
+  for (const f of result.funnels) f.results = results[f.id] || null;
   analytics.capture('ready_funnel_catalog_opened', req.user.userId, {
     funnels: result.funnels.length,
     searched: Boolean(String(req.query.q || '').trim() || String(req.query.niche || '').trim())
@@ -62,10 +66,94 @@ router.get('/mine', handle(async (req, res) => {
   res.json({ funnels: await funnels.listMine(req.user.userId), maxPerAuthor: funnels.MAX_PER_AUTHOR, minSteps: funnels.MIN_STEPS });
 }));
 
+// ---------------------------------------------------------------
+// Part 2: buying, the marketer's confirmation, connecting to an SI-seller (migration 027)
+// ---------------------------------------------------------------
+async function nameOfUser(userId) {
+  return purchases.nameOf(await db.get('SELECT display_name, profile FROM users WHERE id = ?', [userId])) || 'Эксперт';
+}
+
+function notify(userId, text, startParam) {
+  telegramBot.notifyUser(userId, text, { buttonText: 'Открыть', startParam })
+    .catch(err => console.warn('[SmartFlow Funnels] not notified:', err.message));
+}
+
+/** GET /api/ready-funnels/purchases — what I bought and who bought mine */
+router.get('/purchases', handle(async (req, res) => {
+  res.json({
+    bought: await purchases.listForExpert(req.user.userId),
+    sales: await purchases.listForMarketer(req.user.userId),
+    waiting: await purchases.waitingForMarketer(req.user.userId)
+  });
+}));
+
+/** POST /api/ready-funnels/purchases/:pid/decision { decision: confirm|decline, reason } — the marketer */
+router.post('/purchases/:pid/decision', handle(async (req, res) => {
+  const decision = String((req.body || {}).decision || '');
+  const { row, renewal } = await purchases.decide(req.user.userId, req.params.pid, decision, (req.body || {}).reason);
+  analytics.capture('ready_funnel_purchase_decided', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, decision, renewal });
+  const marketer = await nameOfUser(req.user.userId);
+  const title = `«${row.funnel_title}»`;
+  let text;
+  if (decision === 'confirm') {
+    text = renewal
+      ? `✅ ${marketer} подтвердил(а) оплату следующего месяца воронки ${title}. Воронка работает дальше.`
+      : row.price_type === 'percent'
+        ? `✅ ${marketer} согласен(на) подключить воронку ${title} на условиях «${row.price_label}». Подключите её к своему SI-продавцу: Офис → «Готовые воронки» → «Купленные».`
+        : `✅ ${marketer} подтвердил(а) оплату воронки ${title}. Подключите её к своему SI-продавцу: Офис → «Готовые воронки» → «Купленные».`;
+  } else {
+    text = `${marketer} пока не подтвердил(а) ${renewal ? 'оплату следующего месяца' : 'оплату'} воронки ${title}.\n\nПричина: ${row.reason}\n\nНапишите автору в SmartFlow, чтобы разобраться.`;
+  }
+  notify(row.expert_id, text, `F_${row.funnel_id}`);
+  res.json({ purchase: await purchases.toPurchase(row, 'marketer') });
+}));
+
+/** POST /api/ready-funnels/purchases/:pid/end { reason } — the marketer stops a percentage */
+router.post('/purchases/:pid/end', handle(async (req, res) => {
+  const row = await purchases.endPercent(req.user.userId, req.params.pid, (req.body || {}).reason);
+  analytics.capture('ready_funnel_percent_ended', req.user.userId, { funnel_id: row.funnel_id });
+  notify(row.expert_id, `${await nameOfUser(req.user.userId)} отключил(а) воронку «${row.funnel_title}».\n\nПричина: ${row.reason}\n\nВаш SI-продавец снова работает по вашей методологии.`, `F_${row.funnel_id}`);
+  res.json({ purchase: await purchases.toPurchase(row, 'marketer') });
+}));
+
+/** POST /api/ready-funnels/purchases/:pid/apply { projectId, materials: { stepId: text } } — the expert */
+router.post('/purchases/:pid/apply', handle(async (req, res) => {
+  const body = req.body || {};
+  const { row, first, moved } = await purchases.apply(req.user.userId, req.params.pid, body.projectId, body.materials);
+  if (first || moved) analytics.capture('ready_funnel_applied', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, project_id: row.project_id, moved });
+  res.json({ purchase: await purchases.toPurchase(row, 'expert') });
+}));
+
+/** POST /api/ready-funnels/purchases/:pid/detach — the expert switches the funnel off */
+router.post('/purchases/:pid/detach', handle(async (req, res) => {
+  const row = await purchases.detach(req.user.userId, req.params.pid);
+  analytics.capture('ready_funnel_detached', req.user.userId, { funnel_id: row.funnel_id });
+  res.json({ purchase: await purchases.toPurchase(row, 'expert') });
+}));
+
+/**
+ * POST /api/ready-funnels/:id/buy { note } — the expert paid by the author's link (or asks to connect
+ * on a percentage); a monthly one that is already active — the next month. The author confirms.
+ */
+router.post('/:id/buy', handle(async (req, res) => {
+  const { row, renewal } = await purchases.requestPurchase(req.user.userId, req.params.id, (req.body || {}).note);
+  analytics.capture('ready_funnel_purchase_requested', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, renewal });
+  const expert = await nameOfUser(req.user.userId);
+  const what = row.price_type === 'percent'
+    ? `хочет подключить вашу воронку «${row.funnel_title}» на условиях «${row.price_label}»`
+    : `оплатил(а) ${renewal ? 'следующий месяц воронки' : 'воронку'} «${row.funnel_title}» (${row.price_label})`;
+  const note = renewal ? row.renewal_note : row.note;
+  notify(row.marketer_id, `💳 ${expert} ${what}.${note ? `\n\nКомментарий: ${note}` : ''}\n\n${row.price_type === 'percent' ? 'Согласитесь или откажите' : 'Проверьте поступление и подтвердите'}: Офис → «Готовые воронки» → «Мои воронки».`, 'FSALES');
+  res.status(201).json({ purchase: await purchases.toPurchase(row, 'expert') });
+}));
+
 /** GET /api/ready-funnels/:id — one funnel (published, or the author's own) */
 router.get('/:id', handle(async (req, res) => {
-  const funnel = await funnels.getForUser(req.user.userId, req.params.id);
+  let funnel = await funnels.getForUser(req.user.userId, req.params.id);
+  if (!funnel && await purchases.mineFor(req.user.userId, req.params.id)) funnel = await funnels.getBought(req.params.id);
   if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Воронка не найдена или снята с публикации' });
+  funnel.myPurchase = await purchases.mineFor(req.user.userId, funnel.id);
+  funnel.results = (await purchases.resultsFor([funnel.id]))[funnel.id] || null;
   if (funnel.author.id !== req.user.userId) {
     analytics.capture('ready_funnel_viewed', req.user.userId, { funnel_id: funnel.id, price_type: funnel.priceType, steps: funnel.steps.length });
   }

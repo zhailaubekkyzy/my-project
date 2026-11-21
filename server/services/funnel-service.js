@@ -518,11 +518,9 @@ async function clientsOnStep(project, stepId, { offset = 0, days } = {}) {
   );
 }
 
+// The settings the SI follows now (a connected ready-made funnel or the expert's own methodology)
 function parseSettings(project) {
-  const raw = project && project.custom_ai_settings;
-  if (!raw) return {};
-  if (typeof raw === 'object') return raw;
-  try { return JSON.parse(raw) || {}; } catch (e) { return {}; }
+  return require('./ai-settings').settingsOf(project);
 }
 
 module.exports = {
