@@ -144,7 +144,7 @@
       <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
         ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
         <div class="max-w-[80%] min-w-0">
-          <div ${menu} class="${m.mine ? 'chat-bubble-mine' : `chat-bubble-person ${tone}`} ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
+          <div ${menu} class="${m.mine ? 'chat-bubble-mine ml-auto' : `chat-bubble-person ${tone}`} !max-w-full w-fit ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
             ${m.mine ? '' : `<div class="text-[10px] font-bold person-name ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>`}
             ${quoteBlock(m.replyTo, m.mine)}
             ${messageBody(groupId, m)}
