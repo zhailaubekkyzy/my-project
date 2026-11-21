@@ -2216,7 +2216,7 @@ async function runAllTests() {
     const posthog = [];
     analytics._setClientForTests({ capture: (e) => posthog.push(e) });
     try {
-      const tg = { id: 700065, first_name: 'Динара', last_name: 'Тайнова', username: 'dinara_secret' };
+      const tg = { id: 700065, first_name: 'Клиент', last_name: 'Тестовый', username: 'test_client_secret' };
       const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg) });
       assert.strictEqual(login.status, 200);
       const token = login.body.token;
@@ -2239,7 +2239,7 @@ async function runAllTests() {
       assert.strictEqual(new Set(sent.map(e => e.insert_id)).size, sent.length, 'Every event has its own insert_id');
 
       const all = JSON.stringify(sent);
-      for (const secret of ['Динара', 'Тайнова', 'dinara_secret', '700065', '+77019876543', user.id, '$process_person_profile']) {
+      for (const secret of ['Клиент', 'Тестовый', 'test_client_secret', '700065', '+77019876543', user.id, '$process_person_profile']) {
         assert(!all.includes(secret), `No personal data / PostHog-only fields: ${secret}`);
       }
       const buy = sent.find(e => e.event_type === 'funnel_buy_clicked');
@@ -2925,7 +2925,7 @@ async function runAllTests() {
   });
 
   await test('69. Быстрый старт: SI-продавец по цели за минуту, проверка «как клиент» не путается с клиентами', async () => {
-    const token = await tokenFor({ id: 690001, first_name: 'Динара', last_name: 'Ким' });
+    const token = await tokenFor({ id: 690001, first_name: 'Эксперт', last_name: 'Тестовый' });
     const qs = (body) => api('POST', '/api/projects/quick-start', token, body);
     assert.strictEqual((await qs({ goal: 'nope', about: 'коуч', offer: 'x' })).status, 400, 'Unknown goal');
     assert.strictEqual((await qs({ goal: 'sell', about: '', offer: 'x' })).status, 400, 'About is required');
@@ -2945,7 +2945,7 @@ async function runAllTests() {
       const row = await db.get('SELECT * FROM projects WHERE id = ?', [res.body.id]);
       made[goal] = row;
       const settings = JSON.parse(row.custom_ai_settings);
-      assert.strictEqual(row.name, 'Динара · нутрициолог');
+      assert.strictEqual(row.name, 'Эксперт · нутрициолог');
       assert.strictEqual(row.offer, 'План питания на 4 недели');
       assert.strictEqual(row.cta_kind, expect[goal].cta);
       assert.strictEqual(row.price_mode, expect[goal].price);
