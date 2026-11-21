@@ -33,7 +33,8 @@ async function saveInApp(userId, text, startParam) {
  * app on startParam. Texts for clients may come as { ru, en } (the person's language decides).
  * Returns true if at least one channel delivered it to the phone. Never throws.
  */
-async function notifyUser(userId, rawText, { buttonText = 'Открыть в SmartFlow', startParam } = {}) {
+// phone: false — only in Buddy (e.g. a burst of reactions: the phone hears about the first one)
+async function notifyUser(userId, rawText, { buttonText = 'Открыть в SmartFlow', startParam, phone = true } = {}) {
   let text = rawText;
   let button = buttonText;
   try {
@@ -47,7 +48,7 @@ async function notifyUser(userId, rawText, { buttonText = 'Открыть в Sma
     button = pick(buttonText, 'ru');
   }
   await saveInApp(userId, text, startParam);
-  if (!userId) return false;
+  if (!userId || !phone) return false;
 
   let delivered = false;
   for (const channel of CHANNELS) {

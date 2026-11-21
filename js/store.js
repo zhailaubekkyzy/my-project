@@ -73,6 +73,8 @@ const defaultData = {
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
     peopleChats: null,       // my conversations with people (Chats tab)
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
+    groups: null,            // my group conversations and invitations (Chats tab)
+    groupThreads: {},        // { [groupId]: { group, members, messages, pinned, invitedBy } }
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
     cardReviews: {},         // { [projectId]: { count, average, reviews } } отзывы на карточке

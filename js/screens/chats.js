@@ -1,5 +1,6 @@
 // screens/chats.js - Chats: with SI-consultants (soft red) and with people (Tiffany).
-// People find anyone in SmartFlow with the search at the top and write right here (screen 'person').
+// People find anyone in SmartFlow with the search at the top and write right here (screen 'person');
+// group conversations — screens/groups.js (screens 'group…').
 // Real data from the server (js/data.js): my chats as a client, messages, SI replies.
 // A chat opens by the consultant's link: t.me/smartflow_ai_support_bot/app?startapp=<slug>.
 
@@ -77,10 +78,13 @@
     const lastAssistant = assistantList[assistantList.length - 1];
     const q = norm(searchQuery.replace(/^@/, ''));
     const searchBox = SF.data.signedIn() ? `
-      <div class="relative">
-        <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
-        <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека: имя, @ник, чем занимается" autocomplete="off"
-          class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1 min-w-0">
+          <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека: имя, @ник, чем занимается" autocomplete="off"
+            class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        </div>
+        <button onclick="SF.actions.newGroup()" class="flex-shrink-0 px-3 py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center gap-1" aria-label="Новая группа"><i data-lucide="users" class="w-4 h-4"></i>Группа</button>
       </div>` : '';
 
     // One list, newest first: SI-sellers and people together
@@ -93,7 +97,8 @@
         preview: stripPrefix(c.lastMessage),
         unread: SF.data.isUnread(state, c)
       }) })),
-      ...people.map(c => ({ at: c.lastActivity, title: c.person.displayName, username: c.person.username, html: () => personRow(c) }))
+      ...people.map(c => ({ at: c.lastActivity, title: c.person.displayName, username: c.person.username, html: () => personRow(c) })),
+      ...(state.remote.groups || []).map(g => ({ at: g.lastActivity, title: g.name, html: () => SF.groups.listRow(g) }))
     ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
 
     if (q.length >= 2 || q.length === 1) {
@@ -132,7 +137,7 @@
         ${chats && !items.length ? `
           <div class="glass-card-3d p-4 space-y-2 text-center">
             <div class="text-sm font-bold text-ink">Пока нет переписок</div>
-            <div class="text-xs text-muted leading-relaxed">Найдите человека по имени в поиске выше — и напишите ему. Или найдите SI-продавца в Маркетплейсе.</div>
+            <div class="text-xs text-muted leading-relaxed">Найдите человека по имени в поиске выше — и напишите ему, или создайте группу. Или найдите SI-продавца в Маркетплейсе.</div>
             <button onclick="SF.go('marketplace')" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs">Открыть Маркетплейс</button>
           </div>` : ''}
         ${row({
@@ -253,9 +258,10 @@
 
   // Recording a voice (1.5 min) or a round video (30 s): a small window over the screen, so new
   // messages arriving meanwhile do not interrupt it. The limit is a quiet timer.
+  // Shared by private conversations and groups (screens/groups.js): onDone(blob, seconds).
   let personRec = null;
-  SF.actions.recordPerson = async (userId, kind) => {
-    if (personRec || sending || !window.sfMedia) return;
+  SF.recordClip = async (kind, onDone) => {
+    if (personRec || !window.sfMedia) return;
     const max = kind === 'video' ? 30 : 90;
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4';
@@ -271,6 +277,7 @@
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    if (SF.translateDom) SF.translateDom(overlay);
     const timerEl = overlay.querySelector('[data-rec-timer]');
     const close = () => { overlay.remove(); personRec = null; };
     const finish = async () => {
@@ -278,7 +285,7 @@
       personRec.finishing = true;
       const result = await personRec.controller.stop();
       close();
-      if (result && result.blob.size) await sendPersonFile(userId, kind, result.blob, result.seconds);
+      if (result && result.blob.size) await onDone(result.blob, result.seconds);
     };
     try {
       const options = {
@@ -299,6 +306,11 @@
     }
     overlay.querySelector('[data-rec-cancel]').onclick = () => { if (personRec) personRec.controller.cancel(); close(); };
     overlay.querySelector('[data-rec-send]').onclick = finish;
+  };
+
+  SF.actions.recordPerson = (userId, kind) => {
+    if (sending) return;
+    SF.recordClip(kind, (blob, seconds) => sendPersonFile(userId, kind, blob, seconds));
   };
 
   function renderPerson(state, userId) {
@@ -1089,6 +1101,7 @@
   // ---------------- Screen ----------------
   SF.screens.chats = {
     title(route, state) {
+      if (SF.groups.owns(route.screen)) return SF.groups.title(route, state);
       if (route.screen === 'person') return state.remote.personThreads[route.id]?.person?.displayName || 'Переписка';
       if (route.screen !== 'chat') return 'Чаты';
       if (route.slug === ASSISTANT) return 'Поддержка';
@@ -1096,11 +1109,16 @@
       return card ? card.name : 'Чат';
     },
     render(route, state) {
+      if (SF.groups.owns(route.screen)) return SF.groups.render(route, state);
       if (route.screen === 'person') return renderPerson(state, route.id);
       if (route.screen !== 'chat') return renderList(state);
       return route.slug === ASSISTANT ? renderAssistant(state) : renderChat(state, route.slug);
     },
     afterRender(route, state) {
+      if (SF.groups.owns(route.screen)) {
+        SF.groups.afterRender(route, state);
+        return;
+      }
       if (route.screen === 'person') {
         const userId = route.id;
         SF.data.personMessages(userId);
@@ -1115,6 +1133,7 @@
       if (route.screen !== 'chat') {
         SF.data.myChats();
         SF.data.peopleChats();
+        SF.data.groups();
         SF.data.myFeedback(60000);
         return;
       }

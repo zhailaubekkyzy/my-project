@@ -222,6 +222,8 @@ SF.openIn = (tab, screen, params = {}) => {
 //   F_<funnelId>    → a ready-made funnel in the Office (the team's decision for its author)
 //   FREVIEW         → funnels waiting for the team's review (support panel)
 //   FSALES          → «Мои воронки»: purchases of my funnels waiting for my confirmation
+//   G_<groupId>     → a group conversation in «Чаты» (bot notifications about it)
+//   J_<code>        → an invitation link to a group: «Вступить»
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
@@ -239,6 +241,10 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'office', { section: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
+  } else if (param.startsWith('G_')) {
+    SF.openIn('chats', 'group', { id: param.slice(2) });
+  } else if (param.startsWith('J_')) {
+    SF.openIn('chats', 'group-join', { code: param.slice(2) });
   } else if (param.startsWith('U_')) {
     SF.openIn('chats', 'person', { id: param.slice(2) });
   } else if (param === 'CAL') {
@@ -296,6 +302,7 @@ function renderApp(state) {
   let title = '';
   let content = '';
   try {
+    // Titles are plain text and may hold names people chose: always escaped here
     title = screen.title ? screen.title(route, state) : '';
     content = screen.render(route, state);
   } catch (err) {
@@ -304,7 +311,7 @@ function renderApp(state) {
   }
   const canGoBack = stack.length > 1;
   // Conversations fill the screen down to the input (on tall phones and iPad the input stayed mid-screen)
-  const isChatScreen = state.ui.tab === 'chats' && ['chat', 'person'].includes(route.screen);
+  const isChatScreen = state.ui.tab === 'chats' && ['chat', 'person', 'group'].includes(route.screen);
 
   container.innerHTML = `
     ${state.auth?.status === 'expired' ? renderSessionExpired() : ''}
@@ -319,7 +326,7 @@ function renderApp(state) {
             </button>
           ` : `<img src="images/logo-mark.webp" alt="SmartFlow" width="28" height="28" class="w-7 h-7" />`}
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-bold text-ink truncate">${title}</div>
+            <div class="text-sm font-bold text-ink truncate">${SF.esc(title)}</div>
           </div>
           <button onclick="SF.go('profile')" class="flex-shrink-0" aria-label="Профиль">
             ${SF.avatar(state.me.photoUrl, { size: 30, kind: 'human', userId: state.me.id })}
@@ -348,15 +355,16 @@ function renderApp(state) {
   lastRouteKey = routeKey;
 
   syncTelegramBackButton(canGoBack);
-  if (!(tab === 'chats' && (route.screen === 'chat' || route.screen === 'person')) && !(tab === 'marketplace' && route.screen === 'office-client')) {
+  if (!(tab === 'chats' && ['chat', 'person', 'group'].includes(route.screen)) && !(tab === 'marketplace' && route.screen === 'office-client')) {
     SF.data.stopPolling();
   }
   try {
     if (screen.afterRender) screen.afterRender(route, state);
     // The red dot on Buddy stays fresh on every screen (a request at most once a minute)
     if (SF.data.notifications) SF.data.notifications(60000);
-    // Messages from people: the number on «Чаты» stays fresh too
+    // Messages from people and groups: the number on «Чаты» stays fresh too
     if (SF.data.peopleChats) SF.data.peopleChats(60000);
+    if (SF.data.groups) SF.data.groups(60000);
   } catch (err) {
     console.error('[SmartFlow] afterRender failed:', err);
     SF.reportAppError(err, `afterRender ${tab}/${route.screen}`);
@@ -372,7 +380,8 @@ function renderApp(state) {
 function renderBottomNav(state) {
   const badges = {
     chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length +
-      (state.remote.peopleChats || []).filter(c => c.unread || c.needsMyAnswer).length
+      (state.remote.peopleChats || []).filter(c => c.unread || c.needsMyAnswer).length +
+      (SF.groups ? SF.groups.unreadCount(state) : 0)
   };
   // Red dot on Buddy: there are unread notifications
   const buddyUnread = Boolean(state.remote.notifications && state.remote.notifications.unread);
