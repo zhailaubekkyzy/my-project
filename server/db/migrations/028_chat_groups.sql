@@ -5,8 +5,9 @@
 --    there is also an invitation link (invite_code);
 --  - roles: owner (one), admin (up to 2), member;
 --  - text, voice (1.5 min), photo, round video (30 s), a reply to a message, one pinned message;
---  - reactions; the author of the message gets a notification about them;
---  - the only SI here: a short summary of the conversation on request.
+--  - reactions and mentions (@name, a reply to my message): no notification about a reaction; inside the
+--    group marks on the right lead to where I was mentioned or got a reaction (marks_seen_at);
+--  - the only SI here: «Кратко» — a short summary of what I missed (from unread_from) on request.
 -- Works on SQLite and PostgreSQL.
 
 -- changed_at moves on any change people should see at once (message, reaction, pin, members):
@@ -29,6 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_chat_groups_owner ON chat_groups(owner_id, create
 -- status: invited (waiting for «Вступить») | active | removed (by an admin: cannot come back by the link)
 -- notified_at: told about new messages and has not opened the group since (one notification per unread run;
 -- cleared when the person opens the group or writes there)
+-- unread_from: where the person stopped last time there was something new («Кратко» starts here)
+-- marks_seen_at: until when the person has seen the marks «@ / reaction» on the right of the group
 CREATE TABLE IF NOT EXISTS chat_group_members (
   group_id TEXT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -38,6 +41,8 @@ CREATE TABLE IF NOT EXISTS chat_group_members (
   muted INTEGER NOT NULL DEFAULT 0,
   read_at TIMESTAMP,
   notified_at TIMESTAMP,
+  unread_from TIMESTAMP,
+  marks_seen_at TIMESTAMP,
   joined_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (group_id, user_id)
@@ -83,6 +88,16 @@ CREATE TABLE IF NOT EXISTS chat_group_reactions (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_group_reactions_group ON chat_group_reactions(group_id);
 
+-- Who is mentioned in a message (@name picked from the members); a reply counts as a mention too
+CREATE TABLE IF NOT EXISTS chat_group_mentions (
+  message_id TEXT NOT NULL REFERENCES chat_group_messages(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (message_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_group_mentions_user ON chat_group_mentions(user_id, group_id, created_at);
+
 -- «Кратко» by SI: when a person asked (a daily limit protects the OpenAI bill)
 CREATE TABLE IF NOT EXISTS chat_group_summaries (
   id TEXT PRIMARY KEY,
@@ -99,4 +114,5 @@ ALTER TABLE chat_group_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_group_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_group_reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_group_summaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_group_mentions ENABLE ROW LEVEL SECURITY;
 -- postgres-only:end

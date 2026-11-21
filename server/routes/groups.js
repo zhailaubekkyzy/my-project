@@ -40,8 +40,8 @@ router.post('/join/:code', handle((req) => groupService.joinByCode(me(req), req.
 /** GET /api/groups/:id — the group: messages, members, the pinned message (marks it read) */
 router.get('/:id', handle((req) => groupService.conversation(me(req), req.params.id)));
 
-/** POST /api/groups/:id/messages  { text, replyTo } */
-router.post('/:id/messages', handle((req) => groupService.send(me(req), req.params.id, body(req).text, null, body(req).replyTo), 201));
+/** POST /api/groups/:id/messages  { text, replyTo, mentionIds: [] } */
+router.post('/:id/messages', handle((req) => groupService.send(me(req), req.params.id, body(req).text, null, body(req).replyTo, body(req).mentionIds), 201));
 
 /** POST /api/groups/:id/files?kind=voice|photo|video&seconds=18&replyTo=…  (body: the file itself) */
 router.post('/:id/files', readDmFileBody, handle((req) => groupService.send(
@@ -101,7 +101,7 @@ router.post('/:id/leave', handle((req) => groupService.leave(me(req), req.params
 /** POST /api/groups/:id/report  { messageId, reason } — the complaint goes to the support team */
 router.post('/:id/report', handle((req) => groupService.report(me(req), req.params.id, body(req).messageId || null, body(req).reason)));
 
-/** POST /api/groups/:id/summary  { since } — «Кратко» by SI */
-router.post('/:id/summary', handle((req) => groupService.summary(me(req), req.params.id, body(req).since || null)));
+/** POST /api/groups/:id/summary — «Кратко» by SI: what I missed since where I stopped */
+router.post('/:id/summary', handle((req) => groupService.summary(me(req), req.params.id)));
 
 module.exports = router;

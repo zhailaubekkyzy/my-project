@@ -3262,7 +3262,7 @@ async function runAllTests() {
     }
   });
 
-  await test('73. Группы в Чатах: приглашение, ссылка, роли, ответ, закреп, реакции с уведомлением, «Кратко» от SI', async () => {
+  await test('73. Группы в Чатах: приглашение, ссылка, роли, ответ, закреп, реакции и отметки, упоминания, «Кратко» с места остановки', async () => {
     const analytics = require('../server/services/analytics-service');
     const sent = [];
     analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
@@ -3312,10 +3312,16 @@ async function runAllTests() {
       await api('PUT', `/api/groups/${gid}/pin`, owner, { messageId: first.body.messageId });
       assert.strictEqual((await api('GET', `/api/groups/${gid}`, bob)).body.pinned.id, first.body.messageId);
 
-      // Reactions: the author gets a notification; the same emoji again takes it back
+      // Reactions: no notification; the author sees a mark when opening the group (once)
       assert.strictEqual((await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '💩' })).status, 400);
+      const ownerNotes = (await notes(ownerId)).length;
       await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '❤️' });
-      assert((await notes(ownerId)).some(n => n.text.startsWith('❤️') && n.text.includes('Йога по утрам')), 'The author sees the reaction in Buddy');
+      assert.strictEqual((await notes(ownerId)).length, ownerNotes, 'No notification about a reaction');
+      assert.strictEqual((await api('GET', '/api/groups', owner)).body.groups[0].reacted, true, 'A mark in the list');
+      const opened = (await api('GET', `/api/groups/${gid}`, owner)).body;
+      assert.deepStrictEqual(opened.marks.reactions, [first.body.messageId], 'A mark on the right leads to the message');
+      assert.deepStrictEqual(opened.marks.mentions, [], 'The reply was already seen when the owner opened the group');
+      assert.deepStrictEqual((await api('GET', `/api/groups/${gid}`, owner)).body.marks, { mentions: [], reactions: [] }, 'Seen once');
       let msg = (await api('GET', `/api/groups/${gid}`, owner)).body.messages.find(m => m.id === first.body.messageId);
       assert.deepStrictEqual(msg.reactions, [{ emoji: '❤️', count: 1, mine: false }]);
       await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '❤️' });
@@ -3342,12 +3348,20 @@ async function runAllTests() {
       assert.strictEqual(gone.deleted, true);
       assert.strictEqual(gone.text, '');
 
-      // Mute: no more message notifications
+      // Mute: no more message notifications — but a mention still comes
       await api('GET', `/api/groups/${gid}`, bob);
       await api('PUT', `/api/groups/${gid}/mute`, bob, { muted: true });
       const before = (await notes(bobId)).length;
       await api('POST', `/api/groups/${gid}/messages`, owner, { text: 'Тишина?' });
       assert.strictEqual((await notes(bobId)).length, before, 'Muted');
+      await api('POST', `/api/groups/${gid}/messages`, owner, { text: '@Бахыт, ты завтра будешь?', mentionIds: [bobId, 'usr_nobody', ownerId] });
+      assert((await notes(bobId)).some(n => n.text.includes('упомянул(а) вас')), 'A mention comes even when muted');
+      const bobView = (await api('GET', `/api/groups/${gid}`, bob)).body;
+      assert.strictEqual(bobView.marks.mentions.length, 1, 'The mention mark');
+      assert(bobView.newFrom, '«Новые сообщения» from where Bob stopped');
+      assert.strictEqual(bobView.missed, 2);
+      const bobReply = await api('POST', `/api/groups/${gid}/messages`, bob, { text: 'Буду', replyTo: (await api('GET', `/api/groups/${gid}`, bob)).body.messages.at(-1).id });
+      assert.deepStrictEqual((await api('GET', `/api/groups/${gid}`, owner)).body.marks.mentions, [bobReply.body.messageId], 'A reply to my message counts as a mention');
 
       // «Кратко» by SI: needs a key and enough messages
       config.openaiApiKey = '';
@@ -3361,13 +3375,18 @@ async function runAllTests() {
         }
         return realFetch(url, options);
       };
-      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 409, 'Too few messages');
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 409, 'Too few missed');
       for (const t of ['раз', 'два', 'три']) await api('POST', `/api/groups/${gid}/messages`, owner, { text: t });
+      await api('GET', `/api/groups/${gid}`, bob);
       const summary = await api('POST', `/api/groups/${gid}/summary`, bob, {});
       assert.strictEqual(summary.status, 200);
       assert.strictEqual(summary.body.summary, '• Договорились о йоге в 7:00');
-      assert(toOpenAI.messages[1].content.includes('Возьмите коврики'), 'The conversation is summarised');
-      assert(!toOpenAI.messages[1].content.includes('Завтра в 7:00'), 'Deleted messages are left out');
+      assert(toOpenAI.messages[1].content.includes('три'), 'What Bob missed is summarised');
+      assert(!toOpenAI.messages[1].content.includes('Возьмите коврики'), 'Not what Bob had already read');
+      assert.strictEqual(toOpenAI.model, config.groupSummaryModel, 'Its own model, not Buddy’s');
+      // Opening again with nothing new: «Кратко» still retells the same missed part
+      await api('GET', `/api/groups/${gid}`, bob);
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 200);
 
       // Leaving: the owner's role passes on
       await api('POST', `/api/groups/${gid}/leave`, owner);

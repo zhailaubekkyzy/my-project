@@ -7,8 +7,10 @@
 //   group-info  { id }    photo, name, link, members, «Без звука», leave, complaint
 //   group-add   { id }    add people (the owner or an admin)
 //   group-join  { code }  an invitation link: t.me/<bot>/app?startapp=J_<code>
-// Messages: text, voice (1.5 min), photo, round video (30 s), a reply, reactions, one pinned message.
-// The only SI here: «Кратко» — a short summary on request (server/services/group-service.js).
+// Messages: text, voice (1.5 min), photo, round video (30 s), a reply, @mentions, reactions, one pinned message.
+// No notification about reactions: marks on the right («@» and ❤️) lead to where I was mentioned or got a reaction.
+// «Новые сообщения» shows where I stopped; «Кратко» — the only SI here — retells what I missed from that place,
+// on request only (server/services/group-service.js). People: a tap on a person opens their profile.
 
 (function (window) {
   const SF = window.SF;
@@ -17,6 +19,28 @@
   const api = () => window.smartFlowApi;
   let sending = false;
   let replyTo = null; // { groupId, id, senderName, text }
+  // This visit of a group: where I stopped («Новые сообщения») and the marks on the right. The server
+  // tells them once per visit (opening marks them seen), so they are kept here until I tap them.
+  let visit = { groupId: null, newFrom: null, mentions: [], reactions: [], done: new Set(), scrolled: false };
+  let mentionPick = []; // [{ id, name }] picked from the members while typing «@»
+
+  function startVisit(groupId) {
+    visit = { groupId, newFrom: null, mentions: [], reactions: [], done: new Set(), scrolled: false };
+    mentionPick = [];
+    // The copy kept on the phone holds the last visit's marks: only the fresh answer counts
+    const cached = store().data.remote.groupThreads[groupId];
+    if (cached) { cached.newFrom = null; cached.marks = null; }
+    SF.data.invalidate(`group:${groupId}`);
+  }
+
+  // What each server answer adds to this visit (polling brings new marks while the group is open)
+  function takeMarks(groupId, data) {
+    if (visit.groupId !== groupId || !data) return;
+    if (data.newFrom && !visit.newFrom) visit.newFrom = data.newFrom;
+    const add = (list, ids) => (ids || []).forEach(id => { if (!list.includes(id) && !visit.done.has(id)) list.push(id); });
+    add(visit.mentions, data.marks && data.marks.mentions);
+    add(visit.reactions, data.marks && data.marks.reactions);
+  }
 
   const isAdmin = (g) => g && ['owner', 'admin'].includes(g.role);
   const msgTime = (iso) => (iso ? new Date(iso).toLocaleTimeString(SF.locale(), { hour: '2-digit', minute: '2-digit' }) : '');
@@ -43,11 +67,16 @@
           <span class="flex items-center gap-1 text-sm font-bold text-ink min-w-0"><span class="truncate">${SF.esc(g.name)}</span>${g.muted ? '<span class="text-[10px] text-faint">🔕</span>' : ''}</span>
           <span class="block text-[11px] text-muted truncate">${SF.esc(preview)}</span>
         </span>
+        ${g.mentioned ? '<span class="text-xs font-bold text-brand">@</span>' : ''}
+        ${g.reacted ? '<span class="text-xs">❤️</span>' : ''}
         ${g.unread || g.invited ? '<span class="w-2.5 h-2.5 rounded-full bg-[#81D8D0]"></span>' : ''}
       </button>`;
   }
 
-  SF.actions.openGroup = (groupId) => SF.openIn('chats', 'group', { id: groupId });
+  SF.actions.openGroup = (groupId) => {
+    startVisit(groupId);
+    SF.openIn('chats', 'group', { id: groupId });
+  };
   SF.actions.newGroup = () => {
     if (!SF.data.signedIn()) return showToast('Откройте приложение в Telegram, чтобы создать группу');
     picker = { selected: new Map(), query: '', results: null };
@@ -96,7 +125,7 @@
       const src = fileUrls.get(m.fileId) ? `src="${fileUrls.get(m.fileId)}"` : '';
       return `
         <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
-          ${m.mine ? '' : `<span class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</span>`}
+          ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
           <div class="flex flex-col items-center">
             ${m.mine ? '' : `<div class="text-[10px] font-bold text-brand self-start">${SF.esc(m.sender.displayName)}</div>`}
             <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
@@ -108,7 +137,7 @@
     }
     return `
       <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
-        ${m.mine ? '' : `<button onclick="SF.actions.openPerson('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
+        ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
         <div class="max-w-[80%] min-w-0">
           <div ${menu} class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'} ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
             ${m.mine ? '' : `<div class="text-[10px] font-bold text-brand ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>`}
@@ -134,6 +163,22 @@
       }
     });
   }
+
+  // A person: their profile (writing to them is there)
+  SF.actions.openPersonProfile = (userId) => {
+    if (userId === store().data.me.id) return SF.go('profile');
+    SF.openIn('marketplace', 'person', { id: userId });
+  };
+
+  // A mark on the right: to the next place where I was mentioned or got a reaction
+  SF.actions.nextGroupMark = (kind) => {
+    const list = kind === 'reactions' ? visit.reactions : visit.mentions;
+    const id = list.shift();
+    if (!id) return;
+    visit.done.add(id);
+    SF.actions.scrollToGroupMessage(id);
+    store().notify();
+  };
 
   SF.actions.scrollToGroupMessage = (messageId) => {
     const el = document.getElementById(`gm-${messageId}`);
@@ -233,23 +278,43 @@
     await call('POST', groupId, '/report', { messageId: messageId || null, reason }, 'Жалоба отправлена команде. Спасибо!');
   };
 
-  // «Кратко» by SI: what was said, in a few points
+  // «Кратко» by SI: what I missed, in a few points — a card under the header (not a window: new messages
+  // re-draw the screen and would close it), stays while I read and scroll
+  const summaries = {}; // { [groupId]: { loading } | { text, messages } }
   SF.actions.groupSummary = async (groupId) => {
-    SF.openModal(`
-      <div class="flex items-center gap-2 text-sm font-bold text-ink"><span class="si-dot"></span>Кратко</div>
-      <div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">SI читает переписку</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`);
+    if (summaries[groupId] && summaries[groupId].loading) return;
+    summaries[groupId] = { loading: true };
+    store().notify();
     try {
       const res = await api().groupCall('POST', groupId, '/summary', {});
-      SF.openModal(`
-        <div class="flex items-center gap-2 text-sm font-bold text-ink"><span class="si-dot"></span>Кратко</div>
-        <div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line" data-no-tr>${SF.esc(res.summary)}</div>
-        <div class="text-[10px] text-faint">SI пересказал последние сообщения (${res.messages}). Может ошибаться — важное проверьте в переписке.</div>
-        <button onclick="SF.closeModal()" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">Понятно</button>`);
+      summaries[groupId] = { text: res.summary, messages: res.messages };
     } catch (err) {
-      SF.closeModal();
+      delete summaries[groupId];
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
     }
+    store().notify();
   };
+
+  SF.actions.closeGroupSummary = (groupId) => {
+    delete summaries[groupId];
+    store().notify();
+  };
+
+  function summaryCard(groupId) {
+    const sm = summaries[groupId];
+    if (!sm) return '';
+    return `
+      <div class="p-3 rounded-2xl bg-[var(--si-bubble)] border border-[var(--si-bubble-line)] space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="flex items-center gap-1.5 text-xs font-bold text-ink"><span class="si-dot"></span><span>Кратко: что вы пропустили</span></span>
+          ${sm.loading ? '' : `<button onclick="SF.actions.closeGroupSummary('${SF.js(groupId)}')" class="p-1 text-faint" aria-label="Закрыть"><i data-lucide="x" class="w-4 h-4"></i></button>`}
+        </div>
+        ${sm.loading
+          ? '<div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">SI читает переписку</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>'
+          : `<div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line" data-no-tr>${SF.esc(sm.text)}</div>
+             <div class="text-[10px] text-faint">${SF.esc(String(sm.messages))} <span>сообщ. · SI может ошибаться — важное проверьте в переписке</span></div>`}
+      </div>`;
+  }
 
   // ---------------- Sending ----------------
   SF.actions.sendGroup = async (e, groupId) => {
@@ -261,6 +326,10 @@
     input.value = '';
     const reply = replyTo && replyTo.groupId === groupId ? replyTo : null;
     replyTo = null;
+    // Mentions still in the text (a picked «@Имя» erased again is not sent)
+    const mentionIds = [...new Set(mentionPick.filter(p => text.includes(`@${p.name}`)).map(p => p.id))];
+    mentionPick = [];
+    hideMentionList();
     const data = store().data.remote.groupThreads[groupId];
     if (data) {
       const me = store().data.me;
@@ -275,7 +344,7 @@
       SF.scrollToBottom('chat-scroll');
     }
     try {
-      await api().groupCall('POST', groupId, '/messages', { text, replyTo: reply ? reply.id : null });
+      await api().groupCall('POST', groupId, '/messages', { text, replyTo: reply ? reply.id : null, mentionIds });
       SF.askWriteAccess(null, { auto: true });
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не отправилось. Попробуйте ещё раз', err));
@@ -284,6 +353,46 @@
       await reload(groupId);
       SF.scrollToBottom('chat-scroll');
     }
+  };
+
+  // «@» in the input: the members to pick from, right above it (drawn directly, so typing is not interrupted)
+  function hideMentionList() {
+    const box = document.getElementById('mention-list');
+    if (box) box.innerHTML = '';
+  }
+
+  SF.actions.groupInput = (input, groupId) => {
+    const before = input.value.slice(0, input.selectionStart || input.value.length);
+    const match = before.match(/(^|\s)@([^\s@]{0,30})$/);
+    const box = document.getElementById('mention-list');
+    if (!box) return;
+    if (!match) return hideMentionList();
+    const q = match[2].toLowerCase();
+    const meId = store().data.me.id;
+    const data = store().data.remote.groupThreads[groupId];
+    const people = ((data && data.members) || []).filter(m => !m.invited && m.id !== meId && m.displayName.toLowerCase().includes(q)).slice(0, 6);
+    if (!people.length) return hideMentionList();
+    box.innerHTML = `
+      <div class="p-1.5 rounded-xl bg-card border border-line shadow-lg space-y-0.5">
+        ${people.map(m => `
+          <button type="button" onmousedown="event.preventDefault()" onclick="SF.actions.pickMention('${SF.js(groupId)}', '${SF.js(m.id)}')" class="w-full px-2 py-1.5 rounded-lg flex items-center gap-2 text-left hover:bg-sunken">
+            ${SF.avatar(m.photoUrl, { size: 24, kind: 'human' })}<span class="text-xs text-ink truncate">${SF.esc(m.displayName)}</span>
+          </button>`).join('')}
+      </div>`;
+  };
+
+  SF.actions.pickMention = (groupId, userId) => {
+    const input = document.querySelector('[data-keep="group-input"]');
+    const data = store().data.remote.groupThreads[groupId];
+    const m = data && data.members.find(x => x.id === userId);
+    if (!input || !m) return;
+    const caret = input.selectionStart || input.value.length;
+    const before = input.value.slice(0, caret).replace(/@([^\s@]{0,30})$/, `@${m.displayName} `);
+    input.value = before + input.value.slice(caret);
+    input.focus();
+    input.setSelectionRange(before.length, before.length);
+    mentionPick.push({ id: m.id, name: m.displayName });
+    hideMentionList();
   };
 
   async function sendFile(groupId, kind, blob, seconds) {
@@ -358,7 +467,11 @@
     const g = data.group;
     const reply = replyTo && replyTo.groupId === groupId ? replyTo : null;
     const canRecord = window.sfMedia && window.sfMedia.canRecord();
-    return `
+    if (visit.groupId !== groupId) startVisit(groupId);
+    takeMarks(groupId, data);
+    // «Новые сообщения»: before the first message from others after where I stopped
+    const firstNew = visit.newFrom ? data.messages.find(m => !m.mine && m.createdAt > visit.newFrom) : null;
+        return `
       <div class="glass-card-3d p-3 flex items-center justify-between gap-2">
         <button onclick="SF.push('group-info', { id: '${SF.js(groupId)}' })" class="flex items-center gap-2.5 min-w-0 text-left">
           ${groupAvatar(g.photoUrl, 40)}
@@ -367,9 +480,11 @@
             <span class="block text-[10px] text-faint truncate">${members(g.memberCount)}${g.muted ? ' · 🔕' : ''} · <span>подробнее</span></span>
           </span>
         </button>
-        ${data.summaryAvailable && data.messages.length >= 5 ? `
-          <button onclick="SF.actions.groupSummary('${SF.js(groupId)}')" class="flex-shrink-0 px-2.5 py-1.5 rounded-xl btn-3d-dark text-[11px] flex items-center gap-1.5"><span class="si-dot"></span>Кратко</button>` : ''}
+        ${data.summaryAvailable && data.missed >= 3 ? `
+          <button onclick="SF.actions.groupSummary('${SF.js(groupId)}')" class="flex-shrink-0 px-2.5 py-1.5 rounded-xl btn-3d-dark text-[11px] flex items-center gap-1.5" aria-label="Кратко: что я пропустил"><span class="si-dot"></span><span>Кратко</span><span class="text-faint" data-no-tr>${data.missed}</span></button>` : ''}
       </div>
+
+      ${summaryCard(groupId)}
 
       ${data.pinned ? `
         <button onclick="SF.actions.scrollToGroupMessage('${SF.js(data.pinned.id)}')" class="w-full px-3 py-2 rounded-xl bg-card border border-line text-left flex items-center gap-2">
@@ -380,9 +495,16 @@
           </span>
         </button>` : ''}
 
-      <div class="glass-card-3d p-3 flex flex-col space-y-2 chat-fill overflow-y-auto" id="chat-scroll">
-        ${!data.messages.length ? '<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите первым — поздоровайтесь с группой 🙂</div>' : ''}
-        ${data.messages.map(m => groupMessage(groupId, m)).join('')}
+      <div class="relative flex flex-col chat-fill">
+        <div class="glass-card-3d p-3 flex flex-col space-y-2 flex-1 min-h-0 overflow-y-auto" id="chat-scroll">
+          ${!data.messages.length ? '<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите первым — поздоровайтесь с группой 🙂</div>' : ''}
+          ${data.messages.map(m => `${m === firstNew ? '<div id="group-new-divider" class="flex items-center gap-2 py-1 text-[10px] font-bold text-brand"><span class="flex-1 h-px bg-[#81D8D0]"></span><span>Новые сообщения</span><span class="flex-1 h-px bg-[#81D8D0]"></span></div>' : ''}${groupMessage(groupId, m)}`).join('')}
+        </div>
+        ${visit.mentions.length || visit.reactions.length ? `
+          <div class="absolute right-2 bottom-2 flex flex-col gap-1.5">
+            ${visit.mentions.length ? `<button onclick="SF.actions.nextGroupMark('mentions')" class="relative w-10 h-10 rounded-full bg-card border-2 border-[#81D8D0] shadow-lg text-brand font-extrabold text-base" aria-label="Где меня отметили">@<span class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center" data-no-tr>${visit.mentions.length}</span></button>` : ''}
+            ${visit.reactions.length ? `<button onclick="SF.actions.nextGroupMark('reactions')" class="relative w-10 h-10 rounded-full bg-card border-2 border-[#81D8D0] shadow-lg text-base" aria-label="Реакции на мои сообщения">❤️<span class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center" data-no-tr>${visit.reactions.length}</span></button>` : ''}
+          </div>` : ''}
       </div>
 
       ${reply ? `
@@ -394,9 +516,10 @@
           <button onclick="SF.actions.cancelReply()" class="p-1 text-faint" aria-label="Отменить ответ"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>` : ''}
 
+      <div id="mention-list"></div>
       <form onsubmit="SF.actions.sendGroup(event, '${SF.js(groupId)}')" class="flex items-center gap-1.5">
         <button type="button" onclick="SF.actions.sendGroupPhoto('${SF.js(groupId)}')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Отправить фото"><i data-lucide="image" class="w-4 h-4"></i></button>
-        <input type="text" name="text" data-keep="group-input" maxlength="2000" autocomplete="off" placeholder="Сообщение..." class="flex-1 min-w-0 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        <input type="text" name="text" data-keep="group-input" maxlength="2000" autocomplete="off" placeholder="Сообщение... (@ — отметить)" oninput="SF.actions.groupInput(this, '${SF.js(groupId)}')" class="flex-1 min-w-0 bg-card border border-line-2 rounded-xl px-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
         ${canRecord ? `
           <button type="button" onclick="SF.actions.recordGroup('${SF.js(groupId)}', 'voice')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Записать голосовое"><i data-lucide="mic" class="w-4 h-4"></i></button>
           <button type="button" onclick="SF.actions.recordGroup('${SF.js(groupId)}', 'video')" class="p-2.5 rounded-xl btn-3d-dark flex items-center justify-center" aria-label="Записать видео-кружок"><i data-lucide="circle-play" class="w-4 h-4"></i></button>` : ''}
@@ -539,29 +662,29 @@
     const g = data.group;
     const admin = isAdmin(g);
     const meId = store().data.me.id;
+    // A tap anywhere on a person opens their profile (writing to them is there); the owner / admins
+    // have a small «…» menu on the right
     const memberRow = (m) => {
       const me = m.id === meId;
       const canRemove = !me && admin && m.role !== 'owner' && (g.role === 'owner' || m.role === 'member');
+      const menu = !me && ((g.role === 'owner' && !m.invited) || canRemove);
       return `
         <div class="p-2.5 rounded-2xl bg-card border border-line flex items-center gap-2.5">
-          ${SF.avatar(m.photoUrl, { size: 36, kind: 'human', userId: m.id })}
-          <span class="flex-1 min-w-0">
-            <span class="flex items-center gap-1 text-xs font-bold text-ink min-w-0"><span class="truncate">${SF.esc(m.displayName)}${me ? ' (вы)' : ''}</span>${SF.partnerBadge(m.id, 12)}</span>
-            <span class="block text-[10px] text-muted truncate">${m.invited ? 'приглашён(а)' : ROLE_LABEL[m.role] || SF.esc(m.headline || '')}</span>
-          </span>
-          ${me ? '' : `
-            <span class="flex items-center gap-1 flex-shrink-0">
-              <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(m.id)}' })" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px]">Профиль</button>
-              <button onclick="SF.actions.openPerson('${SF.js(m.id)}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[10px]">Написать</button>
-              ${(g.role === 'owner' && !m.invited) || canRemove ? `
-                <details class="relative">
-                  <summary class="list-none p-1.5 rounded-lg btn-3d-dark cursor-pointer" aria-label="Ещё"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></summary>
-                  <div class="absolute right-0 mt-1 z-20 w-44 p-1.5 rounded-xl bg-card border border-line shadow-lg space-y-1">
-                    ${g.role === 'owner' && !m.invited ? `<button onclick="SF.actions.setGroupRole('${SF.js(groupId)}', '${SF.js(m.id)}', '${m.role === 'admin' ? 'member' : 'admin'}')" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-ink-2 hover:bg-sunken">${m.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>` : ''}
-                    ${canRemove ? `<button onclick="SF.actions.removeFromGroup('${SF.js(groupId)}', '${SF.js(m.id)}', ${SF.esc(JSON.stringify(m.displayName))})" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-rose-500 hover:bg-sunken">${m.invited ? 'Отменить приглашение' : 'Удалить из группы'}</button>` : ''}
-                  </div>
-                </details>` : ''}
-            </span>`}
+          <button onclick="SF.actions.openPersonProfile('${SF.js(m.id)}')" class="flex-1 min-w-0 flex items-center gap-2.5 text-left">
+            ${SF.avatar(m.photoUrl, { size: 36, kind: 'human', userId: m.id })}
+            <span class="flex-1 min-w-0">
+              <span class="flex items-center gap-1 text-xs font-bold text-ink min-w-0"><span class="truncate">${SF.esc(m.displayName)}${me ? ' (вы)' : ''}</span>${SF.partnerBadge(m.id, 12)}</span>
+              <span class="block text-[10px] text-muted truncate">${m.invited ? 'приглашён(а)' : ROLE_LABEL[m.role] || SF.esc(m.headline || '')}</span>
+            </span>
+          </button>
+          ${menu ? `
+            <details class="relative flex-shrink-0">
+              <summary class="list-none p-1.5 rounded-lg btn-3d-dark cursor-pointer" aria-label="Ещё"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></summary>
+              <div class="absolute right-0 mt-1 z-20 w-44 p-1.5 rounded-xl bg-card border border-line shadow-lg space-y-1">
+                ${g.role === 'owner' && !m.invited ? `<button onclick="SF.actions.setGroupRole('${SF.js(groupId)}', '${SF.js(m.id)}', '${m.role === 'admin' ? 'member' : 'admin'}')" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-ink-2 hover:bg-sunken">${m.role === 'admin' ? 'Снять админа' : 'Сделать админом'}</button>` : ''}
+                ${canRemove ? `<button onclick="SF.actions.removeFromGroup('${SF.js(groupId)}', '${SF.js(m.id)}', ${SF.esc(JSON.stringify(m.displayName))})" class="w-full text-left px-2.5 py-2 rounded-lg text-xs text-rose-500 hover:bg-sunken">${m.invited ? 'Отменить приглашение' : 'Удалить из группы'}</button>` : ''}
+              </div>
+            </details>` : ''}
         </div>`;
     };
     return `
@@ -733,7 +856,15 @@
       if (route.screen === 'group-info') return SF.data.groupMessages(route.id, 15000);
       const groupId = route.id;
       SF.data.groupMessages(groupId);
-      SF.scrollToBottom('chat-scroll');
+      // With «Новые сообщения»: to where I stopped once, then the reading place stays (my own message
+      // scrolls down by itself); without it — to the bottom, as in any chat
+      const divider = document.getElementById('group-new-divider');
+      if (!divider) {
+        SF.scrollToBottom('chat-scroll');
+      } else if (!visit.scrolled) {
+        visit.scrolled = true;
+        setTimeout(() => divider.scrollIntoView({ block: 'start' }), 60);
+      }
       loadFiles();
       SF.data.poll(`group:${groupId}`, () => {
         SF.data.groupMessages(groupId, 4000);

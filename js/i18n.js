@@ -60,7 +60,10 @@
     'Фото группы обновлено': 'Group photo updated', 'Ссылка-приглашение скопирована': 'Invitation link copied', 'Уведомления включены': 'Notifications on',
     'Текст скопирован': 'Text copied', 'Выберите, кого пригласить': 'Choose who to invite', 'В группе может быть до 50 человек': 'A group can have up to 50 people',
     'Отменить ответ': 'Cancel reply', 'Переименовать': 'Rename', 'участн.': 'members', 'подробнее': 'details', 'до 50': 'up to 50',
-    'Группа в SmartFlow': 'A group in SmartFlow',
+    'Группа в SmartFlow': 'A group in SmartFlow', 'Новые сообщения': 'New messages',
+    'Сообщение... (@ — отметить)': 'Message... (@ to mention)', 'Где меня отметили': 'Where I was mentioned',
+    'Реакции на мои сообщения': 'Reactions to my messages', 'Кратко: что вы пропустили': 'Summary: what you missed',
+    'сообщ. · SI может ошибаться — важное проверьте в переписке': 'messages · SI can be wrong — check what matters in the chat', 'Кратко: что я пропустил': 'Summary: what I missed',
     'Группы доступны после входа через Telegram.': 'Groups are available after signing in with Telegram.',
     'Найдите человека по имени в поиске выше — и напишите ему, или создайте группу. Или найдите SI-продавца в Маркетплейсе.': 'Find a person by name in the search above and write to them, or create a group. Or find an SI-seller in the Marketplace.',
 

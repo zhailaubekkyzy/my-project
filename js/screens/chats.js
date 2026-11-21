@@ -113,17 +113,14 @@
           <div class="space-y-2">
             ${searchResults.people === null ? '<div class="text-xs text-muted px-1">Ищу…</div>' : ''}
             ${found.map(p => `
-              <div class="w-full p-3 rounded-2xl flex items-center gap-3 bg-card border border-line">
+              <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="w-full p-3 rounded-2xl flex items-center gap-3 text-left bg-card border border-line">
                 ${SF.avatar(p.photoUrl, { size: 44, kind: 'human', userId: p.id })}
                 <span class="flex-1 min-w-0">
                   <span class="flex items-center gap-1 text-sm font-bold text-ink min-w-0"><span class="truncate">${SF.esc(p.displayName)}</span>${SF.partnerBadge(p.id)}</span>
                   <span class="block text-[11px] text-muted truncate">${SF.esc(p.headline || (p.username ? `@${p.username}` : ''))}</span>
                 </span>
-                <span class="flex flex-col gap-1 flex-shrink-0">
-                  <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="px-2.5 py-1 rounded-lg btn-3d-dark text-[11px]">Профиль</button>
-                  <button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="px-2.5 py-1 rounded-lg btn-3d-tiffany text-[11px]">Написать</button>
-                </span>
-              </div>`).join('')}
+                <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+              </button>`).join('')}
             ${searchResults.people && !found.length && !mine.length ? '<div class="text-xs text-muted px-1">Никого не нашли. Попробуйте имя, @ник или слово о том, чем человек занимается.</div>' : ''}
           </div>` : ''}
       `;

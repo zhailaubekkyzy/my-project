@@ -8,10 +8,12 @@
 //    photo, add and remove people, pin a message, delete any message; the owner names admins;
 //  - text, voice (1.5 min), photo, round video (30 s) — the same rules as private conversations;
 //    a reply to a message; one pinned message;
-//  - reactions: the author gets a notification (in Buddy; on the phone at most once an hour);
-//  - new messages: one notification per unread run, «Без звука» turns them off;
+//  - reactions: no notification (owner's decision); inside the group marks on the right lead to where
+//    someone reacted to my message or mentioned me (@name or a reply to my message);
+//  - new messages: one notification per unread run, «Без звука» turns them off; a mention always comes;
 //  - someone who blocked me in a private conversation cannot be invited by me;
-//  - the only SI here: «Кратко» — a short summary of the conversation on request (daily limit).
+//  - the only SI here: «Кратко» — a short summary of what I missed, from where I stopped (unread_from),
+//    on request only; its own model GROUP_SUMMARY_MODEL and daily limit, not tied to Buddy.
 // Identity always comes from the login, never from the request body.
 const crypto = require('crypto');
 const db = require('../db');
@@ -35,8 +37,9 @@ const MAX_TEXT = 2000;
 const PAGE = 200;
 const FILES_PER_DAY = 60;
 const SUMMARIES_PER_DAY = 10;
-const SUMMARY_MIN_MESSAGES = 5;
-const SUMMARY_MESSAGES = 150;
+const SUMMARY_MIN_MESSAGES = 3;
+const SUMMARY_MESSAGES = 300;
+const MAX_MENTIONS = 10;
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👏'];
 const FILES = peopleService.FILES;
 
@@ -48,7 +51,9 @@ class GroupError extends Error {
   }
 }
 
-const sqlTime = (date = new Date()) => date.toISOString().slice(0, 19).replace('T', ' ');
+// Milliseconds: «what is new since I looked» compares a reaction with the moment the group was opened,
+// and both easily fall into the same second
+const sqlTime = (date = new Date()) => date.toISOString().slice(0, 23).replace('T', ' ');
 const toIso = (value) => {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(String(value).replace(' ', 'T') + (/[Z+]/.test(String(value)) ? '' : 'Z'));
@@ -281,7 +286,8 @@ async function joinByCode(meId, code) {
 async function myGroups(meId) {
   const rows = await db.all(
     `SELECT g.*, m.user_id AS m_user_id, m.role AS m_role, m.status AS m_status, m.muted AS m_muted, m.read_at AS m_read_at,
-       (SELECT COUNT(*) FROM chat_group_members c WHERE c.group_id = g.id AND c.status = 'active') AS member_count
+       (SELECT COUNT(*) FROM chat_group_members c WHERE c.group_id = g.id AND c.status = 'active') AS member_count,
+       m.marks_seen_at AS m_marks, m.joined_at AS m_joined
      FROM chat_group_members m JOIN chat_groups g ON g.id = m.group_id
      WHERE m.user_id = ? AND m.status IN ('active', 'invited')
      ORDER BY g.last_activity DESC LIMIT ?`,
@@ -291,6 +297,23 @@ async function myGroups(meId) {
   for (const r of rows) {
     const member = { user_id: r.m_user_id, role: r.m_role, status: r.m_status, muted: r.m_muted, read_at: r.m_read_at };
     const v = groupView(r, member, Number(r.member_count) || 0);
+    // «@» / reaction marks in the list: something about me I have not seen yet
+    const since = r.m_marks || r.m_joined;
+    if (r.m_status === 'active' && since) {
+      const mention = await db.get(
+        `SELECT 1 AS x FROM chat_group_messages x WHERE x.group_id = ? AND x.sender_id <> ? AND x.deleted_at IS NULL AND x.created_at > ?
+           AND (EXISTS (SELECT 1 FROM chat_group_mentions n WHERE n.message_id = x.id AND n.user_id = ?)
+                OR EXISTS (SELECT 1 FROM chat_group_messages o WHERE o.id = x.reply_to AND o.sender_id = ?)) LIMIT 1`,
+        [r.id, meId, since, meId, meId]
+      );
+      const reacted = await db.get(
+        `SELECT 1 AS x FROM chat_group_reactions q JOIN chat_group_messages o ON o.id = q.message_id
+         WHERE q.group_id = ? AND o.sender_id = ? AND q.user_id <> ? AND q.created_at > ? LIMIT 1`,
+        [r.id, meId, meId, since]
+      );
+      v.mentioned = Boolean(mention);
+      v.reacted = Boolean(reacted);
+    }
     if (r.last_sender && r.last_sender !== meId) {
       const sender = personOf(await db.get('SELECT * FROM users WHERE id = ?', [r.last_sender]));
       v.lastSenderName = sender ? sender.displayName : null;
@@ -385,8 +408,37 @@ async function conversation(meId, groupId) {
       createdAt: toIso(r.created_at)
     });
   }
+  // Where I stopped: there is something new since my last visit → «Новые сообщения» from here, and
+  // «Кратко» retells from here (unread_from stays until the next time something new waits for me)
+  const lastIso = toIso(group.last_activity);
+  const readIso = toIso(member.read_at) || toIso(member.joined_at);
+  const hasNew = Boolean(group.last_sender && group.last_sender !== meId && (!readIso || readIso < lastIso));
+  const unreadFrom = hasNew ? (member.read_at || member.joined_at) : member.unread_from;
+  // Marks on the right: reactions on my messages and mentions of me (or replies to me) I have not seen
+  const marksFrom = member.marks_seen_at || member.joined_at || member.created_at;
+  const reactedRows = await db.all(
+    `SELECT r.message_id, MAX(r.created_at) AS at FROM chat_group_reactions r JOIN chat_group_messages m ON m.id = r.message_id
+     WHERE r.group_id = ? AND m.sender_id = ? AND r.user_id <> ? AND r.created_at > ? GROUP BY r.message_id ORDER BY at`,
+    [group.id, meId, meId, marksFrom]
+  );
+  const mentionRows = await db.all(
+    `SELECT m.id, m.created_at FROM chat_group_messages m
+     WHERE m.group_id = ? AND m.sender_id <> ? AND m.deleted_at IS NULL AND m.created_at > ?
+       AND (EXISTS (SELECT 1 FROM chat_group_mentions x WHERE x.message_id = m.id AND x.user_id = ?)
+            OR EXISTS (SELECT 1 FROM chat_group_messages o WHERE o.id = m.reply_to AND o.sender_id = ?))
+     ORDER BY m.created_at, m.id`,
+    [group.id, meId, marksFrom, meId, meId]
+  );
+  const missed = unreadFrom ? await db.get(
+    `SELECT COUNT(*) AS n FROM chat_group_messages WHERE group_id = ? AND deleted_at IS NULL AND sender_id <> ? AND created_at > ?`,
+    [group.id, meId, unreadFrom]
+  ) : { n: 0 };
+  const now = sqlTime();
   // Read: the next new message is news again (notified_at is cleared)
-  await db.run('UPDATE chat_group_members SET read_at = ?, notified_at = NULL WHERE group_id = ? AND user_id = ?', [sqlTime(), group.id, meId]);
+  await db.run(
+    'UPDATE chat_group_members SET read_at = ?, notified_at = NULL, unread_from = ?, marks_seen_at = ? WHERE group_id = ? AND user_id = ?',
+    [now, unreadFrom || null, now, group.id, meId]
+  );
   return {
     group: info,
     members,
@@ -394,6 +446,10 @@ async function conversation(meId, groupId) {
     pinned: await quote(group.pinned_message_id),
     canWrite: true,
     reactions: REACTIONS,
+    // «Новые сообщения» divider of this visit (null when nothing new waited)
+    newFrom: hasNew ? toIso(unreadFrom) : null,
+    marks: { mentions: mentionRows.map(r => r.id), reactions: reactedRows.map(r => r.message_id) },
+    missed: Number(missed.n) || 0,
     summaryAvailable: siEngine.isConfigured()
   };
 }
@@ -418,7 +474,7 @@ function detectFile(kind, buffer) {
  * Sends a message to the group: text, or a file (voice / photo / video), maybe as a reply.
  * The other members get one notification per unread run, unless they turned «Без звука» on.
  */
-async function send(meId, groupId, rawText, file = null, replyTo = null) {
+async function send(meId, groupId, rawText, file = null, replyTo = null, mentionIds = []) {
   const { group } = await requireMember(meId, groupId);
   const kind = file ? file.kind : 'text';
   if (file && !FILES[kind]) throw new GroupError('Неизвестный тип файла', 400, 'BAD_KIND');
@@ -438,7 +494,14 @@ async function send(meId, groupId, rawText, file = null, replyTo = null) {
   }
   let reply = null;
   if (replyTo) {
-    reply = await db.get('SELECT id FROM chat_group_messages WHERE id = ? AND group_id = ?', [String(replyTo), group.id]);
+    reply = await db.get('SELECT id, sender_id FROM chat_group_messages WHERE id = ? AND group_id = ?', [String(replyTo), group.id]);
+  }
+  // Mentions: only active members of this group, not me
+  const mentioned = [];
+  for (const mid of [...new Set((Array.isArray(mentionIds) ? mentionIds : []).map(String))].slice(0, MAX_MENTIONS)) {
+    if (mid === meId) continue;
+    const m = await memberOf(group.id, mid);
+    if (m && m.status === 'active') mentioned.push(mid);
   }
 
   const now = sqlTime();
@@ -459,8 +522,11 @@ async function send(meId, groupId, rawText, file = null, replyTo = null) {
     'UPDATE chat_groups SET last_message = ?, last_sender = ?, last_activity = ?, changed_at = ? WHERE id = ?',
     [text.slice(0, 200), meId, now, now, group.id]
   );
+  for (const userId of mentioned) {
+    await db.run('INSERT INTO chat_group_mentions (message_id, group_id, user_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING', [id, group.id, userId, now]);
+  }
   await db.run('UPDATE chat_group_members SET read_at = ?, notified_at = NULL WHERE group_id = ? AND user_id = ?', [now, group.id, meId]);
-  analytics.capture('group_message', meId, { kind, reply: Boolean(reply) });
+  analytics.capture('group_message', meId, { kind, reply: Boolean(reply), mentions: mentioned.length });
 
   // One notification per unread run: told already (notified_at) and has not opened the group since → quiet
   const me = personOf(await db.get('SELECT * FROM users WHERE id = ?', [meId]));
@@ -468,8 +534,23 @@ async function send(meId, groupId, rawText, file = null, replyTo = null) {
     `SELECT user_id, read_at, notified_at FROM chat_group_members WHERE group_id = ? AND status = 'active' AND user_id <> ? AND muted = 0`,
     [group.id, meId]
   );
+  // Mentioned (@name or a reply to their message) — always told, even with «Без звука»: it is for them
+  const forMe = new Set(mentioned);
+  if (reply && reply.sender_id !== meId) forMe.add(reply.sender_id);
+  for (const userId of forMe) {
+    const m = await memberOf(group.id, userId);
+    if (!m || m.status !== 'active') continue;
+    await db.run('UPDATE chat_group_members SET notified_at = ? WHERE group_id = ? AND user_id = ?', [now, group.id, userId]);
+    await notifyService.notifyUser(
+      userId,
+      mentioned.includes(userId)
+        ? { ru: `👥 «${group.name}»: ${me.displayName} упомянул(а) вас.`, en: `👥 «${group.name}»: ${me.displayName} mentioned you.` }
+        : { ru: `👥 «${group.name}»: ${me.displayName} ответил(а) на ваше сообщение.`, en: `👥 «${group.name}»: ${me.displayName} replied to your message.` },
+      { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}` }
+    );
+  }
   for (const m of others) {
-    if (m.notified_at) continue;
+    if (m.notified_at || forMe.has(m.user_id)) continue;
     await db.run('UPDATE chat_group_members SET notified_at = ? WHERE group_id = ? AND user_id = ?', [now, group.id, m.user_id]);
     await notifyService.notifyUser(
       m.user_id,
@@ -493,7 +574,7 @@ async function fileOf(meId, groupId, fileId) {
 
 /**
  * A reaction on a message (emoji from REACTIONS); the same emoji again takes it back.
- * The author is told in Buddy; on the phone at most once an hour (reactions come in bursts).
+ * No notification (owner's decision): the author sees it as a mark on the right when opening the group.
  */
 async function react(meId, groupId, messageId, emoji) {
   const { group } = await requireMember(meId, groupId);
@@ -514,24 +595,6 @@ async function react(meId, groupId, messageId, emoji) {
   await touch(group.id);
   analytics.capture('group_reaction', meId, { emoji });
 
-  // A first reaction of this person on this message is news for the author (a change is not)
-  if (!existing && msg.sender_id !== meId) {
-    const author = await memberOf(group.id, msg.sender_id);
-    if (author && author.status === 'active') {
-      const me = personOf(await db.get('SELECT * FROM users WHERE id = ?', [meId]));
-      const recent = await db.get(
-        `SELECT COUNT(*) AS n FROM chat_group_reactions r JOIN chat_group_messages m ON m.id = r.message_id
-         WHERE m.sender_id = ? AND r.user_id <> ? AND r.created_at >= ?`,
-        [msg.sender_id, msg.sender_id, sqlTime(new Date(Date.now() - 3600000))]
-      );
-      const quoted = msg.kind && msg.kind !== 'text' ? msg.text : `«${String(msg.text).slice(0, 60)}${String(msg.text).length > 60 ? '…' : ''}»`;
-      await notifyService.notifyUser(
-        msg.sender_id,
-        { ru: `${emoji} ${me.displayName} — на ваше сообщение ${quoted} в группе «${group.name}».`, en: `${emoji} ${me.displayName} reacted to your message ${quoted} in «${group.name}».` },
-        { buttonText: { ru: 'Открыть', en: 'Open' }, startParam: `G_${group.id}`, phone: Number(recent.n) <= 1 }
-      );
-    }
-  }
   return { reacted: emoji };
 }
 
@@ -683,48 +746,43 @@ async function report(meId, groupId, messageId, reason) {
 
 // ---------- «Кратко» by SI ----------
 /**
- * A short summary of the conversation: since my last visit if there is enough new, otherwise the
- * last messages. Only texts (a voice or a photo is mentioned as such). Daily limit per person.
+ * «Кратко»: a short summary of what I missed — from where I stopped (unread_from), oldest first.
+ * Only on request (nothing is sent by itself); its own model and daily limit, not tied to Buddy.
  */
-async function summary(meId, groupId, since = null) {
-  const { group } = await requireMember(meId, groupId);
+async function summary(meId, groupId) {
+  const { group, member } = await requireMember(meId, groupId);
   if (!siEngine.isConfigured()) throw new GroupError('Краткое содержание пока недоступно', 503, 'NO_SI');
   const today = await db.get('SELECT COUNT(*) AS n FROM chat_group_summaries WHERE user_id = ? AND created_at >= ?', [meId, dayAgo()]);
   if (Number(today.n) >= SUMMARIES_PER_DAY) throw new GroupError('На сегодня кратких содержаний достаточно — продолжите завтра 🙂', 429, 'SUMMARY_LIMIT');
-  let rows = [];
-  const sinceIso = toIso(since);
-  if (sinceIso) {
-    rows = await db.all(
-      'SELECT * FROM chat_group_messages WHERE group_id = ? AND deleted_at IS NULL AND created_at > ? ORDER BY created_at, id LIMIT ?',
-      [group.id, sqlTime(new Date(sinceIso)), SUMMARY_MESSAGES]
-    );
+  const from = member.unread_from;
+  const rows = from ? await db.all(
+    'SELECT * FROM chat_group_messages WHERE group_id = ? AND deleted_at IS NULL AND created_at > ? ORDER BY created_at, id LIMIT ?',
+    [group.id, from, SUMMARY_MESSAGES]
+  ) : [];
+  if (rows.filter(r => r.sender_id !== meId).length < SUMMARY_MIN_MESSAGES) {
+    throw new GroupError('Вы почти ничего не пропустили — прочитайте сами 🙂', 409, 'TOO_FEW');
   }
-  if (rows.length < SUMMARY_MIN_MESSAGES) {
-    rows = (await db.all(
-      'SELECT * FROM chat_group_messages WHERE group_id = ? AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT ?',
-      [group.id, SUMMARY_MESSAGES]
-    )).reverse();
-  }
-  if (rows.length < SUMMARY_MIN_MESSAGES) throw new GroupError('Пока мало сообщений — прочитайте сами 🙂', 409, 'TOO_FEW');
   const names = new Map();
   const lines = [];
   for (const r of rows) {
     if (!names.has(r.sender_id)) names.set(r.sender_id, (personOf(await db.get('SELECT * FROM users WHERE id = ?', [r.sender_id])) || {}).displayName || 'Участник');
     lines.push(`${names.get(r.sender_id)}: ${r.kind && r.kind !== 'text' ? `[${r.text}]` : String(r.text).slice(0, 500)}`);
   }
-  const me = await db.get('SELECT lang, tg_lang FROM users WHERE id = ?', [meId]);
-  const english = (me && (me.lang || '').startsWith('en'));
+  const meRow = await db.get('SELECT * FROM users WHERE id = ?', [meId]);
+  const english = Boolean(meRow && String(meRow.lang || '').startsWith('en'));
+  const myName = (personOf(meRow) || {}).displayName || '';
   const prompt = [
     {
       role: 'system',
-      content: `Ты делаешь краткое содержание переписки группы «${group.name}» для участника, который пропустил разговор. ` +
-        'Пиши 3–6 коротких пунктов: о чём говорили, что решили, кто что спросил или пообещал, что ждёт ответа. ' +
+      content: `Ты делаешь краткое содержание переписки группы «${group.name}» — того, что участник «${myName}» пропустил с последнего визита. ` +
+        'Пиши 3–8 коротких пунктов по порядку: о чём говорили, что решили, даты, время и места, кто что спросил или пообещал, что ждёт ответа. ' +
+        `Если что-то адресовано лично «${myName}» — это первый пункт. Ничего важного не пропускай. ` +
         'Только то, что есть в сообщениях, ничего не додумывай и не давай советов. Имена — как в переписке. ' +
         `Без вступлений и заголовков. Язык: ${english ? 'английский' : 'русский'}.`
     },
     { role: 'user', content: lines.join('\n').slice(0, 30000) }
   ];
-  const text = await siEngine.callOpenAI(prompt, { model: config.buddyModel });
+  const text = await siEngine.callOpenAI(prompt, { model: config.groupSummaryModel });
   if (!text) throw new GroupError('Не получилось сделать краткое содержание. Попробуйте ещё раз', 502, 'SI_FAILED');
   await db.run('INSERT INTO chat_group_summaries (id, group_id, user_id, created_at) VALUES (?, ?, ?, ?)', [newId('grs'), group.id, meId, sqlTime()]);
   analytics.capture('group_summary', meId, { messages: rows.length });

@@ -242,7 +242,7 @@ SF.openStartParam = (param) => {
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
   } else if (param.startsWith('G_')) {
-    SF.openIn('chats', 'group', { id: param.slice(2) });
+    SF.actions.openGroup(param.slice(2));
   } else if (param.startsWith('J_')) {
     SF.openIn('chats', 'group-join', { code: param.slice(2) });
   } else if (param.startsWith('U_')) {

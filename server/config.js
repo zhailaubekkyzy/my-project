@@ -63,6 +63,8 @@ const config = {
   // Voice messages: OpenAI speech-to-text model
   transcribeModel: process.env.TRANSCRIBE_MODEL || 'whisper-1',
   buddyModel: process.env.BUDDY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  // «Кратко» in groups — its own model, not tied to Buddy (owner's decision 21 Nov.)
+  groupSummaryModel: process.env.GROUP_SUMMARY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
   // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.
   // Telegram ids (digits) and usr_... ids work too. The support team is added in the panel itself.
