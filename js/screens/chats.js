@@ -157,7 +157,8 @@
   const fileUrls = new Map();
   const filePath = (userId, fileId) => `/api/people/${encodeURIComponent(userId)}/files/${encodeURIComponent(fileId)}`;
 
-  function personMessage(m, userId) {
+  // gap: close to the previous message of the same person, a bit further from the other one
+  function personMessage(m, userId, gap = '') {
     // Mine — the deep Tiffany; the other person — their own shade (owner's decision 21 Nov.)
     const bubbleClass = m.mine ? 'chat-bubble-mine' : `chat-bubble-person ${SF.personTone(userId)}`;
     const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
@@ -166,7 +167,7 @@
     const src = m.fileId && fileUrls.get(m.fileId) ? `src="${fileUrls.get(m.fileId)}"` : '';
     if (m.kind === 'video' && m.fileId) {
       return `
-        <div class="flex ${side}">
+        <div class="flex ${side} ${gap}">
           <div class="flex flex-col items-center">
             <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
               class="w-44 h-44 rounded-full object-cover bg-sunken border-2 ${m.mine ? 'border-[#81D8D0]' : 'border-line'}"></video>
@@ -176,7 +177,7 @@
     }
     if (m.kind === 'photo' && m.fileId) {
       return `
-        <div class="flex ${side}">
+        <div class="flex ${side} ${gap}">
           <div class="${bubbleClass} !p-1">
             <img data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} alt="Фото" onclick="SF.actions.openPhoto(this)" class="rounded-xl max-w-[220px] max-h-[280px] min-w-[80px] min-h-[80px] object-cover bg-sunken" />
             <div class="px-1">${time}</div>
@@ -185,12 +186,12 @@
     }
     if (m.kind === 'voice' && m.fileId) {
       return `
-        <div class="flex ${side}">
+        <div class="flex ${side} ${gap}">
           <div class="${bubbleClass}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
         </div>`;
     }
     return `
-      <div class="flex ${side}">
+      <div class="flex ${side} ${gap}">
         <div class="${bubbleClass}">${SF.formatChatMarkdown(m.text)}${time}</div>
       </div>`;
   }
@@ -343,9 +344,9 @@
           </details>` : ''}
       </div>
 
-      <div class="glass-card-3d p-3 flex flex-col space-y-2 chat-fill overflow-y-auto" id="chat-scroll">
+      <div class="glass-card-3d p-3 flex flex-col chat-fill overflow-y-auto" id="chat-scroll">
         ${!data.messages.length ? `<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите ${name} первым — например, поздоровайтесь и расскажите, чем вы занимаетесь 🙂</div>` : ''}
-        ${data.messages.map(m => personMessage(m, p.id)).join('')}
+        ${data.messages.map((m, i, all) => personMessage(m, p.id, i === 0 ? '' : all[i - 1].mine === m.mine ? 'mt-0.5' : 'mt-3')).join('')}
       </div>
 
       ${t && t.needsMyAnswer ? `

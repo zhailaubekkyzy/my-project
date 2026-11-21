@@ -121,18 +121,24 @@
   let tones = new Map();
   const toneOf = (userId) => tones.get(userId) || SF.personTone(userId);
 
-  function groupMessage(groupId, m) {
+  // run: { first, last } — messages of one person in a row stay close together (name over the first,
+  // photo by the last); a new person starts a bit further away (owner's decision 21 Nov., like WhatsApp)
+  function groupMessage(groupId, m, run = { first: true, last: true, gap: '' }) {
     const tone = m.mine ? '' : toneOf(m.sender.id);
+    const avatar = m.mine ? '' : run.last
+      ? `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`
+      : '<span class="flex-shrink-0" style="width:26px"></span>';
+    const showName = !m.mine && run.first;
     const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
     const menu = m.deleted ? '' : `onclick="SF.actions.groupMessageMenu('${SF.js(groupId)}', '${SF.js(m.id)}')"`;
     if (m.kind === 'video' && m.fileId && !m.deleted) {
       const path = filePath(groupId, m.fileId);
       const src = fileUrls.get(m.fileId) ? `src="${fileUrls.get(m.fileId)}"` : '';
       return `
-        <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
-          ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
+        <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5 ${run.gap}">
+          ${avatar}
           <div class="flex flex-col items-center">
-            ${m.mine ? '' : `<div class="text-[10px] font-bold person-name ${tone} self-start">${SF.esc(m.sender.displayName)}</div>`}
+            ${showName ? `<div class="text-[10px] font-bold person-name ${tone} self-start">${SF.esc(m.sender.displayName)}</div>` : ''}
             <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
               class="w-40 h-40 rounded-full object-cover bg-sunken border-2 ${m.mine ? 'border-[#81D8D0]' : 'border-line'}"></video>
             <button ${menu} class="text-[9px] text-faint mt-0.5">🎥 0:${String(m.seconds || 0).padStart(2, '0')} · ${msgTime(m.createdAt)} · ···</button>
@@ -141,11 +147,11 @@
         </div>`;
     }
     return `
-      <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5">
-        ${m.mine ? '' : `<button onclick="SF.actions.openPersonProfile('${SF.js(m.sender.id)}')" class="mt-auto">${SF.avatar(m.sender.photoUrl, { size: 26, kind: 'human', userId: m.sender.id })}</button>`}
+      <div id="gm-${SF.esc(m.id)}" class="flex ${m.mine ? 'justify-end' : 'justify-start'} gap-1.5 ${run.gap}">
+        ${avatar}
         <div class="max-w-[80%] min-w-0">
           <div ${menu} class="${m.mine ? 'chat-bubble-mine ml-auto' : `chat-bubble-person ${tone}`} !max-w-full w-fit ${m.kind === 'photo' ? '!p-1' : ''} cursor-pointer">
-            ${m.mine ? '' : `<div class="text-[10px] font-bold person-name ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>`}
+            ${showName ? `<div class="text-[10px] font-bold person-name ${m.kind === 'photo' ? 'px-1' : ''}">${SF.esc(m.sender.displayName)}</div>` : ''}
             ${quoteBlock(m.replyTo, m.mine)}
             ${messageBody(groupId, m)}
             <div class="${m.kind === 'photo' ? 'px-1' : ''}">${time}</div>
@@ -502,9 +508,17 @@
         </button>` : ''}
 
       <div class="relative flex flex-col chat-fill">
-        <div class="glass-card-3d p-3 flex flex-col space-y-2 flex-1 min-h-0 overflow-y-auto" id="chat-scroll">
+        <div class="glass-card-3d p-3 flex flex-col flex-1 min-h-0 overflow-y-auto" id="chat-scroll">
           ${!data.messages.length ? '<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите первым — поздоровайтесь с группой 🙂</div>' : ''}
-          ${data.messages.map(m => `${m === firstNew ? '<div id="group-new-divider" class="flex items-center gap-2 py-1 text-[10px] font-bold text-brand"><span class="flex-1 h-px bg-[#81D8D0]"></span><span>Новые сообщения</span><span class="flex-1 h-px bg-[#81D8D0]"></span></div>' : ''}${groupMessage(groupId, m)}`).join('')}
+          ${data.messages.map((m, i, all) => {
+            const prev = all[i - 1];
+            const next = all[i + 1];
+            const sameAs = (a, b) => a && b && a.sender.id === b.sender.id;
+            const first = !sameAs(prev, m) || m === firstNew;
+            const last = !sameAs(m, next) || next === firstNew;
+            const run = { first, last, gap: i === 0 || m === firstNew ? '' : first ? 'mt-3' : 'mt-0.5' };
+            return `${m === firstNew ? `<div id="group-new-divider" class="flex items-center gap-2 ${i ? 'mt-3' : ''} mb-2 text-[10px] font-bold text-brand"><span class="flex-1 h-px bg-[#81D8D0]"></span><span>Новые сообщения</span><span class="flex-1 h-px bg-[#81D8D0]"></span></div>` : ''}${groupMessage(groupId, m, run)}`;
+          }).join('')}
         </div>
         ${visit.mentions.length || visit.reactions.length ? `
           <div class="absolute right-2 bottom-2 flex flex-col gap-1.5">
