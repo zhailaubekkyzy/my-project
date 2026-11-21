@@ -2216,7 +2216,7 @@ async function runAllTests() {
     const posthog = [];
     analytics._setClientForTests({ capture: (e) => posthog.push(e) });
     try {
-      const tg = { id: 700065, first_name: 'Динара', last_name: 'Тайнова', username: 'dinara_secret' };
+      const tg = { id: 700065, first_name: 'Клиент', last_name: 'Тестовый', username: 'test_client_secret' };
       const login = await api('POST', '/api/auth/telegram', null, { initData: createTelegramInitData(process.env.TELEGRAM_BOT_TOKEN, tg) });
       assert.strictEqual(login.status, 200);
       const token = login.body.token;
@@ -2239,7 +2239,7 @@ async function runAllTests() {
       assert.strictEqual(new Set(sent.map(e => e.insert_id)).size, sent.length, 'Every event has its own insert_id');
 
       const all = JSON.stringify(sent);
-      for (const secret of ['Динара', 'Тайнова', 'dinara_secret', '700065', '+77019876543', user.id, '$process_person_profile']) {
+      for (const secret of ['Клиент', 'Тестовый', 'test_client_secret', '700065', '+77019876543', user.id, '$process_person_profile']) {
         assert(!all.includes(secret), `No personal data / PostHog-only fields: ${secret}`);
       }
       const buy = sent.find(e => e.event_type === 'funnel_buy_clicked');
@@ -2922,6 +2922,53 @@ async function runAllTests() {
     } finally {
       analytics._setClientForTests(null);
     }
+  });
+
+  await test('69. Быстрый старт: SI-продавец по цели за минуту, проверка «как клиент» не путается с клиентами', async () => {
+    const token = await tokenFor({ id: 690001, first_name: 'Эксперт', last_name: 'Тестовый' });
+    const qs = (body) => api('POST', '/api/projects/quick-start', token, body);
+    assert.strictEqual((await qs({ goal: 'nope', about: 'коуч', offer: 'x' })).status, 400, 'Unknown goal');
+    assert.strictEqual((await qs({ goal: 'sell', about: '', offer: 'x' })).status, 400, 'About is required');
+    assert.strictEqual((await qs({ goal: 'free', about: 'коуч', offer: 'Гайд' })).status, 400, 'The free material is required');
+    assert.strictEqual((await qs({ goal: 'sell', about: 'коуч', offer: 'Курс', link: 'javascript:alert(1)' })).status, 400, 'Only https payment links');
+
+    const expect = {
+      consult: { cta: 'book', price: 'free' },
+      sell: { cta: 'buy', price: 'fixed' },
+      leads: { cta: 'ask', price: 'on_request' },
+      free: { cta: 'free', price: 'free' }
+    };
+    const made = {};
+    for (const goal of Object.keys(expect)) {
+      const res = await qs({ goal, about: 'нутрициолог', offer: 'План питания на 4 недели', priceLabel: '45 000 ₸', link: goal === 'free' ? 'https://example.com/guide' : (goal === 'sell' ? 'https://pay.example.com/a' : '') });
+      assert.strictEqual(res.status, 201, `${goal} is created`);
+      const row = await db.get('SELECT * FROM projects WHERE id = ?', [res.body.id]);
+      made[goal] = row;
+      const settings = JSON.parse(row.custom_ai_settings);
+      assert.strictEqual(row.name, 'Эксперт · нутрициолог');
+      assert.strictEqual(row.offer, 'План питания на 4 недели');
+      assert.strictEqual(row.cta_kind, expect[goal].cta);
+      assert.strictEqual(row.price_mode, expect[goal].price);
+      assert.strictEqual(settings.steps.length, 3, `${goal}: three steps`);
+      assert.strictEqual(settings.scenarios.length, 1, `${goal}: one gentle reminder`);
+      assert.strictEqual(settings.quickStart, goal);
+    }
+    assert.strictEqual(made.sell.price_label, '45 000 ₸');
+    assert.strictEqual(made.sell.payment_url, 'https://pay.example.com/a');
+    assert.strictEqual(made.consult.price_label, '', 'A free consultation has no sum');
+    assert.strictEqual(made.leads.cta_label, 'Оставить заявку');
+    const leadsSettings = JSON.parse(made.leads.custom_ai_settings);
+    assert.strictEqual(leadsSettings.scenarios[0].step, leadsSettings.steps[2].id, 'Lead scenario points to the «Контакт» step');
+
+    // «Поговорить как клиент»: the expert's own chat is «Вы (проверка)», the free material comes right away
+    const start = await api('POST', `/api/chat/${made.free.slug}/start`, token);
+    assert.strictEqual(start.status, 201);
+    assert(start.body.messages.some(m => m.text === 'https://example.com/guide'), 'The material is sent after the hello');
+    const self = await db.get('SELECT * FROM clients WHERE project_id = ?', [made.free.id]);
+    assert.strictEqual(self.name, 'Вы (проверка)');
+    assert.strictEqual(self.entry, 'self');
+    const a = (await api('GET', `/api/projects/${made.free.id}/analytics`, token)).body;
+    assert.deepStrictEqual(a.entries, {}, 'The test chat is not in the numbers by entry');
   });
 
   await new Promise(resolve => httpServer.close(resolve));

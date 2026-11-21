@@ -723,7 +723,90 @@
   }
 
   // ---------------- Create a consultant ----------------
-  function renderCreate() {
+  // ---------------- «Быстрый старт» (owner's decision 21 Nov.) ----------------
+  // A working SI-seller in a minute: pick a goal, answer 2–4 questions, talk to it as a client.
+  // Simple and fit for any niche (the server fills steps and one reminder: server/services/quick-start.js).
+  const QUICK_GOALS = [
+    { id: 'consult', icon: 'calendar-check', title: 'Записать на консультацию', hint: 'SI узнаёт задачу клиента и записывает к вам' },
+    { id: 'sell', icon: 'shopping-bag', title: 'Продать продукт или услугу', hint: 'SI помогает выбрать и ведёт к оплате' },
+    { id: 'leads', icon: 'inbox', title: 'Собрать заявки', hint: 'SI узнаёт задачу и передаёт вам контакт клиента' },
+    { id: 'free', icon: 'gift', title: 'Выдать бесплатный материал', hint: 'Гайд, чек-лист или видео — и мягко к следующему шагу' },
+    { id: 'custom', icon: 'pencil', title: 'Своя задача', hint: 'Опишете цель словами' }
+  ];
+
+  function renderQuickGoals() {
+    return `
+      <div class="glass-card-3d p-4 space-y-1">
+        <div class="text-base font-extrabold text-ink">Какая у вас цель?</div>
+        <div class="text-xs text-muted leading-snug">Выберите — SI-продавец будет готов за минуту. Всё можно поменять потом.</div>
+      </div>
+      <div class="space-y-2">
+        ${QUICK_GOALS.map(g => `
+          <button onclick="SF.push('office-create', { goal: '${g.id}' })" class="w-full p-3.5 rounded-2xl bg-card border border-line flex items-center gap-3 text-left">
+            <span class="w-10 h-10 rounded-xl bg-sunken flex items-center justify-center flex-shrink-0"><i data-lucide="${g.icon}" class="w-5 h-5 text-brand"></i></span>
+            <span class="flex-1 min-w-0">
+              <span class="block text-sm font-bold text-ink">${g.title}</span>
+              <span class="block text-[11px] text-muted leading-snug">${g.hint}</span>
+            </span>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+          </button>`).join('')}
+      </div>`;
+  }
+
+  function renderQuickForm(goal) {
+    const g = QUICK_GOALS.find(x => x.id === goal);
+    const priceBlock = goal === 'consult' ? `
+        <label class="block space-y-1">
+          <span class="font-semibold text-ink-2">Консультация</span>
+          <select name="priceMode" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            <option value="free">Бесплатная</option>
+            <option value="fixed">Платная</option>
+            <option value="on_request">Цена по запросу</option>
+          </select>
+        </label>
+        ${field('priceLabel', 'Цена (если платная)', '', { placeholder: 'Например: 15 000 ₸', max: 80 })}` : goal === 'sell' ? `
+        ${field('priceLabel', 'Цена', '', { placeholder: 'Например: 45 000 ₸', max: 80 })}
+        ${field('link', 'Ваша ссылка на оплату (можно добавить позже)', '', { type: 'url', placeholder: 'https://...', max: 300, hint: 'Деньги приходят вам напрямую.' })}` : '';
+    const linkBlock = goal === 'free'
+      ? field('link', 'Материал: ссылка или текст', '', { placeholder: 'https://... — гайд, чек-лист, видео', rows: 3, max: 500, hint: 'Клиент получит его сразу после приветствия SI.' })
+      : '';
+    return `
+      <form onsubmit="SF.actions.quickStart(event, '${goal}')" class="glass-card-3d p-4 space-y-3 text-xs">
+        <div class="flex items-center gap-2 text-sm font-bold text-ink"><i data-lucide="${g ? g.icon : 'sparkles'}" class="w-4 h-4 text-brand"></i>${g ? g.title : ''}</div>
+        ${field('about', 'Чем вы занимаетесь — одним-двумя словами', '', { placeholder: 'Например: нутрициолог', max: 40 })}
+        ${field('offer', 'Что получит клиент', '', { placeholder: goal === 'free' ? 'Например: чек-лист «7 шагов к режиму сна»' : 'Например: план питания и поддержка 4 недели', max: 200 })}
+        ${priceBlock}
+        ${linkBlock}
+        <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Создать SI-продавца</button>
+        <div class="text-[10px] text-faint text-center">Шаги разговора и мягкое напоминание SI подставит сам — их можно поменять в настройках.</div>
+      </form>`;
+  }
+
+  // The «aha»: the SI-seller is ready — talk to it as a client right now
+  function renderQuickReady(route) {
+    const c = store().findOfficeConsultant(route.id);
+    if (!c) return '<div class="text-xs text-muted">Загружаю…</div>';
+    return `
+      <div class="glass-card-3d p-5 space-y-3 text-center border-[var(--si-bubble-line)]">
+        <div class="flex justify-center">${SF.avatar(c.photoUrl, { size: 64, kind: 'si' })}</div>
+        <div class="text-lg font-extrabold text-ink">SI-продавец готов</div>
+        <div class="text-xs text-ink-2 leading-snug">«${SF.esc(c.name)}» уже умеет вести клиента: ${(c.steps || []).map(st => SF.esc(st.title)).join(' → ')}.</div>
+        <button onclick="SF.actions.openChat('${SF.js(c.slug)}')" class="w-full py-3 rounded-2xl btn-3d-red text-sm flex items-center justify-center gap-1.5">
+          <i data-lucide="message-circle" class="w-4 h-4"></i> Поговорить как клиент
+        </button>
+        <div class="text-[10px] text-faint">Попробуйте сами — так его увидят ваши клиенты. Этот разговор будет подписан «Вы (проверка)».</div>
+      </div>
+      <div class="glass-card-3d p-4 space-y-2 text-xs">
+        <div class="font-semibold text-ink-2">Ссылка для клиентов — открывает чат с SI:</div>
+        <button onclick="SF.copyText('${SF.js(c.link)}', 'Ссылка скопирована')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i> Скопировать ссылку</button>
+        <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Дополнить настройки: фото, описание, материалы</button>
+      </div>`;
+  }
+
+  function renderCreate(route = {}) {
+    if (SF.feature('quick-start') && route.goal !== 'custom') {
+      return route.goal ? renderQuickForm(route.goal) : renderQuickGoals();
+    }
     return `
       <form onsubmit="SF.actions.createConsultant(event)" class="glass-card-3d p-4 space-y-3 text-xs">
         <div class="text-[11px] text-muted leading-snug">У каждого SI-продавца есть цель, чёткие инструкции и лимит на клиента — он работает сам, без вашего участия.</div>
@@ -1397,7 +1480,7 @@
     }
     SF.askWriteAccess(); // the bot will tell about new requests from clients
     SF.confetti();
-    showToast('Офис открыт! Заполните карточку своего SI-продавца');
+    showToast(SF.feature('quick-start') ? 'Офис открыт! Выберите цель — остальное SI подготовит сам' : 'Офис открыт! Заполните карточку своего SI-продавца');
     const next = store().currentRoute().next;
     SF.patch({ section: 'consultants', next: null });
     if (next === 'create') SF.push('office-create');
@@ -1410,6 +1493,34 @@
       SF.push('office-create');
     } else {
       SF.openIn('marketplace', 'office', { section: 'consultants', next: 'create' });
+    }
+  };
+
+  SF.actions.quickStart = async (e, goal) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const f = e.target;
+    const val = (name) => (f[name] ? f[name].value.trim() : '');
+    if (!val('about') || !val('offer')) {
+      showToast('Заполните, чем вы занимаетесь и что получит клиент');
+      return;
+    }
+    const button = f.querySelector('button[type=submit]');
+    if (button) { button.disabled = true; button.textContent = 'Создаю…'; }
+    try {
+      const project = await api().quickStart({
+        goal, about: val('about'), offer: val('offer'),
+        priceMode: f.priceMode ? f.priceMode.value : (goal === 'sell' ? 'fixed' : undefined),
+        priceLabel: val('priceLabel'), link: val('link')
+      });
+      SF.data.invalidate('consultants');
+      await SF.data.myConsultants();
+      // The wizard screens leave the history: «Назад» from «готов» returns to the Office
+      while (store().currentRoute().screen === 'office-create' && store().popRoute()) { /* next */ }
+      SF.push('office-ready', { id: project.id });
+    } catch (err) {
+      if (button) { button.disabled = false; button.textContent = 'Создать SI-продавца'; }
+      showToast(SF.withErrorCode(err.message || 'Не получилось создать', err));
     }
   };
 
@@ -2110,6 +2221,7 @@
   const TITLES = {
     office: 'Офис',
     'office-create': 'Новый SI-продавец',
+    'office-ready': 'SI-продавец готов',
     'office-consultant': 'SI-продавец',
     'office-client': 'Клиент'
   };
@@ -2125,7 +2237,8 @@
       if (route.screen === 'office') return renderOffice(route, state);
       if (route.screen === 'office-create' && !store().isBusinessActive()) return renderTerms();
       if (!store().isBusinessActive() && !store().isAssistant()) return renderTerms();
-      if (route.screen === 'office-create') return renderCreate();
+      if (route.screen === 'office-create') return renderCreate(route);
+      if (route.screen === 'office-ready') return renderQuickReady(route);
       if (route.screen === 'office-consultant') return renderConsultant(route, state);
       if (route.screen === 'office-client') return renderClient(route, state);
       return renderOffice(route, state);
