@@ -481,7 +481,7 @@
     const clientMessages = messages.filter(m => m.sender === 'client').length;
     if (clientMessages < 2) return '';
     return `
-      <div class="sticky top-0 z-10 p-3 rounded-2xl bg-card border border-[#81D8D0] shadow-lg flex items-center gap-2">
+      <div class="p-2.5 rounded-2xl bg-card border border-[#81D8D0] flex items-center gap-2">
         <img src="${SF.MASCOTS.buddy}" alt="" class="w-8 h-8 flex-shrink-0" />
         <div class="flex-1 min-w-0">
           <div class="text-[10px] text-muted">Готовы начать?</div>
