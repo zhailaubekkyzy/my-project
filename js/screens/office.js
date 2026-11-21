@@ -197,6 +197,14 @@
         <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-продавца
       </button>
       ${SF.funnels ? SF.funnels.officeEntry() : ''}
+      <button onclick="SF.go('community')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left">
+        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="users" class="w-5 h-5"></i></span>
+        <span class="flex-1">
+          <span class="block text-sm font-bold text-ink">Мои сообщества</span>
+          <span class="block text-[11px] text-muted">Лента, участники, заявки и оплаты, цифры — во вкладке «Комьюнити»</span>
+        </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+      </button>
       ${assistedBlock}
       <div class="space-y-2.5">
         ${list.map(c => `

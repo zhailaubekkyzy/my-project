@@ -75,6 +75,8 @@ const defaultData = {
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
     groups: null,            // my group conversations and invitations (Chats tab)
     groupThreads: {},        // { [groupId]: { group, members, messages, pinned, invitedBy } }
+    // Communities (tab «Комьюнити»): the catalog, mine, and per community / post
+    communities: { catalog: null, mine: null, view: {}, feed: {}, post: {}, waiting: {}, members: {} },
     calendar: {},            // { [businessId | 'own']: { settings, hosts, meetings, role } } Office → Календарь
     funnelLists: {},         // { ["businessId|days|status"]: { clients, done } } portions of 30
     cardReviews: {},         // { [projectId]: { count, average, reviews } } отзывы на карточке
