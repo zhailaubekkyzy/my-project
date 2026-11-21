@@ -1,5 +1,6 @@
 // screens/chats.js - Chats: with SI-consultants (soft red) and with people (Tiffany).
-// People find anyone in SmartFlow with the search at the top and write right here (screen 'person').
+// People find anyone in SmartFlow with the search at the top and write right here (screen 'person');
+// group conversations — screens/groups.js (screens 'group…').
 // Real data from the server (js/data.js): my chats as a client, messages, SI replies.
 // A chat opens by the consultant's link: t.me/smartflow_ai_support_bot/app?startapp=<slug>.
 
@@ -77,10 +78,13 @@
     const lastAssistant = assistantList[assistantList.length - 1];
     const q = norm(searchQuery.replace(/^@/, ''));
     const searchBox = SF.data.signedIn() ? `
-      <div class="relative">
-        <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
-        <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека: имя, @ник, чем занимается" autocomplete="off"
-          class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1 min-w-0">
+          <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input type="search" data-keep="chats-search" value="${SF.esc(searchQuery)}" oninput="SF.actions.searchChats(this.value)" placeholder="Найти чат или человека: имя, @ник, чем занимается" autocomplete="off"
+            class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
+        </div>
+        <button onclick="SF.actions.newGroup()" class="flex-shrink-0 px-3 py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center gap-1" aria-label="Новая группа"><i data-lucide="users" class="w-4 h-4"></i>Группа</button>
       </div>` : '';
 
     // One list, newest first: SI-sellers and people together
@@ -93,7 +97,8 @@
         preview: stripPrefix(c.lastMessage),
         unread: SF.data.isUnread(state, c)
       }) })),
-      ...people.map(c => ({ at: c.lastActivity, title: c.person.displayName, username: c.person.username, html: () => personRow(c) }))
+      ...people.map(c => ({ at: c.lastActivity, title: c.person.displayName, username: c.person.username, html: () => personRow(c) })),
+      ...(state.remote.groups || []).map(g => ({ at: g.lastActivity, title: g.name, html: () => SF.groups.listRow(g) }))
     ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
 
     if (q.length >= 2 || q.length === 1) {
@@ -108,17 +113,14 @@
           <div class="space-y-2">
             ${searchResults.people === null ? '<div class="text-xs text-muted px-1">Ищу…</div>' : ''}
             ${found.map(p => `
-              <div class="w-full p-3 rounded-2xl flex items-center gap-3 bg-card border border-line">
+              <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="w-full p-3 rounded-2xl flex items-center gap-3 text-left bg-card border border-line">
                 ${SF.avatar(p.photoUrl, { size: 44, kind: 'human', userId: p.id })}
                 <span class="flex-1 min-w-0">
                   <span class="flex items-center gap-1 text-sm font-bold text-ink min-w-0"><span class="truncate">${SF.esc(p.displayName)}</span>${SF.partnerBadge(p.id)}</span>
                   <span class="block text-[11px] text-muted truncate">${SF.esc(p.headline || (p.username ? `@${p.username}` : ''))}</span>
                 </span>
-                <span class="flex flex-col gap-1 flex-shrink-0">
-                  <button onclick="SF.openIn('marketplace', 'person', { id: '${SF.js(p.id)}' })" class="px-2.5 py-1 rounded-lg btn-3d-dark text-[11px]">Профиль</button>
-                  <button onclick="SF.actions.openPerson('${SF.js(p.id)}')" class="px-2.5 py-1 rounded-lg btn-3d-tiffany text-[11px]">Написать</button>
-                </span>
-              </div>`).join('')}
+                <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+              </button>`).join('')}
             ${searchResults.people && !found.length && !mine.length ? '<div class="text-xs text-muted px-1">Никого не нашли. Попробуйте имя, @ник или слово о том, чем человек занимается.</div>' : ''}
           </div>` : ''}
       `;
@@ -132,7 +134,7 @@
         ${chats && !items.length ? `
           <div class="glass-card-3d p-4 space-y-2 text-center">
             <div class="text-sm font-bold text-ink">Пока нет переписок</div>
-            <div class="text-xs text-muted leading-relaxed">Найдите человека по имени в поиске выше — и напишите ему. Или найдите SI-продавца в Маркетплейсе.</div>
+            <div class="text-xs text-muted leading-relaxed">Найдите человека по имени в поиске выше — и напишите ему, или создайте группу. Или найдите SI-продавца в Маркетплейсе.</div>
             <button onclick="SF.go('marketplace')" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs">Открыть Маркетплейс</button>
           </div>` : ''}
         ${row({
@@ -155,14 +157,17 @@
   const fileUrls = new Map();
   const filePath = (userId, fileId) => `/api/people/${encodeURIComponent(userId)}/files/${encodeURIComponent(fileId)}`;
 
-  function personMessage(m, userId) {
+  // gap: close to the previous message of the same person, a bit further from the other one
+  function personMessage(m, userId, gap = '') {
+    // Mine — the deep Tiffany; the other person — their own shade (owner's decision 21 Nov.)
+    const bubbleClass = m.mine ? 'chat-bubble-mine' : `chat-bubble-person ${SF.personTone(userId)}`;
     const time = `<div class="text-[9px] opacity-60 text-right mt-0.5">${msgTime(m.createdAt)}</div>`;
     const side = m.mine ? 'justify-end' : 'justify-start';
     const path = m.fileId ? filePath(userId, m.fileId) : '';
     const src = m.fileId && fileUrls.get(m.fileId) ? `src="${fileUrls.get(m.fileId)}"` : '';
     if (m.kind === 'video' && m.fileId) {
       return `
-        <div class="flex ${side}">
+        <div class="flex ${side} ${gap}">
           <div class="flex flex-col items-center">
             <video data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} playsinline preload="metadata" onclick="SF.actions.toggleCircle(this)"
               class="w-44 h-44 rounded-full object-cover bg-sunken border-2 ${m.mine ? 'border-[#81D8D0]' : 'border-line'}"></video>
@@ -172,8 +177,8 @@
     }
     if (m.kind === 'photo' && m.fileId) {
       return `
-        <div class="flex ${side}">
-          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'} !p-1">
+        <div class="flex ${side} ${gap}">
+          <div class="${bubbleClass} !p-1">
             <img data-dm-file="${SF.esc(path)}" data-file-id="${SF.esc(m.fileId)}" ${src} alt="Фото" onclick="SF.actions.openPhoto(this)" class="rounded-xl max-w-[220px] max-h-[280px] min-w-[80px] min-h-[80px] object-cover bg-sunken" />
             <div class="px-1">${time}</div>
           </div>
@@ -181,13 +186,13 @@
     }
     if (m.kind === 'voice' && m.fileId) {
       return `
-        <div class="flex ${side}">
-          <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
+        <div class="flex ${side} ${gap}">
+          <div class="${bubbleClass}">${SF.voiceContent({ text: '', voiceSeconds: m.seconds }, path)}${time}</div>
         </div>`;
     }
     return `
-      <div class="flex ${side}">
-        <div class="${m.mine ? 'chat-bubble-human' : 'chat-bubble-expert'}">${SF.formatChatMarkdown(m.text)}${time}</div>
+      <div class="flex ${side} ${gap}">
+        <div class="${bubbleClass}">${SF.formatChatMarkdown(m.text)}${time}</div>
       </div>`;
   }
 
@@ -253,9 +258,10 @@
 
   // Recording a voice (1.5 min) or a round video (30 s): a small window over the screen, so new
   // messages arriving meanwhile do not interrupt it. The limit is a quiet timer.
+  // Shared by private conversations and groups (screens/groups.js): onDone(blob, seconds).
   let personRec = null;
-  SF.actions.recordPerson = async (userId, kind) => {
-    if (personRec || sending || !window.sfMedia) return;
+  SF.recordClip = async (kind, onDone) => {
+    if (personRec || !window.sfMedia) return;
     const max = kind === 'video' ? 30 : 90;
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4';
@@ -271,6 +277,7 @@
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    if (SF.translateDom) SF.translateDom(overlay);
     const timerEl = overlay.querySelector('[data-rec-timer]');
     const close = () => { overlay.remove(); personRec = null; };
     const finish = async () => {
@@ -278,7 +285,7 @@
       personRec.finishing = true;
       const result = await personRec.controller.stop();
       close();
-      if (result && result.blob.size) await sendPersonFile(userId, kind, result.blob, result.seconds);
+      if (result && result.blob.size) await onDone(result.blob, result.seconds);
     };
     try {
       const options = {
@@ -299,6 +306,11 @@
     }
     overlay.querySelector('[data-rec-cancel]').onclick = () => { if (personRec) personRec.controller.cancel(); close(); };
     overlay.querySelector('[data-rec-send]').onclick = finish;
+  };
+
+  SF.actions.recordPerson = (userId, kind) => {
+    if (sending) return;
+    SF.recordClip(kind, (blob, seconds) => sendPersonFile(userId, kind, blob, seconds));
   };
 
   function renderPerson(state, userId) {
@@ -332,9 +344,9 @@
           </details>` : ''}
       </div>
 
-      <div class="glass-card-3d p-3 flex flex-col space-y-2 chat-fill overflow-y-auto" id="chat-scroll">
+      <div class="glass-card-3d p-3 flex flex-col chat-fill overflow-y-auto" id="chat-scroll">
         ${!data.messages.length ? `<div class="m-auto text-center text-xs text-muted px-4 leading-relaxed">Напишите ${name} первым — например, поздоровайтесь и расскажите, чем вы занимаетесь 🙂</div>` : ''}
-        ${data.messages.map(m => personMessage(m, p.id)).join('')}
+        ${data.messages.map((m, i, all) => personMessage(m, p.id, i === 0 ? '' : all[i - 1].mine === m.mine ? 'mt-0.5' : 'mt-3')).join('')}
       </div>
 
       ${t && t.needsMyAnswer ? `
@@ -1089,6 +1101,7 @@
   // ---------------- Screen ----------------
   SF.screens.chats = {
     title(route, state) {
+      if (SF.groups.owns(route.screen)) return SF.groups.title(route, state);
       if (route.screen === 'person') return state.remote.personThreads[route.id]?.person?.displayName || 'Переписка';
       if (route.screen !== 'chat') return 'Чаты';
       if (route.slug === ASSISTANT) return 'Поддержка';
@@ -1096,11 +1109,16 @@
       return card ? card.name : 'Чат';
     },
     render(route, state) {
+      if (SF.groups.owns(route.screen)) return SF.groups.render(route, state);
       if (route.screen === 'person') return renderPerson(state, route.id);
       if (route.screen !== 'chat') return renderList(state);
       return route.slug === ASSISTANT ? renderAssistant(state) : renderChat(state, route.slug);
     },
     afterRender(route, state) {
+      if (SF.groups.owns(route.screen)) {
+        SF.groups.afterRender(route, state);
+        return;
+      }
       if (route.screen === 'person') {
         const userId = route.id;
         SF.data.personMessages(userId);
@@ -1115,6 +1133,7 @@
       if (route.screen !== 'chat') {
         SF.data.myChats();
         SF.data.peopleChats();
+        SF.data.groups();
         SF.data.myFeedback(60000);
         return;
       }

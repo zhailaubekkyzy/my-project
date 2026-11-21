@@ -3262,6 +3262,155 @@ async function runAllTests() {
     }
   });
 
+  await test('73. Группы в Чатах: приглашение, ссылка, роли, ответ, закреп, реакции и отметки, упоминания, «Кратко» с места остановки', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    const notifyService = require('../server/services/notify-service');
+    const phoneSent = [];
+    const recorder = { name: 'test-phone', send: async (userId, { text, startParam }) => { phoneSent.push({ userId, text, start_param: startParam }); return true; } };
+    notifyService.CHANNELS.push(recorder);
+    try {
+      const owner = await tokenFor({ id: 730001, first_name: 'Айгуль', last_name: 'Группа' });
+      const bob = await tokenFor({ id: 730002, first_name: 'Бахыт', last_name: 'Группа' });
+      const cat = await tokenFor({ id: 730003, first_name: 'Света', last_name: 'Группа' });
+      const outsider = await tokenFor({ id: 730004, first_name: 'Чужой', last_name: 'Группа' });
+      const idOf = async (token) => (await api('GET', '/api/me/profile', token)).body.user.id;
+      const [ownerId, bobId, catId] = [await idOf(owner), await idOf(bob), await idOf(cat)];
+      // Group notifications go to the phone only (a recording channel here), never to Buddy
+      const notes = async (userId) => phoneSent.filter(n => n.userId === userId);
+
+      assert.strictEqual((await api('POST', '/api/groups', owner, { name: '   ' })).status, 400, 'A name is needed');
+      // Cat blocked the owner in a private conversation: the owner cannot invite her
+      await api('POST', `/api/people/${catId}/messages`, owner, { text: 'Привет' });
+      await api('POST', `/api/people/${ownerId}/answer`, cat, { action: 'block' });
+      const created = await api('POST', '/api/groups', owner, { name: 'Йога по утрам', memberIds: [bobId, catId, 'usr_nobody'] });
+      assert.strictEqual(created.status, 201);
+      assert.strictEqual(created.body.invited, 1, 'Only Bob is invited');
+      const gid = created.body.groupId;
+      assert((await notes(bobId)).some(n => n.start_param === `G_${gid}` && n.text.includes('приглашает')), 'Bob is told on the phone');
+
+      // Invited: sees the invitation only, cannot write
+      const invited = await api('GET', `/api/groups/${gid}`, bob);
+      assert.strictEqual(invited.body.group.invited, true);
+      assert.strictEqual(invited.body.messages.length, 0);
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/messages`, bob, { text: 'я тут' })).status, 404);
+      assert.strictEqual((await api('GET', `/api/groups/${gid}`, outsider)).status, 404, 'Strangers see nothing');
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/answer`, bob, { accept: true })).status, 200);
+
+      // Messages, a reply, the unread notification only once per run
+      const first = await api('POST', `/api/groups/${gid}/messages`, owner, { text: 'Завтра в 7:00 в парке' });
+      assert.strictEqual(first.status, 201);
+      await api('POST', `/api/groups/${gid}/messages`, owner, { text: 'Возьмите коврики' });
+      assert.strictEqual((await notes(bobId)).filter(n => n.text.includes('новое сообщение')).length, 1, 'One notification for an unread run');
+      const reply = await api('POST', `/api/groups/${gid}/messages`, bob, { text: 'Буду!', replyTo: first.body.messageId });
+      const view = (await api('GET', `/api/groups/${gid}`, owner)).body;
+      const answer = view.messages.find(m => m.id === reply.body.messageId);
+      assert.strictEqual(answer.replyTo.text, 'Завтра в 7:00 в парке');
+      assert.strictEqual(answer.sender.displayName.startsWith('Бахыт'), true);
+      assert.strictEqual(view.members.length, 2);
+
+      // Pin: only the owner/admin
+      assert.strictEqual((await api('PUT', `/api/groups/${gid}/pin`, bob, { messageId: first.body.messageId })).status, 403);
+      await api('PUT', `/api/groups/${gid}/pin`, owner, { messageId: first.body.messageId });
+      assert.strictEqual((await api('GET', `/api/groups/${gid}`, bob)).body.pinned.id, first.body.messageId);
+
+      // Reactions: no notification; the author sees a mark when opening the group (once)
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '💩' })).status, 400);
+      const ownerNotes = (await notes(ownerId)).length;
+      await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '❤️' });
+      assert.strictEqual((await notes(ownerId)).length, ownerNotes, 'No notification about a reaction');
+      assert.strictEqual((await api('GET', '/api/groups', owner)).body.groups[0].reacted, true, 'A mark in the list');
+      const opened = (await api('GET', `/api/groups/${gid}`, owner)).body;
+      assert.deepStrictEqual(opened.marks.reactions, [first.body.messageId], 'A mark on the right leads to the message');
+      assert.deepStrictEqual(opened.marks.mentions, [], 'The reply was already seen when the owner opened the group');
+      assert.deepStrictEqual((await api('GET', `/api/groups/${gid}`, owner)).body.marks, { mentions: [], reactions: [] }, 'Seen once');
+      let msg = (await api('GET', `/api/groups/${gid}`, owner)).body.messages.find(m => m.id === first.body.messageId);
+      assert.deepStrictEqual(msg.reactions, [{ emoji: '❤️', count: 1, mine: false }]);
+      await api('POST', `/api/groups/${gid}/messages/${first.body.messageId}/react`, bob, { emoji: '❤️' });
+      msg = (await api('GET', `/api/groups/${gid}`, owner)).body.messages.find(m => m.id === first.body.messageId);
+      assert.strictEqual(msg.reactions.length, 0, 'Taken back');
+
+      // The link: preview, join; removed people cannot come back by it
+      const code = view.group.inviteCode;
+      assert(code, 'The owner sees the invitation link');
+      assert.strictEqual((await api('GET', `/api/groups/${gid}`, bob)).body.group.inviteCode, null, 'A member does not');
+      assert.strictEqual((await api('GET', `/api/groups/join/${code}`, outsider)).body.memberCount, 2);
+      assert.strictEqual((await api('POST', `/api/groups/join/${code}`, outsider)).status, 200);
+      const outsiderId = await idOf(outsider);
+      assert.strictEqual((await api('DELETE', `/api/groups/${gid}/members/${outsiderId}`, bob)).status, 403, 'A member cannot remove');
+      await api('DELETE', `/api/groups/${gid}/members/${outsiderId}`, owner);
+      assert.strictEqual((await api('POST', `/api/groups/join/${code}`, outsider)).status, 403, 'Removed: not by the link');
+
+      // Roles: an admin pins; deleting someone's message — only author/admin
+      assert.strictEqual((await api('DELETE', `/api/groups/${gid}/messages/${first.body.messageId}`, bob)).status, 403);
+      await api('PUT', `/api/groups/${gid}/members/${bobId}`, owner, { role: 'admin' });
+      assert.strictEqual((await api('PUT', `/api/groups/${gid}/pin`, bob, { messageId: null })).status, 200);
+      assert.strictEqual((await api('DELETE', `/api/groups/${gid}/messages/${first.body.messageId}`, bob)).status, 200);
+      const gone = (await api('GET', `/api/groups/${gid}`, owner)).body.messages.find(m => m.id === first.body.messageId);
+      assert.strictEqual(gone.deleted, true);
+      assert.strictEqual(gone.text, '');
+
+      // Mute: no more message notifications — but a mention still comes
+      await api('GET', `/api/groups/${gid}`, bob);
+      await api('PUT', `/api/groups/${gid}/mute`, bob, { muted: true });
+      const before = (await notes(bobId)).length;
+      await api('POST', `/api/groups/${gid}/messages`, owner, { text: 'Тишина?' });
+      assert.strictEqual((await notes(bobId)).length, before, 'Muted');
+      await api('POST', `/api/groups/${gid}/messages`, owner, { text: '@Бахыт, ты завтра будешь?', mentionIds: [bobId, 'usr_nobody', ownerId] });
+      assert((await notes(bobId)).some(n => n.text.includes('упомянул(а) вас')), 'A mention comes even when muted');
+      const bobView = (await api('GET', `/api/groups/${gid}`, bob)).body;
+      assert.strictEqual(bobView.marks.mentions.length, 1, 'The mention mark');
+      assert(bobView.newFrom, '«Новые сообщения» from where Bob stopped');
+      assert.strictEqual(bobView.missed, 2);
+      const bobReply = await api('POST', `/api/groups/${gid}/messages`, bob, { text: 'Буду', replyTo: (await api('GET', `/api/groups/${gid}`, bob)).body.messages.at(-1).id });
+      assert.deepStrictEqual((await api('GET', `/api/groups/${gid}`, owner)).body.marks.mentions, [bobReply.body.messageId], 'A reply to my message counts as a mention');
+
+      // «Кратко» by SI: needs a key and enough messages
+      config.openaiApiKey = '';
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 503);
+      config.openaiApiKey = 'sk-test-not-real';
+      let toOpenAI = null;
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          toOpenAI = JSON.parse(options.body);
+          return new Response(JSON.stringify({ choices: [{ message: { content: '• Договорились о йоге в 7:00' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 409, 'Too few missed');
+      for (const t of ['раз', 'два', 'три']) await api('POST', `/api/groups/${gid}/messages`, owner, { text: t });
+      await api('GET', `/api/groups/${gid}`, bob);
+      const summary = await api('POST', `/api/groups/${gid}/summary`, bob, {});
+      assert.strictEqual(summary.status, 200);
+      assert.strictEqual(summary.body.summary, '• Договорились о йоге в 7:00');
+      assert(toOpenAI.messages[1].content.includes('три'), 'What Bob missed is summarised');
+      assert(!toOpenAI.messages[1].content.includes('Возьмите коврики'), 'Not what Bob had already read');
+      assert.strictEqual(toOpenAI.model, config.groupSummaryModel, 'Its own model, not Buddy’s');
+      // Opening again with nothing new: «Кратко» still retells the same missed part
+      await api('GET', `/api/groups/${gid}`, bob);
+      assert.strictEqual((await api('POST', `/api/groups/${gid}/summary`, bob, {})).status, 200);
+
+      // Leaving: the owner's role passes on
+      await api('POST', `/api/groups/${gid}/leave`, owner);
+      assert.strictEqual((await api('GET', `/api/groups/${gid}`, bob)).body.group.role, 'owner');
+      assert.strictEqual((await api('GET', '/api/groups', owner)).body.groups.length, 0);
+
+      const inBuddy = await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE SUBSTR(start_param, 1, 2) = 'G_'`);
+      assert.strictEqual(Number(inBuddy.n), 0, 'Nothing from groups goes to Buddy');
+      const names = sent.map(e => e.event);
+      for (const e of ['group_created', 'group_joined', 'group_message', 'group_reaction', 'group_summary']) assert(names.includes(e), `Event ${e}`);
+      assert(!JSON.stringify(sent).includes('Йога'), 'No group names or texts in the numbers');
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+      analytics._setClientForTests(null);
+      notifyService.CHANNELS.splice(notifyService.CHANNELS.indexOf(recorder), 1);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

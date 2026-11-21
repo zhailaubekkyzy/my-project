@@ -486,6 +486,49 @@
       return await apiFetch(`/api/people/${encodeURIComponent(userId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
     },
 
+    // Group conversations in «Чаты» (server/routes/groups.js)
+    async getGroups() {
+      return await apiFetch('/api/groups');
+    },
+
+    async getGroup(groupId) {
+      return await apiFetch(`/api/groups/${encodeURIComponent(groupId)}`);
+    },
+
+    // POST/PUT/DELETE on a group: groupCall('POST', id, '/messages', { text })
+    async groupCall(method, groupId, path = '', body) {
+      return await apiFetch(`/api/groups/${encodeURIComponent(groupId)}${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+    },
+
+    async createGroup(name, memberIds) {
+      return await apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ name, memberIds }) });
+    },
+
+    async previewGroupLink(code) {
+      return await apiFetch(`/api/groups/join/${encodeURIComponent(code)}`);
+    },
+
+    async joinGroupLink(code) {
+      return await apiFetch(`/api/groups/join/${encodeURIComponent(code)}`, { method: 'POST' });
+    },
+
+    // A voice (1.5 min), a photo or a round video (30 s) in a group, maybe as a reply
+    async sendGroupFile(groupId, kind, blob, seconds = '', replyTo = '') {
+      return await apiFetch(`/api/groups/${encodeURIComponent(groupId)}/files?kind=${encodeURIComponent(kind)}&seconds=${encodeURIComponent(seconds)}&replyTo=${encodeURIComponent(replyTo || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+        body: blob
+      });
+    },
+
+    async uploadGroupPhoto(groupId, image) {
+      return await apiFetch(`/api/groups/${encodeURIComponent(groupId)}/photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': image.type || 'image/jpeg' },
+        body: image
+      });
+    },
+
     async getMyChats() {
       return await apiFetch('/api/chat');
     },

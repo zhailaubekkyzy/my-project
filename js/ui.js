@@ -63,6 +63,16 @@
       </span>`;
   }
 
+  // A person's own shade in conversations (css/app.css .person-tone-N). In a group the order of members
+  // is passed, so up to 7 people never share a shade; otherwise it comes from the id (always the same).
+  const PERSON_TONES = 7;
+  function personTone(userId, index) {
+    if (Number.isInteger(index) && index >= 0) return `person-tone-${index % PERSON_TONES}`;
+    let h = 0;
+    for (const ch of String(userId || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `person-tone-${h % PERSON_TONES}`;
+  }
+
   function siLabel(text = 'SI') {
     return `<span class="inline-flex items-center gap-1 text-si font-semibold"><span class="si-dot"></span>${esc(text)}</span>`;
   }
@@ -265,6 +275,7 @@
     photoSrc,
     avatar,
     siLabel,
+    personTone,
     sectionTitle,
     emptyState,
     soonBadge,

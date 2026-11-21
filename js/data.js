@@ -80,6 +80,17 @@
       store().setRemote(`personThreads.${userId}`, await api().getPersonMessages(userId));
     }), maxAge),
 
+    // Group conversations (Chats tab) and one group
+    groups: (maxAge = 15000) => ensure('groups', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('groups', (await api().getGroups()).groups || []);
+    }, maxAge),
+
+    groupMessages: (groupId, maxAge = 5000) => ensure(`group:${groupId}`, () => orMissing(`group:${groupId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`groupThreads.${groupId}`, await api().getGroup(groupId));
+    }), maxAge),
+
     chatMessages: (slug, maxAge = 5000) => ensure(`messages:${slug}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getChatMessages(slug);
@@ -308,6 +319,10 @@
       if (pulse.people !== prev.people) {
         loaders.peopleChats(0);
         if (tab === 'chats' && route.screen === 'person' && route.id) loaders.personMessages(route.id, 0);
+      }
+      if (pulse.groups !== prev.groups) {
+        loaders.groups(0);
+        if (tab === 'chats' && route.screen === 'group' && route.id) loaders.groupMessages(route.id, 0);
       }
       if (pulse.chats !== prev.chats) {
         invalidate('chats');
