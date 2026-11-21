@@ -136,6 +136,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/buddy', require('./routes/buddy'));
 app.use('/api/people', require('./routes/people'));
+app.use('/api/ready-funnels', require('./routes/ready-funnels'));
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.
