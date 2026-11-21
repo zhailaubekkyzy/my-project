@@ -33,13 +33,16 @@ router.get('/pulse', async (req, res, next) => {
          (SELECT MAX(last_activity) FROM clients WHERE external_client_id = ?) AS chats,
          (SELECT MAX(g.changed_at) FROM chat_group_members m JOIN chat_groups g ON g.id = m.group_id
             WHERE m.user_id = ? AND m.status IN ('active', 'invited')) AS grp,
-         (SELECT COUNT(*) FROM chat_group_members WHERE user_id = ? AND status IN ('active', 'invited')) AS grp_n`,
-      [me, me, me, me, me, me, me]
+         (SELECT COUNT(*) FROM chat_group_members WHERE user_id = ? AND status IN ('active', 'invited')) AS grp_n,
+         (SELECT MAX(c.changed_at) FROM community_members m JOIN communities c ON c.id = m.community_id
+            WHERE m.user_id = ? AND m.status IN ('active', 'requested', 'paying')) AS com,
+         (SELECT COUNT(*) FROM community_members WHERE user_id = ? AND status IN ('active', 'requested', 'paying')) AS com_n`,
+      [me, me, me, me, me, me, me, me, me]
     );
     const dm = [stamp(row.dm_a), stamp(row.dm_b)].filter(Boolean).sort().pop() || null;
     res.setHeader('Cache-Control', 'no-store');
     // groups: any change in my groups (a message, a reaction, a pin, members, an invitation)
-    res.json({ unread: Number(row.unread) || 0, notes: stamp(row.notes), people: dm, chats: stamp(row.chats), groups: `${stamp(row.grp) || ''}:${Number(row.grp_n) || 0}` });
+    res.json({ unread: Number(row.unread) || 0, notes: stamp(row.notes), people: dm, chats: stamp(row.chats), groups: `${stamp(row.grp) || ''}:${Number(row.grp_n) || 0}`, communities: `${stamp(row.com) || ''}:${Number(row.com_n) || 0}` });
   } catch (err) {
     next(err);
   }

@@ -486,6 +486,29 @@
       return await apiFetch(`/api/people/${encodeURIComponent(userId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
     },
 
+    // Communities in «Комьюнити» (server/routes/communities.js): communityCall('GET', '/mine')
+    async communityCall(method, path = '', body) {
+      return await apiFetch(`/api/communities${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+    },
+
+    async uploadCommunityCover(communityId, image) {
+      return await apiFetch(`/api/communities/${encodeURIComponent(communityId)}/cover`, {
+        method: 'POST',
+        headers: { 'Content-Type': image.type || 'image/jpeg' },
+        body: image
+      });
+    },
+
+    // A post with a photo: the text goes in the address, the photo is the body
+    async createCommunityPhotoPost(communityId, { text = '', category = '', announcement = false }, photo) {
+      const q = `text=${encodeURIComponent(text)}&category=${encodeURIComponent(category || '')}&announcement=${announcement ? '1' : '0'}`;
+      return await apiFetch(`/api/communities/${encodeURIComponent(communityId)}/posts/photo?${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': photo.type || 'image/jpeg' },
+        body: photo
+      });
+    },
+
     // Group conversations in «Чаты» (server/routes/groups.js)
     async getGroups() {
       return await apiFetch('/api/groups');
@@ -683,6 +706,8 @@
       funnel: (id) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}`),
       decideFunnel: (id, decision, note) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }),
       partners: () => apiFetch('/api/admin/partners'),
+      communities: () => apiFetch('/api/admin/communities'),
+      hideCommunity: (id, hidden) => apiFetch(`/api/admin/communities/${encodeURIComponent(id)}/hide`, { method: 'POST', body: JSON.stringify({ hidden }) }),
       feedbackList: (status) => apiFetch(`/api/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ''}`),
       feedback: (id) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`),
       updateFeedback: (id, patch) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(patch) }),

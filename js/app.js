@@ -224,6 +224,8 @@ SF.openIn = (tab, screen, params = {}) => {
 //   FSALES          → «Мои воронки»: purchases of my funnels waiting for my confirmation
 //   G_<groupId>     → a group conversation in «Чаты» (bot notifications about it)
 //   J_<code>        → an invitation link to a group: «Вступить»
+//   K_<communityId> → a community in «Комьюнити» (its link; notifications about requests and payments)
+//   KP_<postId>     → a post of a community with its comments (notifications about comments, announcements)
 // Prefixes are uppercase, so they never clash with slugs (always lowercase).
 function handleStartParam() {
   const tg = window.Telegram?.WebApp;
@@ -241,6 +243,10 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'office', { section: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
+  } else if (param.startsWith('KP_')) {
+    SF.openIn('community', 'community-post', { postId: param.slice(3) });
+  } else if (param.startsWith('K_')) {
+    SF.openIn('community', 'community', { id: param.slice(2), view: 'feed' });
   } else if (param.startsWith('G_')) {
     SF.actions.openGroup(param.slice(2));
   } else if (param.startsWith('J_')) {
@@ -381,7 +387,9 @@ function renderBottomNav(state) {
   const badges = {
     chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length +
       (state.remote.peopleChats || []).filter(c => c.unread || c.needsMyAnswer).length +
-      (SF.groups ? SF.groups.unreadCount(state) : 0)
+      (SF.groups ? SF.groups.unreadCount(state) : 0),
+    // Communities with new posts or requests / payments waiting for me
+    community: SF.community ? SF.community.unreadCount(state) : 0
   };
   // Red dot on Buddy: there are unread notifications
   const buddyUnread = Boolean(state.remote.notifications && state.remote.notifications.unread);

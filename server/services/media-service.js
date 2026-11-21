@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const db = require('../db');
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_KINDS = ['user_photo', 'consultant_photo', 'group_photo'];
+const ALLOWED_KINDS = ['user_photo', 'consultant_photo', 'group_photo', 'community_cover'];
 
 // Accept only real JPEG / PNG / WebP files, recognized by their first bytes
 // (never trust the Content-Type the browser sent, and never accept SVG).

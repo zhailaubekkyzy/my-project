@@ -91,6 +91,43 @@
       store().setRemote(`groupThreads.${groupId}`, await api().getGroup(groupId));
     }), maxAge),
 
+    // Communities: the catalog (with a search), mine, one community, its feed / members / waiting, a post
+    communityCatalog: (q = '', maxAge = 30000) => ensure(`com:catalog:${q}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote('communities.catalog', (await api().communityCall('GET', `?q=${encodeURIComponent(q)}`)).communities || []);
+    }, maxAge),
+
+    communityMine: (maxAge = 15000) => ensure('com:mine', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('communities.mine', (await api().communityCall('GET', '/mine')).communities || []);
+    }, maxAge),
+
+    community: (id, maxAge = 15000) => ensure(`com:view:${id}`, () => orMissing(`com:${id}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`communities.view.${id}`, await api().communityCall('GET', `/${encodeURIComponent(id)}`));
+    }), maxAge),
+
+    communityFeed: (id, category = '', maxAge = 10000) => ensure(`com:feed:${id}:${category}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().communityCall('GET', `/${encodeURIComponent(id)}/feed?category=${encodeURIComponent(category)}`);
+      store().setRemote(`communities.feed.${id}`, { ...res, category });
+    }, maxAge),
+
+    communityMembers: (id, maxAge = 30000) => ensure(`com:members:${id}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`communities.members.${id}`, (await api().communityCall('GET', `/${encodeURIComponent(id)}/members`)).members || []);
+    }, maxAge),
+
+    communityWaiting: (id, maxAge = 15000) => ensure(`com:waiting:${id}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`communities.waiting.${id}`, (await api().communityCall('GET', `/${encodeURIComponent(id)}/waiting`)).items || []);
+    }, maxAge),
+
+    communityPost: (postId, maxAge = 8000) => ensure(`com:post:${postId}`, () => orMissing(`compost:${postId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`communities.post.${postId}`, await api().communityCall('GET', `/posts/${encodeURIComponent(postId)}`));
+    }), maxAge),
+
     chatMessages: (slug, maxAge = 5000) => ensure(`messages:${slug}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getChatMessages(slug);
@@ -323,6 +360,11 @@
       if (pulse.groups !== prev.groups) {
         loaders.groups(0);
         if (tab === 'chats' && route.screen === 'group' && route.id) loaders.groupMessages(route.id, 0);
+      }
+      if (pulse.communities !== prev.communities) {
+        invalidate('com:');
+        loaders.communityMine(0);
+        if (tab === 'community' && SF.community && SF.community.refresh) SF.community.refresh(route);
       }
       if (pulse.chats !== prev.chats) {
         invalidate('chats');
