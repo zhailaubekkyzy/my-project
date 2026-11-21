@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const projectService = require('../services/project-service');
 const marketplaceService = require('../services/marketplace-service');
+const quickStart = require('../services/quick-start');
 const funnelService = require('../services/funnel-service');
 const reviewService = require('../services/review-service');
 const analytics = require('../services/analytics-service');
@@ -48,6 +49,67 @@ router.post('/', async (req, res, next) => {
 
     analytics.capture('si_seller_created', req.user.userId);
     res.status(201).json(project);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/projects/quick-start  { goal, about, offer, priceMode, priceLabel, link }
+ * «Быстрый старт»: a working SI-seller from one of four simple goals (server/services/quick-start.js).
+ * goal: consult | sell | leads | free. about — who the expert is in a word («нутрициолог»);
+ * link — the payment link (sell, optional) or the free material (free, required: a link or a text).
+ */
+router.post('/quick-start', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const template = quickStart.TEMPLATES[body.goal];
+    if (!template) return res.status(400).json({ error: 'bad_request', message: 'Выберите цель' });
+    const about = cleanText(body.about, 40);
+    const offer = cleanText(body.offer, 200);
+    if (!about) return res.status(400).json({ error: 'bad_request', message: 'Напишите, чем вы занимаетесь' });
+    if (!offer) return res.status(400).json({ error: 'bad_request', message: 'Напишите, что получит клиент' });
+    const rawLink = cleanText(body.link, 500);
+    let paymentUrl = null;
+    let material = '';
+    if (body.goal === 'free') {
+      if (!rawLink) return res.status(400).json({ error: 'bad_request', message: 'Добавьте ссылку на материал или его текст' });
+      material = rawLink;
+    } else if (rawLink && body.goal === 'sell') {
+      paymentUrl = cleanUrl(rawLink);
+      if (!paymentUrl) return res.status(400).json({ error: 'bad_request', message: 'Ссылка на оплату должна начинаться с https://' });
+    }
+    const priceMode = marketplaceService.PRICE_MODES.includes(body.priceMode) ? body.priceMode : template.priceMode;
+    const priceLabel = priceMode === 'fixed' ? cleanText(body.priceLabel, 80) : '';
+
+    const user = await db.get('SELECT display_name, profile FROM users WHERE id = ?', [req.user.userId]);
+    const shownName = (projectService.safeJsonParse(user && user.profile).displayName || (user && user.display_name) || '').trim();
+    const firstName = shownName.split(/\s+/)[0] || 'Эксперт';
+    const plan = template.build({ offer, link: material });
+
+    const project = await projectService.createProject(req.user.userId, {
+      name: `${firstName} · ${about}`.slice(0, 80),
+      niche: about,
+      customAiSettings: projectService.limitAiSettings({
+        clientLimit: 40,
+        quickStart: body.goal,
+        goal: plan.goal,
+        instructions: plan.instructions,
+        methodology: plan.methodology,
+        steps: funnelService.normalizeSteps(plan.steps),
+        scenarios: funnelService.normalizeScenarios(plan.scenarios, plan.steps)
+      })
+    });
+    const updated = await projectService.updateProject(project.id, {
+      offer,
+      price_mode: priceMode,
+      price_label: priceLabel,
+      payment_url: paymentUrl,
+      cta_kind: template.cta,
+      cta_label: template.ctaLabel || null
+    });
+    analytics.capture('si_seller_created', req.user.userId, { template: body.goal });
+    res.status(201).json(projectService.decorateProject(updated || project));
   } catch (err) {
     next(err);
   }
@@ -205,7 +267,7 @@ router.get('/:projectId/analytics', requireProjectPermission('analytics:read'), 
   const entryRows = await db.all(
     `SELECT COALESCE(entry, 'old') AS entry, COUNT(*) AS clients,
             SUM(CASE WHEN funnel_status = 'bought' THEN 1 ELSE 0 END) AS bought
-     FROM clients WHERE project_id = ? GROUP BY COALESCE(entry, 'old')`, [p.id]);
+     FROM clients WHERE project_id = ? AND COALESCE(entry, '') <> 'self' GROUP BY COALESCE(entry, 'old')`, [p.id]);
   const entries = {};
   for (const r of entryRows) entries[r.entry] = { clients: Number(r.clients) || 0, bought: Number(r.bought) || 0 };
   const cardViews = await count('SELECT COUNT(*) as count FROM card_views WHERE project_id = ? AND user_id <> ?', [p.id, p.owner_id]);

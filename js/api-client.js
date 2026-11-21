@@ -482,6 +482,11 @@
     },
 
     // First visit by the consultant's link: the SI writes first
+    // «Быстрый старт»: an SI-seller from a goal (consult | sell | leads | free)
+    async quickStart(data) {
+      return await apiFetch('/api/projects/quick-start', { method: 'POST', body: JSON.stringify(data) });
+    },
+
     async startChat(slug, entry = null) {
       return await apiFetch(`/api/chat/${encodeURIComponent(slug)}/start`, {
         method: 'POST',

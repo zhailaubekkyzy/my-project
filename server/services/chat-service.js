@@ -80,15 +80,17 @@ async function leadForUser(project, userId, { create = true, entry = null } = {}
   );
   if (existing || !create) return existing;
   const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+  // The expert talking to their own SI-seller to see how it works («Поговорить как клиент»)
+  const ownTest = userId === project.owner_id;
   const lead = await findOrCreateLead(project, {
     clientId: userId,
-    name: user ? displayNameOf(user) : 'Клиент Telegram',
+    name: ownTest ? 'Вы (проверка)' : (user ? displayNameOf(user) : 'Клиент Telegram'),
     username: user ? user.username : null,
     avatarUrl: user ? (mediaUrl(user.photo_media_id) || user.avatar_url) : null
   });
   // The link with a source this person opened for THIS SI-seller (first one) gets the client
   const sourceLink = await require('./partner-service').attributeClient(project, lead, userId);
-  lead.entry = sourceLink ? 'source' : (ENTRIES.includes(entry) ? entry : 'link');
+  lead.entry = ownTest ? 'self' : sourceLink ? 'source' : (ENTRIES.includes(entry) ? entry : 'link');
   await db.run('UPDATE clients SET entry = ? WHERE id = ? AND entry IS NULL', [lead.entry, lead.id]);
   return lead;
 }
