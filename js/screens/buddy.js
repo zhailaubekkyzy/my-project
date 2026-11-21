@@ -13,7 +13,7 @@
   // The chain of hints after key events (see the structure document, "Бадди")
   function nextStep(state) {
     const me = state.me;
-    const business = store().isBusinessActive();
+    const business = store().isBusinessView();
     const chats = state.remote.chats || [];
     if (!business && !chats.length) {
       return {
@@ -22,7 +22,7 @@
       };
     }
     // No "create your own SI-seller" offer from Buddy (owner's decision 16 Oct.: for clients it is spam);
-    // experts find the Office in the Marketplace themselves
+    // experts turn on the business profile in Профиль themselves
     if (!business) return null;
     const consultants = store().ownConsultants();
     const unfinished = consultants.find(c => !c.offer || !c.paymentUrl);

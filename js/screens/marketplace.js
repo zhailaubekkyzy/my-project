@@ -24,34 +24,19 @@
   }
 
   // ---------------- List ----------------
-  // Visible way to create your own SI-consultant (Office terms first, if not accepted yet)
-  function createButton() {
-    return `
-      <button onclick="SF.actions.startCreateConsultant()" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i> Создать своего SI-продавца
-      </button>`;
-  }
-
+  // Business profile only: the way into the Office. A personal profile sees just the experts'
+  // products; the business profile is turned on in Профиль (owner's decision 21 Nov., like Instagram).
   function officeEntry(state) {
-    if (store().isBusinessActive() || store().isAssistant()) {
-      const waiting = SF.data.waitingInquiries(state).length;
-      return `
-        <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
-          <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
-          <span class="flex-1">
-            <span class="block text-sm font-bold text-ink">Мой Офис</span>
-            <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
-          </span>
-          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-        </button>`;
-    }
+    if (!store().isBusinessView()) return '';
+    const waiting = SF.data.waitingInquiries(state).length;
     return `
-      <button onclick="SF.push('office')" class="w-full hero-tiffany-banner p-4 text-left flex items-center gap-3">
-        <img src="${SF.MASCOTS.consultant}" alt="" class="w-14 h-14 flex-shrink-0" />
+      <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
+        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
         <span class="flex-1">
-          <span class="block text-sm font-extrabold">Офис для бизнеса</span>
-          <span class="block text-xs font-medium leading-snug">Свой SI-продавец продаёт ваши услуги 24/7. Откройте бизнес-профиль — это бесплатно.</span>
+          <span class="block text-sm font-bold text-ink">Мой Офис</span>
+          <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
         </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
       </button>`;
   }
 
@@ -93,7 +78,6 @@
     const items = (all || []).filter(c => (filter === 'all' || c.category === filter) && matches(c));
     return `
       ${officeEntry(state)}
-      ${createButton()}
 
       <div class="relative">
         <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -112,7 +96,9 @@
         ${items.map(card).join('')}
         ${all && !items.length && q ? '<div class="text-xs text-muted px-1">Ничего не нашли. Людей можно найти во вкладке «Чаты».</div>' : ''}
         ${all && !items.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
-          'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».') : ''}
+          store().isBusinessView()
+            ? 'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».'
+            : 'Здесь появятся SI-продавцы экспертов.') : ''}
       </div>
     `;
   }
@@ -359,7 +345,7 @@
     afterRender(route, state) {
       if (route.screen === 'list') {
         SF.data.marketplace();
-        if (store().isBusinessActive() || store().isAssistant()) SF.data.allInquiries();
+        if (store().isBusinessView()) SF.data.allInquiries();
       } else if (route.screen === 'consultant') {
         if (!findCard(state, route.id)) SF.data.cardById(route.id);
         SF.data.cardReviews(route.id);
