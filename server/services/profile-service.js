@@ -51,6 +51,9 @@ function sanitizeProfile(input = {}) {
   // When the person accepted the business-profile terms (opens the Office)
   const agreed = typeof input.businessAgreedAt === 'string' ? new Date(input.businessAgreedAt) : null;
   profile.businessAgreedAt = agreed && !isNaN(agreed) ? agreed.toISOString() : null;
+  // Personal / business profile, like Instagram (owner's decision 21 Nov.): a business profile can
+  // switch to the personal view — the Office and funnels hide, SI-sellers keep working, nothing is deleted
+  profile.personalMode = input.personalMode === true;
   return profile;
 }
 

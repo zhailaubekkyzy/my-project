@@ -25,7 +25,7 @@
   // Exact phrases (trimmed). Keys are the Russian text as it appears on the screen.
   const EN = {
     // Navigation and common
-    'Инкубатор': 'Incubator', 'Маркетплейс': 'Marketplace', 'Бадди': 'Buddy', 'Чаты': 'Chats', 'Профиль': 'Profile',
+    'Инкубатор': 'Incubator', 'Комьюнити': 'Community', 'Маркетплейс': 'Marketplace', 'Бадди': 'Buddy', 'Чаты': 'Chats', 'Профиль': 'Profile',
     'Назад': 'Back', 'Закрыть': 'Close', 'Отмена': 'Cancel', 'Отменить': 'Cancel', 'Сохранить': 'Save', 'Изменить': 'Edit',
     'Открыть': 'Open', 'Отправить': 'Send', 'Загружаю…': 'Loading…', 'Ищу…': 'Searching…', 'скоро': 'soon', 'Ещё': 'More',
     'Написать': 'Message', 'Создать': 'Create', 'Заполнить': 'Fill in', 'Не сейчас': 'Not now', 'Включить': 'Turn on',
@@ -36,6 +36,21 @@
     'эксперта': 'the expert', 'Автор': 'Author', 'Фото': 'Photo', 'Чат': 'Chat', 'Переписка': 'Conversation', 'Запись': 'Recording',
     'Бесплатно': 'Free', 'Пожаловаться': 'Report', 'Поддержка': 'Support',
     'ТЕСТ · тестовая копия SmartFlow': 'TEST · SmartFlow test copy',
+
+    // Комьюнити and the personal / business profile
+    'Сообщества экспертов': 'Expert communities',
+    'Здесь будут сообщества: лента, курсы, участники и уровни. Вступайте бесплатно или по ссылке эксперта.': 'Communities are coming here: a feed, courses, members and levels. Join for free or via the expert\'s link.',
+    'Здесь появятся SI-продавцы экспертов.': 'Experts’ SI-sellers will appear here.',
+    'Мои сообщества': 'My communities', 'Пока нет сообществ.': 'No communities yet.',
+    'Создать сообщество': 'Create a community',
+    'Своё сообщество с курсами и аналитикой. Сколько угодно сообществ.': 'Your own community with courses and analytics. As many as you like.',
+    'Перейти на бизнес-профиль': 'Switch to a business profile',
+    'Бесплатно. Свои SI-продавцы, воронки, аналитика и сообщества.': 'Free. Your own SI-sellers, funnels, analytics and communities.',
+    'Личный': 'Personal', 'Бизнес': 'Business',
+    'Офис спрятан. SI-продавцы продолжают работать, уведомления приходят как обычно.': 'The Office is hidden. SI-sellers keep working, notifications arrive as usual.',
+    'Личный профиль': 'Personal profile', 'Бизнес-профиль': 'Business profile',
+    'Не удалось переключить профиль. Попробуйте ещё раз': 'Could not switch the profile. Please try again',
+    'Создание сообществ появится в следующих версиях': 'Creating communities is coming in the next versions',
 
     // Session / errors
     'Нет связи с сервером. Откройте приложение в Telegram или проверьте интернет.': 'No connection to the server. Open the app in Telegram or check your internet.',

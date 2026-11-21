@@ -18,6 +18,7 @@ const defaultData = {
   ui: {
     tab: 'buddy',
     routes: {
+      community: [{ screen: 'list' }],
       marketplace: [{ screen: 'list' }],
       buddy: [{ screen: 'home' }],
       chats: [{ screen: 'list' }],
@@ -277,6 +278,12 @@ class Store {
 
   isBusinessActive() {
     return Boolean(this.data.me.profile.businessAgreedAt);
+  }
+
+  // Business profile turned on and not switched to the personal view (Профиль → «Бизнес-профиль»).
+  // Only the view: SI-sellers, clients and notifications work the same in the personal view.
+  isBusinessView() {
+    return (this.isBusinessActive() || this.isAssistant()) && !this.data.me.profile.personalMode;
   }
 
   // I am the assistant in someone's business: the Office opens without the owner's terms

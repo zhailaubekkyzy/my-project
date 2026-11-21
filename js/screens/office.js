@@ -1485,7 +1485,7 @@
     e.preventDefault();
     if (needServer()) return;
     const s = store();
-    const profile = { ...s.data.me.profile, businessAgreedAt: new Date().toISOString() };
+    const profile = { ...s.data.me.profile, businessAgreedAt: new Date().toISOString(), personalMode: false };
     try {
       const res = await api().updateMyProfile(profile);
       s.applyServerUser(res.user);

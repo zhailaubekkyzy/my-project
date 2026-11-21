@@ -1,15 +1,15 @@
 // app.js - SmartFlow shell: bottom navigation, screen routing, Telegram login and back button.
 //
 // Structure (see docs/ARCHITECTURE.md):
-//   Инкубатор (later) · Маркетплейс (+ Офис) · Бадди (center, home) · Чаты · Профиль
+//   Комьюнити · Маркетплейс (+ Офис, только в бизнес-профиле) · Бадди (center, home) · Чаты · Профиль
 // Every tab keeps a stack of screens in store.data.ui.routes[tab]; screens are rendered by
 // window.SF.screens[tab].render(route, state) from js/screens/*.js.
 
 const SF = window.SF;
 
-// Bottom navigation, left to right. Community is planned: switch `enabled` on when it is built.
+// Bottom navigation, left to right. «Комьюнити» replaced «Инкубатор» (owner's decision 21 Nov.)
 const TABS = [
-  { id: 'incubator', label: 'Инкубатор', icon: 'sprout', enabled: false },
+  { id: 'community', label: 'Комьюнити', icon: 'users', enabled: true },
   { id: 'marketplace', label: 'Маркетплейс', icon: 'store', enabled: true },
   { id: 'buddy', label: 'Бадди', icon: 'sparkles', enabled: true, center: true },
   { id: 'chats', label: 'Чаты', icon: 'messages-square', enabled: true },

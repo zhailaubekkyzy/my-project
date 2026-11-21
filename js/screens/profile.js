@@ -23,6 +23,56 @@
       </div>`;
   }
 
+  // ---------------- Personal / business profile (like Instagram) ----------------
+  // Personal: Бадди, Чаты, Маркетплейс, Комьюнити. Business (free for everyone): plus the Office —
+  // SI-sellers, marketers' funnels, analytics, own communities. Switching back only hides them.
+  function renderBusinessSwitch(state) {
+    const s = store();
+    if (!state.me.id) return '';
+    if (!s.isBusinessActive() && !s.isAssistant()) {
+      return `
+        <button onclick="SF.openIn('marketplace', 'office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left">
+          <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand flex-shrink-0"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
+          <span class="flex-1">
+            <span class="block text-sm font-bold text-ink">Перейти на бизнес-профиль</span>
+            <span class="block text-[11px] text-muted leading-snug">Бесплатно. Свои SI-продавцы, воронки, аналитика и сообщества.</span>
+          </span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+        </button>`;
+    }
+    const business = s.isBusinessView();
+    return `
+      <div class="glass-card-3d p-3 space-y-2 text-xs">
+        <div class="flex gap-1 p-1 rounded-xl bg-sunken">
+          <button onclick="SF.actions.setPersonalMode(true)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'text-muted' : 'bg-card text-ink shadow'}">Личный</button>
+          <button onclick="SF.actions.setPersonalMode(false)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'bg-card text-ink shadow' : 'text-muted'}">Бизнес</button>
+        </div>
+        ${business ? `
+          <button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Мой Офис</button>
+        ` : '<div class="text-[11px] text-faint leading-snug">Офис спрятан. SI-продавцы продолжают работать, уведомления приходят как обычно.</div>'}
+      </div>`;
+  }
+
+  SF.actions.setPersonalMode = async (personal) => {
+    const s = store();
+    if (Boolean(s.data.me.profile.personalMode) === personal) return;
+    const before = s.data.me.profile.personalMode;
+    s.updateProfile({ personalMode: personal });
+    s.notify();
+    try {
+      if (api() && api().isSignedIn()) {
+        const res = await api().updateMyProfile({ ...s.data.me.profile, personalMode: personal });
+        if (res.user) s.applyServerUser(res.user);
+        s.saveData();
+      }
+      showToast(personal ? 'Личный профиль' : 'Бизнес-профиль');
+    } catch (err) {
+      s.updateProfile({ personalMode: before });
+      s.notify();
+      showToast(SF.withErrorCode('Не удалось переключить профиль. Попробуйте ещё раз', err));
+    }
+  };
+
   // ---------------- View: the landing as visitors see it ----------------
   function renderView(state) {
     const me = state.me;
@@ -90,6 +140,8 @@
         <button onclick="SF.push('edit')" class="py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Редактировать</button>
         <button onclick="SF.showToast('SI-брендолог проведёт короткое интервью и соберёт профиль сам — на следующем шаге')" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><span class="si-dot"></span>SI-брендолог ${SF.soonBadge()}</button>
       </div>
+
+      ${renderBusinessSwitch(state)}
 
       ${SF.botCanWrite() !== null ? `
         <div class="glass-card-3d p-3 flex items-center justify-between gap-2 text-xs">
@@ -366,8 +418,9 @@
         ? { label: f.offerLabel.value.trim() || 'Мой оффер', url: offerUrl || null, consultantId: offerConsultant || null }
         : null,
       language: store().data.me.profile.language || 'ru',
-      // PUT replaces the whole profile: keep the Office consent
-      businessAgreedAt: store().data.me.profile.businessAgreedAt || null
+      // PUT replaces the whole profile: keep the Office consent and the personal / business view
+      businessAgreedAt: store().data.me.profile.businessAgreedAt || null,
+      personalMode: Boolean(store().data.me.profile.personalMode)
     };
 
     store().updateProfile(profile);

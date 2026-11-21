@@ -426,6 +426,20 @@ async function runAllTests() {
     assert.strictEqual(user.profile.bio, 'Помогаю экспертам продавать');
     assert.deepStrictEqual(user.profile.links, [{ label: 'Instagram', url: 'https://instagram.com/alexey' }]);
     assert.strictEqual(user.profile.isAdmin, undefined, 'Unknown fields are dropped');
+    assert.strictEqual(user.profile.personalMode, false, 'Business profile view by default');
+    const personal = await fetch(baseUrl + '/api/me/profile', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...user.profile, personalMode: true })
+    }).then(r => r.json());
+    assert.strictEqual(personal.user.profile.personalMode, true, 'Switched to the personal profile');
+    assert.strictEqual(personal.user.profile.bio, 'Помогаю экспертам продавать', 'Switching keeps the profile');
+    const back = await fetch(baseUrl + '/api/me/profile', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...personal.user.profile, personalMode: 'yes' })
+    }).then(r => r.json());
+    assert.strictEqual(back.user.profile.personalMode, false, 'Only true turns the personal view on');
 
     // A Telegram re-login keeps the name chosen in the app
     await authService.findOrCreateTelegramUser(expertA_Tg, 'expert');
