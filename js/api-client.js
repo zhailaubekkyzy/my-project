@@ -412,6 +412,16 @@
       });
     },
 
+    // Ready-made funnels from marketers (flag `funnels`): the catalogue, one's own, publishing
+    readyFunnels: {
+      catalogue: (q = '', niche = '') => apiFetch(`/api/ready-funnels?q=${encodeURIComponent(q)}&niche=${encodeURIComponent(niche)}`),
+      mine: () => apiFetch('/api/ready-funnels/mine'),
+      get: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`),
+      submit: (data) => apiFetch('/api/ready-funnels', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id, data) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }),
+      withdraw: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    },
+
     // Marketplace and public profiles (no login needed)
     async getMarketplace() {
       return await apiFetch('/api/marketplace');
@@ -619,6 +629,9 @@
     // ---------- Support panel (team only) ----------
     admin: {
       overview: () => apiFetch('/api/admin/overview'),
+      funnels: (status) => apiFetch(`/api/admin/funnels?status=${encodeURIComponent(status || 'review')}`),
+      funnel: (id) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}`),
+      decideFunnel: (id, decision, note) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }),
       partners: () => apiFetch('/api/admin/partners'),
       feedbackList: (status) => apiFetch(`/api/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ''}`),
       feedback: (id) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`),

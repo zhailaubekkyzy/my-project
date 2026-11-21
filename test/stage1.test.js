@@ -3008,6 +3008,105 @@ async function runAllTests() {
     assert.strictEqual((await db.get('SELECT COUNT(*) AS n FROM project_slug_aliases WHERE slug = ?', [oldSlug])).n, 0);
   });
 
+  await test('71. Готовые воронки: маркетолог публикует, команда проверяет, эксперт видит описание и шаги без текстов', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const saved = { features: config.features, betaUsers: config.betaUsers, adminUsers: config.adminUsers };
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
+    try {
+      const marketerTg = { id: 710001, first_name: 'Маркетолог', last_name: 'Тестовый' };
+      const marketerToken = await tokenFor(marketerTg);
+      const expertToken = await tokenFor({ id: 710002, first_name: 'Эксперт', last_name: 'Тестовый' });
+      const teamTg = { id: 710003, first_name: 'Команда', last_name: 'Тестовая' };
+      const teamToken = await tokenFor(teamTg);
+
+      // Behind the flag: off → as if it does not exist
+      config.features = [];
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).status, 404);
+      config.features = ['funnels:all'];
+      config.adminUsers = [String(teamTg.id)];
+
+      const own = (await api('POST', '/api/projects/quick-start', marketerToken, { goal: 'sell', about: 'маркетолог', offer: 'Курс', priceLabel: '45 000 ₸', link: 'https://pay.example.com/a' })).body;
+      const empty = (await api('POST', '/api/projects', marketerToken, { name: 'empty funnel' })).body;
+      const stranger = (await api('POST', '/api/projects', expertToken, { name: 'not mine' })).body;
+      const good = {
+        projectId: own.id, title: 'Продажа курса за 3 шага', niche: 'Нутрициология', description: 'Знакомство, решение, покупка',
+        result: 'Клиент сам доходит до оплаты', priceType: 'once', priceLabel: '15 000 ₸', paymentUrl: 'https://pay.example.com/funnel'
+      };
+      const post = (body, token = marketerToken) => api('POST', '/api/ready-funnels', token, body);
+      assert.strictEqual((await post({ ...good, result: '' })).status, 400, 'The result is required');
+      assert.strictEqual((await post({ ...good, priceType: 'free' })).status, 400, 'Only once / monthly / percent');
+      assert.strictEqual((await post({ ...good, paymentUrl: 'http://pay.example.com' })).status, 400, 'Only https payment links');
+      assert.strictEqual((await post({ ...good, paymentUrl: '' })).status, 400, 'One-time payment needs the link');
+      assert.strictEqual((await post({ ...good, projectId: empty.id })).status, 400, 'A funnel needs steps');
+      assert.strictEqual((await post({ ...good, projectId: stranger.id })).status, 404, 'Not someone else’s SI-seller');
+
+      const created = await post(good);
+      assert.strictEqual(created.status, 201);
+      const id = created.body.funnel.id;
+      assert.strictEqual(created.body.funnel.status, 'review');
+      const percent = await post({ ...good, title: 'Процент', priceType: 'percent', priceLabel: '10% с продаж', paymentUrl: '' });
+      assert.strictEqual(percent.status, 201, 'A percentage can go without a link');
+
+      // Not in the catalogue until the team approves; the expert cannot open it either
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
+      assert.strictEqual((await api('GET', `/api/ready-funnels/${id}`, expertToken)).status, 404);
+      assert.strictEqual((await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels.length, 2);
+
+      // The team: only staff, sees the full texts, a reason is required to reject
+      assert.strictEqual((await api('GET', '/api/admin/funnels', expertToken)).status, 403);
+      const queue = (await api('GET', '/api/admin/funnels', teamToken)).body.funnels;
+      assert.strictEqual(queue.length, 2);
+      assert(queue[0].snapshot.instructions.length > 0, 'The team sees the instructions');
+      assert.strictEqual((await api('GET', '/api/admin/overview', teamToken)).body.funnelsToReview, 2);
+      const decide = (fid, decision, note) => api('POST', `/api/admin/funnels/${fid}/decision`, teamToken, { decision, note });
+      assert.strictEqual((await decide(percent.body.funnel.id, 'reject', '')).status, 400);
+      assert.strictEqual((await decide(percent.body.funnel.id, 'reject', 'Опишите результат честнее')).status, 200);
+      const mine = (await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels;
+      assert.strictEqual(mine.find(f => f.id === percent.body.funnel.id).reviewNote, 'Опишите результат честнее');
+      assert.strictEqual((await decide(id, 'approve')).status, 200);
+      assert.strictEqual((await decide(id, 'approve')).status, 409, 'Already published');
+
+      // The expert: the catalogue shows the description, step names and the result — not the texts
+      const cat = (await api('GET', '/api/ready-funnels', expertToken)).body;
+      assert.strictEqual(cat.funnels.length, 1);
+      assert.deepStrictEqual(cat.niches, ['Нутрициология']);
+      const f = cat.funnels[0];
+      assert.strictEqual(f.steps.length, 3);
+      assert.strictEqual(f.steps[0].title, 'Знакомство');
+      assert.strictEqual(f.result, good.result);
+      assert.strictEqual(f.priceTypeLabel, 'Разовая оплата');
+      const shown = JSON.stringify((await api('GET', `/api/ready-funnels/${id}`, expertToken)).body);
+      const settings = JSON.parse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [own.id])).custom_ai_settings);
+      assert(!shown.includes(settings.instructions), 'The instructions are not shown');
+      assert(!shown.includes(settings.scenarios[0].text), 'Scenario texts are not shown');
+      assert(!shown.includes('snapshot') && !shown.includes('paymentUrl'), 'No snapshot and no payment link before buying');
+      assert.strictEqual((await api('GET', '/api/ready-funnels?q=курса', expertToken)).body.funnels.length, 1);
+      assert.strictEqual((await api('GET', '/api/ready-funnels?q=йога', expertToken)).body.funnels.length, 0);
+
+      // The author changes it → back to the team, gone from the catalogue
+      assert.strictEqual((await api('PUT', `/api/ready-funnels/${id}`, expertToken, good)).status, 404, 'Only the author');
+      const edited = await api('PUT', `/api/ready-funnels/${id}`, marketerToken, { ...good, priceType: 'monthly', priceLabel: '5 000 ₸ в месяц' });
+      assert.strictEqual(edited.body.funnel.status, 'review');
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
+      await decide(id, 'approve');
+      assert.strictEqual((await decide(id, 'hide', 'Жалоба эксперта')).status, 200);
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
+      assert.strictEqual((await api('DELETE', `/api/ready-funnels/${id}`, marketerToken)).status, 200);
+      assert.strictEqual((await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels.length, 1);
+
+      // Every decision is in the team's log; the numbers carry no names or texts
+      const log = await db.all(`SELECT action FROM admin_actions WHERE action LIKE 'funnel_%'`);
+      assert.deepStrictEqual(log.map(r => r.action).sort(), ['funnel_approve', 'funnel_approve', 'funnel_hide', 'funnel_reject']);
+      const names = sent.map(e => e.event);
+      for (const e of ['ready_funnel_submitted', 'ready_funnel_reviewed', 'ready_funnel_catalog_opened', 'ready_funnel_viewed', 'ready_funnel_withdrawn']) assert(names.includes(e), `${e} is sent`);
+      assert(!JSON.stringify(sent).includes('Продажа курса'), 'No titles in the numbers');
+    } finally {
+      analytics._setClientForTests(null);
+      Object.assign(config, saved);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
