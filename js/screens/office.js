@@ -343,6 +343,12 @@
               <span class="block text-sm font-bold text-ink truncate">${SF.esc(c.name)}</span>
               <span class="block text-[11px]">${SF.siLabel(c.roleTitle)}</span>
               <span class="block text-[10px] mt-0.5 ${c.isListed ? 'text-brand' : 'text-faint'}">${c.isListed ? 'В Маркетплейсе' : 'Не в Маркетплейсе'}${c.paymentUrl ? ' · ссылка на оплату есть' : ' · нет ссылки на оплату'}</span>
+              ${state.remote.puzzle[c.id] ? `
+                <span class="flex items-center gap-1.5 mt-1">
+                  <i data-lucide="puzzle" class="w-3 h-3 ${state.remote.puzzle[c.id].missingRequired.length ? 'text-amber-500' : 'text-brand'}"></i>
+                  <span class="flex-1 h-1.5 rounded-full bg-sunken overflow-hidden"><span class="block h-full rounded-full ${state.remote.puzzle[c.id].missingRequired.length ? 'bg-amber-500' : 'bg-[#81D8D0]'}" style="width:${Math.round(state.remote.puzzle[c.id].done / Math.max(1, state.remote.puzzle[c.id].total) * 100)}%"></span></span>
+                  <span class="text-[10px] font-semibold text-muted">${state.remote.puzzle[c.id].done}/${state.remote.puzzle[c.id].total}</span>
+                </span>` : ''}
             </span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
           </button>`).join('')}
@@ -1104,7 +1110,6 @@
     const form = noteForm && noteForm.projectId === c.id ? noteForm : null;
     const steps = c.steps || [];
     const stepTitle = (id) => (steps.find(st => st.id === id) || {}).title || '';
-    const pct = Math.round(pz.done / Math.max(1, pz.total) * 100);
     const toggle = (key, label, hint, on) => `
       <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
         <span><span class="block font-semibold text-ink">${label}</span><span class="block text-[10px] text-faint leading-snug">${hint}</span></span>
@@ -1113,22 +1118,7 @@
     const field2 = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
-        <div class="flex items-center justify-between gap-2">
-          ${SF.sectionTitle('puzzle', 'Пазл: что знает этот SI')}
-          <span class="text-[11px] font-bold ${pz.missingRequired.length ? 'text-amber-500' : 'text-brand'}">${pz.done} из ${pz.total}</span>
-        </div>
-        ${SF.progressBar(pct)}
-        <div class="space-y-1.5">
-          ${pz.items.map(it => `
-            <div class="flex items-center gap-2 p-2 rounded-xl ${it.done ? 'bg-card' : 'bg-sunken'} border border-line">
-              <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] flex-shrink-0 ${it.done ? 'bg-[#81D8D0] text-[#08302c]' : it.required ? 'bg-amber-500/20 text-amber-500' : 'bg-card text-faint border border-line'}">${it.done ? '✓' : it.required ? '!' : '·'}</span>
-              <span class="flex-1 min-w-0">
-                <span class="block font-semibold text-ink">${it.label}${it.required && !it.done ? ' <span class="text-[10px] text-amber-500 font-normal">нужно</span>' : ''}</span>
-                ${it.done ? '' : `<span class="block text-[10px] text-faint leading-snug">${it.hint}</span>`}
-              </span>
-              ${it.done ? '' : `<button onclick="SF.actions.puzzleGo('${SF.js(c.id)}', '${it.place}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[10px] flex-shrink-0">Дополнить</button>`}
-            </div>`).join('')}
-        </div>
+        ${renderPuzzleGame(c, pz)}
         <div class="space-y-1.5">
           <div class="text-[11px] font-bold text-muted uppercase tracking-wider">Что брать из Мозга</div>
           ${toggle('knowsBusiness', 'Знает о бизнесе', 'Что вы делаете и для кого — из Офиса → «Мозг».', pz.access.knowsBusiness)}
@@ -1169,6 +1159,85 @@
             </form>` : ''}
         </div>
       </div>`;
+  }
+
+  // ---------------- The puzzle as a game (owner's request 22 Nov.: «геймифицируй пазл») ----------------
+  // 8 pieces around the SI in the middle — like the logo: SI in the centre, the pieces of knowledge around it.
+  // A piece lights up when it is really filled (the server checks the real data — nothing is made up).
+  // Levels of the SI; «Следующий кусочек» — the most important missing one; confetti when a piece or a level is new.
+  const PIECE_SHORT = { offer: 'Продукт', price: 'Цена', payment: 'Оплата', business: 'О бизнесе', profile: 'Обо мне', materials: 'Материалы', path: 'Путь клиента', access: 'Доступ' };
+  const PIECE_ICON = { offer: 'shopping-bag', price: 'wallet', payment: 'receipt', business: 'briefcase', profile: 'user', materials: 'file-text', path: 'route', access: 'gift' };
+  // Grid 3×3: the SI in the middle cell (index 4), the pieces around it clockwise from the top left
+  const PIECE_CELLS = [0, 1, 2, 5, 8, 7, 6, 3];
+  const PUZZLE_LEVELS = [
+    { name: 'Собирается', hint: 'Соберите оранжевые кусочки — и SI сможет продавать.' },
+    { name: 'Готов продавать', hint: 'Главное есть. Ещё кусочки — и SI ответит на больше вопросов.' },
+    { name: 'Хорошо подготовлен', hint: 'Почти всё на месте. Осталось чуть-чуть.' },
+    { name: 'Пазл собран', hint: 'SI знает всё основное. Учите его дальше: «Научить SI» в «Мне написали».' },
+    { name: 'Собран и учится у вас', hint: 'Каждое дополнение делает SI точнее.' }
+  ];
+  function puzzleLevel(pz) {
+    if (pz.missingRequired.length) return 0;
+    if (pz.done === pz.total) return pz.notes.length >= 3 ? 4 : 3;
+    return pz.done >= 6 ? 2 : 1;
+  }
+
+  function renderPuzzleGame(c, pz) {
+    const level = puzzleLevel(pz);
+    const order = { true: 0, false: 1 };
+    // The next piece: a required one first, then in the list order
+    const next = pz.items.filter(i => !i.done).sort((x, y) => order[x.required] - order[y.required])[0] || null;
+    const cells = Array(9).fill(null);
+    pz.items.slice(0, 8).forEach((it, i) => { cells[PIECE_CELLS[i]] = it; });
+    const piece = (it) => `
+      <button onclick="SF.actions.puzzleGo('${SF.js(c.id)}', '${it.place}')" title="${SF.esc(it.label)}"
+        class="aspect-square rounded-2xl flex flex-col items-center justify-center gap-1 p-1 text-center transition
+          ${it.done ? 'bg-[#81D8D0] text-[#08302c] shadow' : it.required ? 'border-2 border-dashed border-amber-500 bg-amber-500/10 text-amber-500' : 'border-2 border-dashed border-line-2 bg-sunken text-faint'}">
+        <i data-lucide="${it.done ? PIECE_ICON[it.id] || 'puzzle' : 'puzzle'}" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold leading-tight">${PIECE_SHORT[it.id] || it.label}</span>
+      </button>`;
+    return `
+      <div class="flex items-center justify-between gap-2">
+        ${SF.sectionTitle('puzzle', 'Пазл SI')}
+        <span class="text-[11px] font-bold ${pz.missingRequired.length ? 'text-amber-500' : 'text-brand'}">${pz.done} из ${pz.total}</span>
+      </div>
+      <div class="grid grid-cols-3 gap-1.5 max-w-[300px] mx-auto">
+        ${cells.map((it, i) => (i === 4 ? `
+          <div class="aspect-square rounded-2xl bg-[var(--si-bubble)] border border-[var(--si-bubble-line)] flex flex-col items-center justify-center gap-1">
+            ${SF.avatar(c.photoUrl, { size: 40, kind: 'si' })}
+            <span class="text-[9px] font-bold text-si">Ур. ${level + 1}</span>
+          </div>` : piece(it))).join('')}
+      </div>
+      <div class="p-3 rounded-2xl bg-sunken border border-line space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-extrabold text-ink">${PUZZLE_LEVELS[level].name}</span>
+          <span class="text-sm tracking-widest" aria-label="Уровень ${level + 1} из 5"><span class="text-amber-400">${'★'.repeat(level + 1)}</span><span class="text-faint">${'★'.repeat(4 - level)}</span></span>
+        </div>
+        <div class="text-[11px] text-muted leading-snug">${PUZZLE_LEVELS[level].hint}</div>
+        ${next ? `
+          <button onclick="SF.actions.puzzleGo('${SF.js(c.id)}', '${next.place}')" class="w-full py-2.5 rounded-xl ${next.required ? 'btn-3d-tiffany' : 'btn-3d-dark'} text-xs flex items-center justify-center gap-1.5">
+            <i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Следующий кусочек: ${SF.esc(next.label)}
+          </button>
+          <div class="text-[10px] text-faint text-center leading-snug">${SF.esc(next.hint)}</div>` : ''}
+        ${pz.notes.length ? `<div class="text-[10px] text-brand font-semibold text-center">Вы научили SI ${pz.notes.length} ${pz.notes.length % 10 === 1 && pz.notes.length % 100 !== 11 ? 'теме' : 'темам'}</div>` : ''}
+      </div>`;
+  }
+
+  // A piece or a level is new since this phone last saw this SI-продавец: confetti and a short word
+  function celebratePuzzle(projectId, pz) {
+    const key = `sf_puzzle_${projectId}`;
+    const level = puzzleLevel(pz);
+    let seen = null;
+    try { seen = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { seen = null; }
+    try { localStorage.setItem(key, JSON.stringify({ done: pz.done, level })); } catch (e) { /* private mode */ }
+    if (!seen) return; // the first look is the starting point
+    if (level > seen.level) {
+      SF.confetti();
+      showToast(`Новый уровень SI: «${PUZZLE_LEVELS[level].name}» 🎉`);
+    } else if (pz.done > seen.done) {
+      SF.confetti();
+      showToast('Новый кусочек пазла на месте 🧩');
+    }
   }
 
   // «Дополнить»: to the place where this piece is filled in
@@ -1916,6 +1985,7 @@
       SF.data.invalidate('consultants');
       SF.data.invalidate('marketplace');
       SF.data.invalidate('puzzle:'); // what the SI knows changed
+      SF.data.puzzle(id, 0);
       await SF.data.myConsultants();
       showToast(f.isListed.checked ? 'Сохранено. SI-продавец виден в Маркетплейсе' : 'Сохранено');
     } catch (err) {
@@ -2602,6 +2672,8 @@
           if (bid) SF.data.products(bid);
         }
         if (route.section === 'team') SF.data.business(bid || '');
+        // The small puzzle bar on each SI-продавец of the open business
+        if (!route.section || route.section === 'consultants') store().consultantsOfCurrent().forEach(c => SF.data.puzzle(c.id, 60000));
       } else if (route.screen === 'office-consultant') {
         const c = store().findOfficeConsultant(route.id);
         const tab = c && c.assisting
@@ -2612,7 +2684,11 @@
         if (tab === 'methodology') {
           SF.data.brain();
           if (c && c.businessId) SF.data.products(c.businessId);
-          if (c && !c.assisting) SF.data.puzzle(route.id);
+          if (c && !c.assisting) {
+            SF.data.puzzle(route.id);
+            const pz = state.remote.puzzle[route.id];
+            if (pz) celebratePuzzle(route.id, pz);
+          }
           // «Научить SI»: straight to the form
           if (route.noteTopic) setTimeout(() => document.querySelector('[name=topic]')?.scrollIntoView({ block: 'center' }), 80);
         }
