@@ -276,6 +276,12 @@
         ${stepsList(f.steps)}
         ${f.scenarioCount ? `<div class="text-[11px] text-muted">И ещё ${f.scenarioCount} ${plural(f.scenarioCount, 'сценарий', 'сценария', 'сценариев')} «если…, то…»: что делать при возражении, молчании и других ситуациях.</div>` : ''}
       </div>
+      ${f.puzzle ? `
+        <div class="glass-card-3d p-4 space-y-2 text-xs">
+          ${SF.sectionTitle('puzzle', `Что вы дополните · ${f.puzzle.pieces.length}`)}
+          <div class="flex flex-wrap gap-1.5">${f.puzzle.pieces.map(p => `<span class="px-2 py-1 rounded-lg ${p.required ? 'bg-amber-500/10 border border-amber-500/50' : 'bg-sunken border border-line'} text-ink">${esc(p.title)}</span>`).join('')}</div>
+          <div class="text-[11px] text-muted leading-snug">После покупки — короткие вопросы по каждому кусочку; что есть в вашем Мозге, подставится само. Воронка начнёт продавать, ${esc(f.puzzle.release)}.</div>
+        </div>` : ''}
       <div class="glass-card-3d p-4 space-y-2">
         ${SF.sectionTitle('target', 'Результат')}
         <div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${esc(f.result)}</div>
@@ -342,6 +348,10 @@
         ${material.length ? `<div class="text-[11px] text-ink-2 leading-snug">На этих шагах клиент получает материал — добавьте свой (ссылку или текст). Без него SI просто проведёт шаг словами.</div>
           ${material.map(st => `<label class="block space-y-1"><span class="font-semibold text-ink-2">${esc(st.title)}</span>
             <input name="m_${esc(st.id)}" maxlength="1000" value="${esc((p.materials || {})[st.id] || '')}" placeholder="https://… или текст" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" /></label>`).join('')}` : ''}
+        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
+          <input type="checkbox" name="brainAccess" checked class="w-4 h-4 mt-0.5 accent-[#0d9488] flex-shrink-0" />
+          <span><span class="block font-semibold text-ink">Дать воронке доступ к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть о бизнесе, продукте и в материалах, подставится в пазл воронки само — меньше писать. Автор воронки ваш Мозг не видит. Можно выключить потом в пазле.</span></span>
+        </label>
         <div class="text-[11px] text-muted leading-snug">Оффер, цена, кнопка и SI-мозг остаются вашими. Ваша методология сохранится и снова заработает, если отключить воронку.</div>
         <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">${p.connectedTo ? 'Сохранить' : 'Подключить'}</button>
         ${p.connectedTo ? `<button type="button" onclick="SF.funnels.detach('${SF.js(p.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Отключить от «${esc(p.connectedTo.name)}»</button>` : ''}
@@ -509,11 +519,17 @@
     const button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
-      await api().readyFunnels.apply(pid, String(form.get('projectId') || ''), materials);
+      const projectId = String(form.get('projectId') || '');
+      const res = await api().readyFunnels.apply(pid, projectId, materials, form.get('brainAccess') === 'on');
       refresh();
       SF.data.invalidate('office');
+      SF.data.invalidate('puzzle:');
       SF.data.officeLists && SF.data.officeLists(true);
-      showToast('Готово: SI-продавец ведёт клиентов по воронке');
+      if (res && res.puzzle && !res.released) {
+        // The funnel waits for its puzzle: straight to it
+        showToast('Подключено. Соберите пазл воронки — и она начнёт продавать 🧩');
+        SF.openIn('marketplace', 'office-consultant', { id: projectId, tab: 'methodology' });
+      } else showToast('Готово: SI-продавец ведёт клиентов по воронке');
     } catch (err) {
       showToast(err.message || 'Не получилось подключить');
     } finally {

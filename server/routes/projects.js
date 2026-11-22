@@ -61,6 +61,7 @@ router.post('/', async (req, res, next) => {
 // «Пазл» of an SI-продавец («Бизнес-режим 2.0», шаг 3): permissions, «что дополнить», additions
 // ---------------------------------------------------------------
 const puzzleService = require('../services/puzzle-service');
+const puzzleSpec = require('../services/puzzle-spec');
 const puzzleRoute = (fn, status = 200) => async (req, res, next) => {
   try {
     res.status(status).json(await fn(req));
@@ -74,6 +75,17 @@ router.get('/:id/puzzle', puzzleRoute((req) => puzzleService.puzzle(req.user.use
 /** PUT /api/projects/:id/puzzle/access  { knowsBusiness, knowsProfile } */
 router.put('/:id/puzzle/access', puzzleRoute((req) => puzzleService.setAccess(req.user.userId, req.params.id, req.body || {})));
 /** POST /api/projects/:id/notes  { topic, text, stepId, source } ; PUT / DELETE /api/projects/:id/notes/:noteId */
+/** PUT /api/projects/:id/puzzle/pieces/:pieceId  { answers: { questionId: text } } — «Сохранить» кусочка воронки */
+router.put('/:id/puzzle/pieces/:pieceId', puzzleRoute(async (req) => {
+  const out = await puzzleService.savePiece(req.user.userId, req.params.id, req.params.pieceId, req.body || {});
+  if (out.saved.newlyDone) analytics.capture('puzzle_piece_saved', req.user.userId, { project_id: req.params.id, piece_id: out.saved.pieceId });
+  if (out.saved.released) analytics.capture('funnel_released', req.user.userId, { project_id: req.params.id });
+  return out;
+}));
+/** POST /api/projects/:id/puzzle/pieces/:pieceId/suggest — SI ищет ответы в материалах SI-мозга */
+router.post('/:id/puzzle/pieces/:pieceId/suggest', puzzleRoute((req) => puzzleService.suggest(req.user.userId, req.params.id, req.params.pieceId)));
+/** PUT /api/projects/:id/puzzle/brain  { on } — доступ воронки к Мозгу */
+router.put('/:id/puzzle/brain', puzzleRoute((req) => puzzleService.setBrainAccess(req.user.userId, req.params.id, Boolean((req.body || {}).on))));
 router.post('/:id/notes', puzzleRoute((req) => puzzleService.addNote(req.user.userId, req.params.id, req.body || {}), 201));
 router.put('/:id/notes/:noteId', puzzleRoute((req) => puzzleService.updateNote(req.user.userId, req.params.id, req.params.noteId, req.body || {})));
 router.delete('/:id/notes/:noteId', puzzleRoute((req) => puzzleService.deleteNote(req.user.userId, req.params.id, req.params.noteId)));
@@ -232,6 +244,10 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     // Steps of the funnel: up to 8, each with a title. Scenarios of a deleted step are dropped
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.steps !== undefined) {
       aiSettings = { ...aiSettings, steps: funnelService.normalizeSteps(aiSettings.steps) };
+    }
+    // The puzzle the buyers of this funnel fill in (the author decides the pieces and the questions)
+    if (aiSettings && typeof aiSettings === 'object' && aiSettings.puzzle !== undefined) {
+      aiSettings = { ...aiSettings, puzzle: puzzleSpec.normalizePuzzle(aiSettings.puzzle) };
     }
     if (aiSettings && typeof aiSettings === 'object' && aiSettings.scenarios !== undefined) {
       const steps = aiSettings.steps !== undefined ? aiSettings.steps : (projectService.safeJsonParse(req.project.custom_ai_settings).steps || []);

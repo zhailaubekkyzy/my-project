@@ -11,6 +11,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const funnelService = require('./funnel-service');
+const puzzleSpec = require('./puzzle-spec');
 const { cleanText } = require('./profile-service');
 const { mediaUrl } = require('./media-service');
 const { toDate } = require('./ai-settings');
@@ -178,7 +179,7 @@ async function expertRow(expertId, purchaseId) {
  * Connect a bought funnel to one's own SI-seller (one at a time). materials: { stepId: text or link }
  * for the steps where the client gets a material — the expert's own; the marketer's are not used.
  */
-async function apply(expertId, purchaseId, projectId, materials = {}) {
+async function apply(expertId, purchaseId, projectId, materials = {}, brainAccess) {
   const row = await expertRow(expertId, purchaseId);
   if (row.status !== 'active') throw new PurchaseError('Воронку можно подключить после того, как автор подтвердит оплату');
   if (isExpired(row)) throw new PurchaseError('Оплаченный месяц закончился — оплатите следующий, чтобы подключить снова');
@@ -197,15 +198,22 @@ async function apply(expertId, purchaseId, projectId, materials = {}) {
     instructions: snapshot.instructions || '',
     methodology: snapshot.methodology || '',
     steps: funnelService.normalizeSteps(steps),
-    scenarios: funnelService.normalizeScenarios(snapshot.scenarios, steps)
+    scenarios: funnelService.normalizeScenarios(snapshot.scenarios, steps),
+    puzzle: puzzleSpec.normalizePuzzle(snapshot.puzzle)
   };
+  // The author's puzzle: the funnel starts selling only when its condition is met (answers already given count)
+  const fpz = settings.puzzle.pieces.length ? settings.puzzle : null;
+  const answers = fpz ? await require('./puzzle-service').answersOf(project.id) : {};
+  const released = !fpz || puzzleSpec.releaseMet(fpz, answers) ? 1 : 0;
+  // As soon as an expert buys a funnel, it asks for the access to the Brain (owner's decision 22 Nov.)
+  const access = brainAccess === undefined ? Number(project.funnel_brain_access) !== 0 : Boolean(brainAccess);
   const until = row.price_type === 'monthly' ? row.paid_until : null;
   const now = sqlTime();
 
   // The funnel moves: off the SI-seller it was on; the SI-seller loses another funnel it had
   if (row.project_id && row.project_id !== project.id) {
     await db.run(
-      'UPDATE projects SET funnel_settings = NULL, funnel_until = NULL, funnel_purchase_id = NULL WHERE id = ? AND funnel_purchase_id = ?',
+      'UPDATE projects SET funnel_settings = NULL, funnel_until = NULL, funnel_purchase_id = NULL, funnel_released = 1 WHERE id = ? AND funnel_purchase_id = ?',
       [row.project_id, row.id]
     );
   }
@@ -213,8 +221,8 @@ async function apply(expertId, purchaseId, projectId, materials = {}) {
     await db.run('UPDATE funnel_purchases SET project_id = NULL, applied_at = NULL, updated_at = ? WHERE id = ?', [now, project.funnel_purchase_id]);
   }
   await db.run(
-    'UPDATE projects SET funnel_settings = ?, funnel_until = ?, funnel_purchase_id = ?, updated_at = ? WHERE id = ?',
-    [JSON.stringify(settings), until, row.id, now, project.id]
+    'UPDATE projects SET funnel_settings = ?, funnel_until = ?, funnel_purchase_id = ?, funnel_released = ?, funnel_brain_access = ?, updated_at = ? WHERE id = ?',
+    [JSON.stringify(settings), until, row.id, released, access ? 1 : 0, now, project.id]
   );
   // The numbers for a percentage count from the first connection to this SI-seller
   const sameProject = row.project_id === project.id && row.applied_at;
@@ -222,13 +230,13 @@ async function apply(expertId, purchaseId, projectId, materials = {}) {
     'UPDATE funnel_purchases SET project_id = ?, applied_at = ?, updated_at = ? WHERE id = ?',
     [project.id, sameProject ? row.applied_at : now, now, row.id]
   );
-  return { row: await getRow(row.id), moved: Boolean(row.project_id && row.project_id !== project.id), first: !row.project_id };
+  return { row: await getRow(row.id), moved: Boolean(row.project_id && row.project_id !== project.id), first: !row.project_id, released: Boolean(released), puzzle: Boolean(fpz) };
 }
 
 async function detachProject(row) {
   if (!row.project_id) return;
   await db.run(
-    'UPDATE projects SET funnel_settings = NULL, funnel_until = NULL, funnel_purchase_id = NULL WHERE id = ? AND funnel_purchase_id = ?',
+    'UPDATE projects SET funnel_settings = NULL, funnel_until = NULL, funnel_purchase_id = NULL, funnel_released = 1 WHERE id = ? AND funnel_purchase_id = ?',
     [row.project_id, row.id]
   );
   await db.run('UPDATE funnel_purchases SET project_id = NULL, applied_at = NULL, updated_at = ? WHERE id = ?', [sqlTime(), row.id]);

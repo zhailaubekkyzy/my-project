@@ -331,6 +331,8 @@ class Store {
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         steps: Array.isArray(settings.steps) ? settings.steps : [],
+        // The puzzle the buyers of this seller's funnel fill in (the author decides it)
+        puzzle: settings.puzzle && Array.isArray(settings.puzzle.pieces) ? settings.puzzle : { pieces: [], release: { mode: 'required' } },
         category: p.category || settings.category || 'sales',
         offer: p.offer || '',
         description: p.description || '',

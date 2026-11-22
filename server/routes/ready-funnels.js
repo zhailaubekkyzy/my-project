@@ -119,9 +119,10 @@ router.post('/purchases/:pid/end', handle(async (req, res) => {
 /** POST /api/ready-funnels/purchases/:pid/apply { projectId, materials: { stepId: text } } — the expert */
 router.post('/purchases/:pid/apply', handle(async (req, res) => {
   const body = req.body || {};
-  const { row, first, moved } = await purchases.apply(req.user.userId, req.params.pid, body.projectId, body.materials);
-  if (first || moved) analytics.capture('ready_funnel_applied', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, project_id: row.project_id, moved });
-  res.json({ purchase: await purchases.toPurchase(row, 'expert') });
+  const brainAccess = body.brainAccess === undefined ? undefined : Boolean(body.brainAccess);
+  const { row, first, moved, released, puzzle } = await purchases.apply(req.user.userId, req.params.pid, body.projectId, body.materials, brainAccess);
+  if (first || moved) analytics.capture('ready_funnel_applied', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, project_id: row.project_id, moved, puzzle, released, brain_access: brainAccess !== false });
+  res.json({ purchase: await purchases.toPurchase(row, 'expert'), released, puzzle });
 }));
 
 /** POST /api/ready-funnels/purchases/:pid/detach — the expert switches the funnel off */

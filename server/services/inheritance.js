@@ -4,6 +4,7 @@
 // expert's own additions (seller_notes). What the seller has itself always wins (owner's decision 22 Nov.: below, one may
 // change one's own — a different price, an offer). Nothing is invented: empty stays empty.
 const db = require('../db');
+const puzzleSpec = require('./puzzle-spec');
 
 // Seller field ← product field (both as the expert typed them)
 const FROM_PRODUCT = [
@@ -60,6 +61,17 @@ async function withInherited(project) {
   // Дополнения эксперта: свои у продавца, работают и с купленной воронкой
   const notes = await db.all('SELECT step_id, topic, text FROM seller_notes WHERE project_id = ? ORDER BY created_at, id', [project.id]);
   if (notes.length) out.sellerNotes = notes.map(n => ({ stepId: n.step_id || null, topic: n.topic, text: n.text }));
+  // Ответы эксперта на вопросы пазла купленной воронки (что нужно этой воронке, решил её автор)
+  const fpz = puzzleSpec.funnelPuzzleOf(project);
+  if (fpz) {
+    const rows = await db.all('SELECT question_id, answer FROM seller_answers WHERE project_id = ?', [project.id]);
+    const answers = Object.fromEntries(rows.map(r => [r.question_id, r.answer]));
+    const list = [];
+    for (const piece of fpz.pieces) {
+      for (const q of piece.questions) if (answers[q.id]) list.push({ piece: piece.title, question: q.text, answer: answers[q.id] });
+    }
+    if (list.length) out.puzzleAnswers = list;
+  }
   return out;
 }
 

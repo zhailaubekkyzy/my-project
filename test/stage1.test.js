@@ -3729,6 +3729,113 @@ async function runAllTests() {
     assert.strictEqual((await api('GET', '/api/brain/materials', owner)).body.materials.length, 2, 'Without a filter — all mine, as before');
   });
 
+  await test('79. Пазл от автора воронки: кусочки и вопросы автора, ответы из Мозга, «Сохранить», выпуск по условию автора', async () => {
+    const inheritance = require('../server/services/inheritance');
+    const siEngine = require('../server/services/si-engine');
+    const { settingsOf } = require('../server/services/ai-settings');
+    const saved = { features: config.features, adminUsers: config.adminUsers };
+    try {
+      config.features = ['funnels:all'];
+      const teamTg = { id: 790009, first_name: 'Команда', last_name: 'Пазл' };
+      config.adminUsers = [String(teamTg.id)];
+      const teamToken = await tokenFor(teamTg);
+      const mk = await tokenFor({ id: 790001, first_name: 'Маркетолог', last_name: 'Пазл' });
+      const ex = await tokenFor({ id: 790002, first_name: 'Эксперт', last_name: 'Пазл' });
+
+      // The author: a funnel with its own pieces and questions, and the condition to start selling
+      const src = (await api('POST', '/api/projects/quick-start', mk, { goal: 'consult', about: 'маркетолог', offer: 'Разбор' })).body;
+      const cur = JSON.parse((await db.get('SELECT custom_ai_settings FROM projects WHERE id = ?', [src.id])).custom_ai_settings);
+      const puzzle = {
+        pieces: [
+          { id: 'who', title: 'Кому помогаете', questions: [
+            { id: 'who1', text: 'Чем занимается ваш бизнес?', source: 'business.about' },
+            { id: 'who2', text: 'Кто ваш идеальный клиент?', hint: 'Возраст, ситуация, боль' }
+          ] },
+          { id: 'res', title: 'Результат', questions: [{ id: 'res1', text: 'Какой результат получит клиент?', source: 'product.result' }] },
+          { id: 'bonus', title: 'Бонусы', required: false, questions: [{ id: 'b1', text: 'Есть ли бонус при покупке сегодня?' }] },
+          { title: '', questions: [{ text: 'без названия — не сохранится' }] },
+          { title: 'Без вопросов', questions: [] }
+        ],
+        release: { mode: 'required' }
+      };
+      const put = await api('PUT', `/api/projects/${src.id}`, mk, { custom_ai_settings: { ...cur, puzzle } });
+      assert.strictEqual(put.status, 200);
+      const stored = put.body.custom_ai_settings.puzzle;
+      assert.deepStrictEqual(stored.pieces.map(p => p.id), ['who', 'res', 'bonus'], 'Only pieces with a title and questions');
+      assert.strictEqual(stored.pieces[2].required, false);
+
+      const f = (await api('POST', '/api/ready-funnels', mk, { projectId: src.id, title: 'Воронка с пазлом', niche: 'Коучинг', description: 'О', result: 'Р', priceType: 'once', priceLabel: '1 ₸', paymentUrl: 'https://pay.example.com/p' })).body.funnel;
+      await api('POST', `/api/admin/funnels/${f.id}/decision`, teamToken, { decision: 'approve' });
+      // The author changes the puzzle after publishing — buyers get the frozen one
+      await api('PUT', `/api/projects/${src.id}`, mk, { custom_ai_settings: { ...cur, puzzle: { pieces: [{ title: 'Другое', questions: [{ text: '?' }] }] } } });
+
+      // The expert: a Brain with «о бизнесе» and a product with a result
+      const prof = (await api('GET', '/api/me/profile', ex)).body.user.profile;
+      await api('PUT', '/api/me/profile', ex, { ...prof, businessAgreedAt: new Date().toISOString() });
+      const biz = (await api('POST', '/api/business/businesses', ex, { name: 'Коучинг', about: 'Коучинг для руководителей' })).body.business;
+      const seller = (await api('POST', '/api/projects', ex, { name: 'Мой SI', businessId: biz.id })).body;
+      await api('PUT', `/api/projects/${seller.id}`, ex, { custom_ai_settings: { methodology: 'Моя методология' } });
+      const product = (await api('POST', `/api/business/businesses/${biz.id}/products`, ex, { name: 'Коуч-сессия' })).body.product;
+      await api('PUT', `/api/business/sellers/${seller.id}/product`, ex, { productId: product.id });
+
+      const pid = (await api('POST', `/api/ready-funnels/${f.id}/buy`, ex, { note: 'Kaspi' })).body.purchase.id;
+      await api('POST', `/api/ready-funnels/purchases/${pid}/decision`, mk, { decision: 'confirm' });
+      // As soon as the funnel is bought it asks for the Brain: yes
+      const applied = await api('POST', `/api/ready-funnels/purchases/${pid}/apply`, ex, { projectId: seller.id, brainAccess: true });
+      assert.strictEqual(applied.status, 200);
+      assert.strictEqual(applied.body.puzzle, true);
+      assert.strictEqual(applied.body.released, false, 'Not released before the puzzle');
+      let row = await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]);
+      assert.strictEqual(settingsOf(row).methodology, 'Моя методология', 'Until then — the expert’s own methodology');
+
+      let pz = (await api('GET', `/api/projects/${seller.id}/puzzle`, ex)).body;
+      assert.strictEqual(pz.mode, 'funnel');
+      assert.deepStrictEqual(pz.items.map(i => i.id), ['who', 'res', 'bonus'], 'The author’s pieces, frozen');
+      assert.strictEqual(pz.items[0].questions[0].prefill, 'Коучинг для руководителей', 'From the Brain by itself');
+      assert.strictEqual(pz.items[1].questions[0].prefill, '', 'The product has no result yet');
+      assert.deepStrictEqual(pz.missingRequired, ['who', 'res']);
+      assert.strictEqual(pz.release.released, false);
+
+      // «Сохранить» a piece: the expert edited the pre-filled answer
+      const save = (piece, answers) => api('PUT', `/api/projects/${seller.id}/puzzle/pieces/${piece}`, ex, { answers });
+      assert.strictEqual((await save('nope', {})).status, 404);
+      let res = (await save('who', { who1: 'Коучинг для руководителей IT', who2: '' })).body;
+      assert.strictEqual(res.saved.done, false, 'Not every question answered');
+      res = (await save('who', { who2: 'Руководители 30–45 лет, выгорание' })).body;
+      assert.deepStrictEqual([res.saved.done, res.saved.newlyDone, res.saved.released], [true, true, false]);
+      assert.strictEqual((await db.get('SELECT about FROM businesses WHERE id = ?', [biz.id])).about, 'Коучинг для руководителей', 'What the Brain has is not overwritten');
+      res = (await save('res', { res1: 'Спокойная работа без выгорания за 6 недель' })).body;
+      assert.deepStrictEqual([res.saved.newlyDone, res.saved.released], [true, true], 'All required pieces — the funnel starts');
+      assert.strictEqual((await db.get('SELECT result FROM products WHERE id = ?', [product.id])).result, 'Спокойная работа без выгорания за 6 недель', 'An empty Brain field gets the answer');
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]);
+      assert.notStrictEqual(settingsOf(row).methodology, 'Моя методология', 'Now the funnel works');
+      const material = await db.get('SELECT title FROM brain_materials WHERE id = ?', [row.puzzle_material_id]);
+      assert(material && material.title.includes('Воронка с пазлом'), 'The other answers are a Brain material');
+
+      // The SI knows the answers
+      const prompt = siEngine.buildSystemPrompt(await inheritance.withInherited(row), 'Эксперт');
+      assert(prompt.includes('Руководители 30–45 лет, выгорание'));
+
+      // Emptying a required answer stops the funnel again
+      res = (await save('who', { who2: '' })).body;
+      row = await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]);
+      assert.strictEqual(Number(row.funnel_released), 0);
+      assert.strictEqual(settingsOf(row).methodology, 'Моя методология');
+
+      // Without the access to the Brain nothing is pre-filled
+      pz = (await api('PUT', `/api/projects/${seller.id}/puzzle/brain`, ex, { on: false })).body;
+      assert.strictEqual(pz.access.brain, false);
+      assert.strictEqual(pz.items[0].questions[0].prefill, '');
+      // Detaching: the default puzzle comes back, the seller is the expert's again
+      await api('POST', `/api/ready-funnels/purchases/${pid}/detach`, ex);
+      pz = (await api('GET', `/api/projects/${seller.id}/puzzle`, ex)).body;
+      assert.strictEqual(pz.mode, 'own');
+      await api('POST', `/api/admin/funnels/${f.id}/decision`, teamToken, { decision: 'hide' }); // the catalogue stays empty for other tests
+    } finally {
+      Object.assign(config, saved);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

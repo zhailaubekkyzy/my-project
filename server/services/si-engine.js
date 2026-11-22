@@ -92,6 +92,12 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     lines.push('Дополнения эксперта (на эти темы отвечай именно так; они важнее общих сведений):');
     for (const n of notes) lines.push(`- ${n.topic}: ${String(n.text).slice(0, 1500)}`);
   }
+  // The expert's answers to the questions of the bought funnel's puzzle
+  const puzzleAnswers = (project.puzzleAnswers || []).slice(0, 48);
+  if (puzzleAnswers.length) {
+    lines.push('Ответы эксперта на вопросы воронки (это правда о нём и его продукте; опирайся на них):');
+    for (const a of puzzleAnswers) lines.push(`- ${a.piece} · ${a.question} — ${String(a.answer).slice(0, 1200)}`);
+  }
   // Only the price the expert typed on the card (old auto-filled tariffs are never used)
   if (project.price_mode === 'free') {
     lines.push('Цена: бесплатно.');

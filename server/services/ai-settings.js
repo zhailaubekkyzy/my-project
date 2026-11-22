@@ -22,6 +22,8 @@ function toDate(value) {
 
 function funnelOn(project, now = new Date()) {
   if (!project || !project.funnel_settings) return false;
+  // A bought funnel with the author's puzzle starts only when the author's condition is met (migration 032)
+  if (Number(project.funnel_released) === 0) return false;
   const until = toDate(project.funnel_until);
   return !project.funnel_until || (until && until > now);
 }
