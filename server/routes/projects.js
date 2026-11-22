@@ -93,6 +93,8 @@ router.post('/quick-start', async (req, res, next) => {
     const project = await projectService.createProject(req.user.userId, {
       name: `${firstName} · ${about}`.slice(0, 80),
       niche: about,
+      // In which of my businesses («Бизнес-режим 2.0»); without it — the main one
+      businessId: body.businessId ? String(body.businessId) : null,
       customAiSettings: projectService.limitAiSettings({
         clientLimit: 40,
         quickStart: body.goal,

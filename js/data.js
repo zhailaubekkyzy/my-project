@@ -128,6 +128,31 @@
       store().setRemote(`communities.post.${postId}`, await api().communityCall('GET', `/posts/${encodeURIComponent(postId)}`));
     }), maxAge),
 
+    // «Бизнес-режим 2.0»: my businesses (up to 3) and the products of one
+    businesses: (maxAge = 30000) => ensure('businesses', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('businesses', await api().listBusinesses());
+    }, maxAge),
+
+    products: (businessId, maxAge = 30000) => ensure(`products:${businessId}`, async () => {
+      if (!signedIn() || !businessId) return false;
+      store().setRemote(`products.${businessId}`, (await api().listProducts(businessId)).products || []);
+    }, maxAge),
+
+    // The funnel of one AI-продавец: counts per status and a portion of clients of one status
+    sellerFunnel: (projectId, businessId, days) => ensure(`sfunnel:${projectId}|${days}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnel({ businessId, projectId, days: days === 'all' ? '' : days });
+      store().setRemote(`sellerFunnel.${projectId}|${days}`, { counts: res.counts || {} });
+    }, 15000),
+
+    sellerFunnelList: (projectId, businessId, days, status) => ensure(`sfunnelList:${projectId}|${days}|${status}`, async () => {
+      if (!signedIn()) return false;
+      const res = await api().getFunnel({ businessId, projectId, days: days === 'all' ? '' : days, status });
+      const clients = res.clients || [];
+      store().setRemote(`sellerFunnelLists.${projectId}|${days}|${status}`, { clients, done: clients.length < (res.pageSize || 30) });
+    }, 15000),
+
     chatMessages: (slug, maxAge = 5000) => ensure(`messages:${slug}`, async () => {
       if (!signedIn()) return false;
       const res = await api().getChatMessages(slug);
@@ -280,9 +305,10 @@
     }, 60000),
 
     // My business: owner + assistant
-    business: () => ensure('business', async () => {
+    // Members of the business open in the Office (businessId), or of my main one
+    business: (businessId = '') => ensure(`business:${businessId}`, async () => {
       if (!signedIn()) return false;
-      store().setRemote('business', await api().getBusiness());
+      store().setRemote('business', { ...(await api().getBusiness(businessId)), requestedFor: businessId || null });
     }, 30000),
 
     // My consultants and the ones I assist, refreshed once a minute while the Office is open

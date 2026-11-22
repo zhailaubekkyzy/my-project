@@ -243,8 +243,9 @@ async function targetBusiness(ownerId, businessId) {
 /**
  * What the signed-in person sees about businesses: their own (with members) and the ones they assist.
  */
-async function overview(userId) {
-  const own = await businessOfOwner(userId);
+// businessId: one of my businesses (the one open in the Office); without it — the main one
+async function overview(userId, businessId = null) {
+  const own = businessId ? await ownBusiness(userId, businessId) : await businessOfOwner(userId);
   const assisting = await db.all(
     `SELECT b.id, b.owner_id, u.display_name, u.profile
      FROM business_members m
@@ -269,8 +270,8 @@ async function overview(userId) {
 /**
  * The owner adds an assistant by their number from Profile (SF-48213).
  */
-async function addAssistant(ownerId, rawCode) {
-  const business = await businessOfOwner(ownerId);
+async function addAssistant(ownerId, rawCode, businessId = null) {
+  const business = businessId ? await ownBusiness(ownerId, businessId) : await businessOfOwner(ownerId);
   if (!business) throw new BusinessError('Сначала включите своего SI-продавца в Офисе — бизнес появится вместе с ним.', 400, 'NO_BUSINESS');
 
   const code = supportService.normalizeSupportCode(rawCode);
@@ -315,8 +316,8 @@ async function addAssistant(ownerId, rawCode) {
   return listMembers(business.id);
 }
 
-async function removeAssistant(ownerId, assistantUserId) {
-  const business = await businessOfOwner(ownerId);
+async function removeAssistant(ownerId, assistantUserId, businessId = null) {
+  const business = businessId ? await ownBusiness(ownerId, businessId) : await businessOfOwner(ownerId);
   if (!business) throw new BusinessError('Бизнес не найден.', 404, 'NO_BUSINESS');
   const res = await db.run(
     `UPDATE business_members SET status = 'removed', updated_at = CURRENT_TIMESTAMP

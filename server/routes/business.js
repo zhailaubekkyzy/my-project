@@ -24,7 +24,7 @@ function sendBusinessError(res, err, next) {
  */
 router.get('/', async (req, res, next) => {
   try {
-    res.json(await businessService.overview(req.user.userId));
+    res.json(await businessService.overview(req.user.userId, req.query.businessId ? String(req.query.businessId) : null));
   } catch (err) {
     next(err);
   }
@@ -68,7 +68,7 @@ router.put('/sellers/:projectId/product', handle((req) => productService.attachT
  */
 router.post('/assistants', async (req, res, next) => {
   try {
-    const members = await businessService.addAssistant(req.user.userId, req.body?.supportCode);
+    const members = await businessService.addAssistant(req.user.userId, req.body?.supportCode, req.body?.businessId ? String(req.body.businessId) : null);
     res.status(201).json({ members });
   } catch (err) {
     sendBusinessError(res, err, next);
@@ -80,7 +80,7 @@ router.post('/assistants', async (req, res, next) => {
  */
 router.delete('/assistants/:userId', async (req, res, next) => {
   try {
-    const members = await businessService.removeAssistant(req.user.userId, req.params.userId);
+    const members = await businessService.removeAssistant(req.user.userId, req.params.userId, req.query.businessId ? String(req.query.businessId) : null);
     res.json({ members });
   } catch (err) {
     sendBusinessError(res, err, next);

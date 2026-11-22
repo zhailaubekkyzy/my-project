@@ -47,11 +47,80 @@
           <button onclick="SF.actions.setPersonalMode(true)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'text-muted' : 'bg-card text-ink shadow'}">Личный</button>
           <button onclick="SF.actions.setPersonalMode(false)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'bg-card text-ink shadow' : 'text-muted'}">Бизнес</button>
         </div>
-        ${business ? `
-          <button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Мой Офис</button>
-        ` : '<div class="text-[11px] text-faint leading-snug">Офис спрятан. SI-продавцы продолжают работать, уведомления приходят как обычно.</div>'}
+        ${business ? renderMyBusinesses(state) : '<div class="text-[11px] text-faint leading-snug">Офис спрятан. SI-продавцы продолжают работать, уведомления приходят как обычно.</div>'}
       </div>`;
   }
+
+  // «Мои бизнесы» (owner's decision 22 Nov.): up to 3; the chosen one opens in the Office. The first is the main one.
+  let businessForm = null; // { id?: string } — the open form (new business or renaming one)
+  function renderMyBusinesses(state) {
+    const s = store();
+    if (!s.isBusinessActive()) {
+      // An assistant in someone else's business without one's own: just the way into the Office
+      return `<button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Мой Офис</button>`;
+    }
+    const data = state.remote.businesses;
+    if (!data) return '<div class="text-[11px] text-muted">Загружаю бизнесы…</div>';
+    const list = data.businesses || [];
+    const current = s.currentBusinessId();
+    const field = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
+    const editing = businessForm && businessForm.id ? list.find(b => b.id === businessForm.id) : null;
+    const form = businessForm ? `
+      <form onsubmit="SF.actions.saveBusiness(event)" class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
+        <input name="name" required maxlength="80" value="${SF.esc(editing ? editing.name : '')}" placeholder="Название бизнеса, например «Йога-студия»" class="${field}" />
+        <input name="niche" maxlength="120" value="${SF.esc(editing ? editing.niche : '')}" placeholder="Ниша (необязательно)" class="${field}" />
+        <textarea name="about" rows="2" maxlength="2000" placeholder="О бизнесе: что делаете и для кого (SI будет знать)" class="${field}">${SF.esc(editing ? editing.about : '')}</textarea>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button type="button" onclick="SF.actions.closeBusinessForm()" class="py-2 rounded-xl bg-card border border-line text-xs text-ink-2">Отмена</button>
+          <button type="submit" class="py-2 rounded-xl btn-3d-tiffany text-xs">${editing ? 'Сохранить' : 'Открыть бизнес'}</button>
+        </div>
+      </form>` : '';
+    return `
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-[11px] font-bold text-muted uppercase tracking-wider"><span>Мои бизнесы</span><span class="normal-case font-normal">${list.length} из ${data.max || 3}</span></div>
+        ${list.map(b => `
+          <div class="p-2.5 rounded-xl border flex items-center gap-2 ${b.id === current ? 'border-[#81D8D0] bg-[#81D8D0]/10' : 'border-line bg-card'}">
+            <button onclick="SF.actions.openBusiness('${SF.js(b.id)}')" class="flex-1 min-w-0 text-left">
+              <span class="block text-xs font-bold text-ink truncate">${SF.esc(b.name || 'Мой бизнес')}${b.isPrimary ? ' <span class="text-[10px] font-normal text-faint">· главный</span>' : ''}</span>
+              <span class="block text-[10px] text-muted">SI-продавцов: ${b.sellers} · продуктов: ${b.products} · материалов: ${b.materials}</span>
+            </button>
+            <button onclick="SF.actions.editBusiness('${SF.js(b.id)}')" class="p-1.5 rounded-lg text-faint" aria-label="Изменить"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          </div>`).join('')}
+        ${form}
+        ${!businessForm && list.length < (data.max || 3) ? `<button onclick="SF.actions.newBusiness()" class="w-full py-2 rounded-xl bg-card border border-dashed border-line-2 text-xs text-ink-2 flex items-center justify-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>${list.length ? 'Открыть ещё бизнес' : 'Открыть бизнес'}</button>` : ''}
+        ${list.length ? `<button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Офис: ${SF.esc((s.currentBusiness() || {}).name || 'мой бизнес')}</button>` : ''}
+      </div>`;
+  }
+
+  SF.actions.newBusiness = () => { businessForm = {}; store().notify(); };
+  SF.actions.editBusiness = (id) => { businessForm = { id }; store().notify(); };
+  SF.actions.closeBusinessForm = () => { businessForm = null; store().notify(); };
+
+  // Choose the business that opens in the Office
+  SF.actions.openBusiness = (id) => {
+    store().setCurrentBusiness(id);
+    SF.data.invalidate('business:');
+    SF.openIn('marketplace', 'office', { section: 'consultants' });
+  };
+
+  SF.actions.saveBusiness = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const data = { name: f.name.value.trim(), niche: f.niche.value.trim(), about: f.about.value.trim() };
+    try {
+      const res = businessForm && businessForm.id
+        ? await api().updateBusiness(businessForm.id, data)
+        : await api().createBusiness(data);
+      const created = !(businessForm && businessForm.id);
+      businessForm = null;
+      SF.data.invalidate('businesses');
+      await SF.data.businesses(0);
+      if (created && res.business) store().setCurrentBusiness(res.business.id);
+      showToast(created ? 'Бизнес открыт' : 'Сохранено');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
 
   SF.actions.setPersonalMode = async (personal) => {
     const s = store();
@@ -476,7 +545,10 @@
     },
     afterRender(route, state) {
       if (isAdmin(route)) SF.admin.afterRender(route, state);
-      else if (route.screen !== 'edit') SF.data.referral();
+      else if (route.screen !== 'edit') {
+        SF.data.referral();
+        if (store().isBusinessView() && store().isBusinessActive()) SF.data.businesses();
+      }
     }
   };
 })(window);

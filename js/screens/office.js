@@ -8,15 +8,14 @@
   const SF = window.SF;
   const showToast = SF.showToast;
 
+  // «Бизнес-режим 2.0» (owner's decisions 22 Nov.): the Office of one business — Мозг · Мои SI-продавцы · Помощник.
+  // The funnel, «Мне написали», the calendar and analytics live inside each SI-продавец (each has its own goal).
   const SECTIONS = [
-    { id: 'consultants', label: 'Мои SI', icon: 'bot' },
-    { id: 'funnel', label: 'Воронка', icon: 'filter' },
-    { id: 'calendar', label: 'Календарь', icon: 'calendar' },
-    { id: 'brain', label: 'SI-мозг', icon: 'brain' },
-    { id: 'inbox', label: 'Мне написали', icon: 'user-check' },
+    { id: 'brain', label: 'Мозг', icon: 'brain' },
+    { id: 'consultants', label: 'Мои SI-продавцы', icon: 'bot' },
     { id: 'team', label: 'Помощник', icon: 'user-plus' }
   ];
-  const ASSISTANT_SECTIONS = ['consultants', 'funnel', 'calendar', 'inbox'];
+  const ASSISTANT_SECTIONS = ['consultants'];
 
   // Funnel: 5 statuses (names chosen by the owner), colors: waiting — bright, bought — green, refused — gray
   const FUNNEL = [
@@ -63,12 +62,15 @@
     notify: 'Сообщить мне в SmartFlow'
   };
 
+  // Inside an SI-продавец (owner's order): its funnel and numbers · its clients (Мне написали, all, calendar) ·
+  // broadcasts · the card and methodology
   const CONSULTANT_TABS = [
-    { id: 'methodology', label: 'Карточка и методология', icon: 'git-branch' },
     { id: 'analytics', label: 'Аналитика', icon: 'trending-up' },
     { id: 'income', label: 'Клиенты', icon: 'users' },
-    { id: 'broadcasts', label: 'Рассылки', icon: 'send-horizontal' }
+    { id: 'broadcasts', label: 'Рассылки', icon: 'send-horizontal' },
+    { id: 'methodology', label: 'Методология', icon: 'git-branch' }
   ];
+  const CLIENT_TABS = [['inbox', 'Мне написали'], ['all', 'Все клиенты'], ['calendar', 'Календарь']];
 
   const ROLE_SUGGESTIONS = ['SI-продавец', 'SI-консультант', 'SI-помощник', 'SI-ассистент', 'SI-менеджер'];
 
@@ -148,35 +150,160 @@
     if (!store().isBusinessActive() && (!store().isAssistant() || route.next === 'create')) return renderTerms();
     const sections = assistantOnly() ? SECTIONS.filter(s => ASSISTANT_SECTIONS.includes(s.id)) : SECTIONS;
     const section = sections.some(s => s.id === route.section) ? route.section : 'consultants';
-    const waiting = SF.data.waitingInquiries(state).length;
+    const waitingOf = (ids) => SF.data.waitingInquiries(state).filter(i => ids.has(i.consultant.id)).length;
+    const waiting = waitingOf(new Set(store().consultantsOfCurrent().map(c => c.id)));
     let body = '';
     if (section === 'consultants') body = renderConsultantList(state);
-    if (section === 'funnel') body = renderFunnel(route, state);
-    if (section === 'calendar') body = renderCalendar(state);
-    if (section === 'brain') body = renderBrain(state);
-    if (section === 'inbox') body = renderInbox(state);
+    if (section === 'brain') body = renderBrainSection(state);
     if (section === 'team') body = renderTeam(state);
+    const business = store().currentBusiness();
+    const many = ((state.remote.businesses && state.remote.businesses.businesses) || []).length > 1;
     return `
-      <div class="grid ${sections.length === 4 ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-raised p-1.5 rounded-2xl border border-line">
-        ${sections.map(s => `
-          <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[10px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
-            <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
-            ${s.id === 'inbox' && waiting ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waiting}</span>` : ''}
-          </button>`).join('')}
-      </div>
+      ${business && !assistantOnly() ? `
+        <button onclick="SF.go('profile')" class="w-full p-3 rounded-2xl bg-card border border-line flex items-center gap-2.5 text-left">
+          <span class="w-9 h-9 rounded-xl bg-[#81D8D0]/20 text-brand flex items-center justify-center flex-shrink-0"><i data-lucide="briefcase" class="w-4 h-4"></i></span>
+          <span class="flex-1 min-w-0">
+            <span class="block text-sm font-bold text-ink truncate">${SF.esc(business.name || 'Мой бизнес')}</span>
+            <span class="block text-[10px] text-muted">${many ? 'Сменить бизнес — в Профиле' : 'Бизнесы — в Профиле, до 3'}</span>
+          </span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+        </button>` : ''}
+      ${sections.length > 1 ? `
+        <div class="grid grid-cols-3 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
+          ${sections.map(s => `
+            <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[10px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+              <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
+              ${s.id === 'consultants' && waiting ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waiting}</span>` : ''}
+            </button>`).join('')}
+        </div>` : ''}
       ${body}
     `;
   }
 
+  // ---------------- Мозг: the business, its products, materials ----------------
+  function renderBrainSection(state) {
+    const b = store().currentBusiness();
+    const products = b ? state.remote.products[b.id] : [];
+    return `
+      ${b ? `
+        <div class="glass-card-3d p-4 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            ${SF.sectionTitle('briefcase', 'О бизнесе')}
+            <button onclick="SF.actions.editBusiness('${SF.js(b.id)}'); SF.go('profile')" class="px-2.5 py-1 rounded-lg btn-3d-dark text-[11px]">Изменить</button>
+          </div>
+          <div class="text-sm font-bold text-ink">${SF.esc(b.name || 'Мой бизнес')}${b.niche ? ` <span class="text-[11px] font-normal text-muted">· ${SF.esc(b.niche)}</span>` : ''}</div>
+          ${b.about ? `<div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(b.about)}</div>` : '<div class="text-xs text-muted leading-snug">Расскажите в двух словах, что вы делаете и для кого — это узнают все SI-продавцы бизнеса.</div>'}
+        </div>
+        <div class="glass-card-3d p-4 space-y-2.5">
+          ${SF.sectionTitle('shopping-bag', 'Продукты')}
+          <p class="text-[11px] text-muted leading-snug">Опишите продукт один раз: что получает клиент, результат, цену, рассрочку. SI-продавец, привязанный к продукту, возьмёт отсюда всё, чего нет в его карточке.</p>
+          ${!products ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
+          ${(products || []).map(p => `
+            <button onclick="SF.push('office-product', { businessId: '${SF.js(b.id)}', id: '${SF.js(p.id)}' })" class="w-full p-3 rounded-xl bg-card border border-line flex items-center gap-2.5 text-left">
+              <span class="flex-1 min-w-0">
+                <span class="block text-xs font-bold text-ink truncate">${SF.esc(p.name)}</span>
+                <span class="block text-[10px] text-muted truncate">${SF.esc(productPrice(p))}${p.format ? ` · ${SF.esc(p.format)}` : ''}</span>
+              </span>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+            </button>`).join('')}
+          <button onclick="SF.push('office-product', { businessId: '${SF.js(b.id)}' })" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Добавить продукт</button>
+        </div>` : ''}
+      ${renderBrain(state)}
+    `;
+  }
+
+  const productPrice = (p) => (p.priceMode === 'free' ? 'Бесплатно' : p.priceMode === 'on_request' ? 'Цена по запросу' : (p.priceLabel || 'Цена не указана'));
+
+  // A product of the business: one form for a new one and for changes
+  function renderProduct(route, state) {
+    const list = state.remote.products[route.businessId];
+    if (route.id && !list) return '<div class="text-xs text-muted">Загружаю…</div>';
+    const p = route.id ? (list || []).find(x => x.id === route.id) : null;
+    if (route.id && !p) return SF.emptyState('assistant', 'Продукт не найден', 'Возможно, он в архиве.');
+    const v = p || { name: '', description: '', result: '', format: '', duration: '', priceMode: 'fixed', priceLabel: '', installment: '', guarantee: '', paymentUrl: '', accessUrl: '' };
+    return `
+      <form onsubmit="SF.actions.saveProduct(event, '${SF.js(route.businessId)}', '${SF.js(route.id || '')}')" class="glass-card-3d p-4 space-y-3 text-xs">
+        ${field('name', 'Название', v.name, { placeholder: 'Например: Курс «Йога за 15 минут»', max: 120 })}
+        ${field('description', 'Что получает клиент', v.description, { rows: 3, max: 3000, placeholder: 'Что входит, как проходит' })}
+        ${field('result', 'Результат для клиента', v.result, { rows: 2, max: 1000, placeholder: 'Только настоящий — без обещаний, которых нет' })}
+        <div class="grid grid-cols-2 gap-2">
+          ${field('format', 'Формат', v.format, { placeholder: 'Онлайн, видео + чат', max: 200 })}
+          ${field('duration', 'Длительность', v.duration, { placeholder: '21 день', max: 200 })}
+        </div>
+        <label class="block space-y-1">
+          <span class="block text-[11px] font-semibold text-ink-2">Цена</span>
+          <select name="priceMode" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
+            ${PRICE_MODES.map(([id, label]) => `<option value="${id}" ${v.priceMode === id ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </label>
+        ${field('priceLabel', 'Сумма (для фиксированной цены)', v.priceLabel, { placeholder: '15 000 ₸', max: 80 })}
+        ${field('installment', 'Рассрочка', v.installment, { placeholder: 'Если есть — какая', max: 300 })}
+        ${field('guarantee', 'Гарантии и возврат', v.guarantee, { rows: 2, max: 500, placeholder: 'Только настоящие условия' })}
+        ${field('paymentUrl', 'Ссылка на оплату', v.paymentUrl, { placeholder: 'https://…', max: 300 })}
+        ${field('accessUrl', 'Ссылка на доступ после оплаты', v.accessUrl, { placeholder: 'https://…', max: 300, hint: 'Клиент получит её, когда вы подтвердите оплату.' })}
+        <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">${p ? 'Сохранить' : 'Добавить продукт'}</button>
+        ${p ? `<button type="button" onclick="SF.actions.archiveProduct('${SF.js(p.id)}', '${SF.js(route.businessId)}')" class="w-full py-2 text-[11px] text-faint">Убрать в архив</button>` : ''}
+      </form>`;
+  }
+
+  SF.actions.saveProduct = async (e, businessId, id) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const f = e.target;
+    const data = {};
+    for (const k of ['name', 'description', 'result', 'format', 'duration', 'priceMode', 'priceLabel', 'installment', 'guarantee', 'paymentUrl', 'accessUrl']) data[k] = f[k].value.trim();
+    try {
+      if (id) await api().updateProduct(id, data);
+      else await api().createProduct(businessId, data);
+      SF.data.invalidate(`products:${businessId}`);
+      SF.data.invalidate('businesses');
+      await SF.data.products(businessId, 0);
+      showToast(id ? 'Продукт сохранён' : 'Продукт добавлен');
+      SF.back();
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+
+  SF.actions.archiveProduct = async (id, businessId) => {
+    if (!window.confirm('Убрать продукт в архив? SI-продавцы перестанут брать из него сведения.')) return;
+    try {
+      await api().archiveProduct(id);
+      SF.data.invalidate(`products:${businessId}`);
+      SF.data.invalidate('businesses');
+      await SF.data.products(businessId, 0);
+      SF.back();
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  // Which product this SI-продавец sells (from its business)
+  SF.actions.attachProduct = async (projectId, productId) => {
+    if (needServer()) return;
+    try {
+      await api().attachProduct(projectId, productId);
+      SF.data.invalidate('consultants');
+      await SF.data.myConsultants();
+      showToast(productId ? 'Продукт привязан — SI знает о нём всё' : 'Продукт отвязан');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  const waitingCount = (state, projectId) => (state.remote.inquiries[projectId] || []).filter(i => i.status === 'waiting').length;
+
   function renderConsultantList(state) {
-    const list = state.office.consultants.filter(c => !c.assisting);
+    // Only the SI-продавцы of the business open in the Office (Профиль → «Мои бизнесы»)
+    const list = store().consultantsOfCurrent();
     const assisted = state.office.consultants.filter(c => c.assisting);
     const owners = [...new Set(assisted.map(c => c.ownerName))];
     const assistedBlock = assisted.length ? `
       <div class="space-y-2.5">
         <div class="text-[11px] text-muted px-1 leading-snug">Вы помощник: ${SF.esc(owners.join(', '))}. Отвечаете клиентам и ставите SI на паузу; деньги, SI-мозг и настройки видит только владелец.</div>
         ${assisted.map(c => `
-          <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'income' })" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
+          <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'income' })" class="relative w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
+            ${waitingCount(state, c.id) ? `<span class="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold">ждут: ${waitingCount(state, c.id)}</span>` : ''}
             ${SF.avatar(c.photoUrl, { size: 48, kind: 'si' })}
             <span class="flex-1 min-w-0">
               <span class="block text-sm font-bold text-ink truncate">${SF.esc(c.name)}</span>
@@ -208,7 +335,8 @@
       ${assistedBlock}
       <div class="space-y-2.5">
         ${list.map(c => `
-          <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
+          <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'analytics' })" class="relative w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
+            ${waitingCount(state, c.id) ? `<span class="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold">ждут: ${waitingCount(state, c.id)}</span>` : ''}
             ${SF.avatar(c.photoUrl, { size: 48, kind: 'si' })}
             <span class="flex-1 min-w-0">
               <span class="block text-sm font-bold text-ink truncate">${SF.esc(c.name)}</span>
@@ -231,26 +359,29 @@
     return info.assisting && info.assisting[0] ? info.assisting[0].businessId : '';
   }
 
-  function renderFunnel(route, state) {
-    const businessId = funnelBusinessId(state);
-    if (businessId === null) return '<div class="text-xs text-muted">Загружаю…</div>';
-    if (!businessId) {
-      return SF.emptyState('consultant', 'Воронка появится с первым SI-продавцом', 'Создайте и включите SI-продавца — здесь будет видно, на каком шаге каждый клиент.');
-    }
+  // «По шагам»: one SI-seller — how many reached each step, are on it now, refused on it; where they stop
+  function funnelStepsProject(route) {
+    const list = store().data.office.consultants;
+    // By default — the first SI-seller that already has steps
+    return list.find(c => c.id === route.fproject) || list.find(c => (c.steps || []).length) || list[0] || null;
+  }
+
+  // The funnel of one SI-продавец: the 5 statuses or «По шагам» (route.fview), for 7 / 30 days / all time
+  function renderSellerFunnel(c, route, state) {
     const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
     const view = route.fview === 'steps' ? 'steps' : 'status';
-    const viewToggle = `
+    const toggle = `
       <div class="grid grid-cols-2 gap-1 bg-raised p-1 rounded-2xl border border-line">
         ${[['status', 'По статусам'], ['steps', 'По шагам']].map(([id, label]) => `
           <button onclick="SF.patch({ fview: '${id}' })" class="py-2 rounded-xl text-[11px] font-semibold ${view === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">${label}</button>`).join('')}
       </div>`;
-    if (view === 'steps') return viewToggle + renderFunnelSteps(route, state, days);
-    const funnel = state.remote.funnel[`${businessId}|${days}`];
+    if (view === 'steps') return toggle + renderFunnelSteps({ ...route, fproject: c.id }, state, days, { single: true });
+    const funnel = state.remote.sellerFunnel[`${c.id}|${days}`];
     const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
-    const list = state.remote.funnelLists[`${businessId}|${days}|${status}`];
+    const list = state.remote.sellerFunnelLists[`${c.id}|${days}|${status}`];
     const counts = (funnel && funnel.counts) || {};
     return `
-      ${viewToggle}
+      ${toggle}
       <div class="flex gap-1.5">
         ${FUNNEL_DAYS.map(d => `
           <button onclick="SF.patch({ days: '${d.id}' })" class="flex-1 py-1.5 rounded-xl text-[11px] font-semibold border ${days === d.id ? 'bg-card border-[#81D8D0] text-ink' : 'bg-sunken border-line text-muted'}">${d.label}</button>`).join('')}
@@ -262,7 +393,6 @@
             <div class="text-xl font-extrabold">${funnel ? (counts[f.id] || 0) : '…'}</div>
           </button>`).join('')}
       </div>
-      <div class="text-[10px] text-faint px-1 leading-snug">«Есть возражения» — клиент ответил на оффер или засомневался, но ещё не купил. «Купили» и «Отказ» отмечаете вы или помощник в карточке клиента; SI сам замечает оффер, возражения и отказ в переписке.</div>
       ${SF.sectionTitle('', funnelOf(status).label)}
       ${!list ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
       ${list && !list.clients.length ? '<div class="text-xs text-muted px-1">Здесь пока никого нет.</div>' : ''}
@@ -272,24 +402,17 @@
             ${SF.avatar(cl.avatar_url, { size: 32 })}
             <span class="flex-1 min-w-0">
               <span class="block text-xs font-bold text-ink truncate">${SF.esc(cl.name)}</span>
-              <span class="block text-[10px] text-muted truncate">${cl.last_objection ? `«${SF.esc(cl.last_objection)}» · ` : ''}${SF.esc(cl.project_name)}</span>
+              <span class="block text-[10px] text-muted truncate">${cl.last_objection ? `«${SF.esc(cl.last_objection)}»` : SF.esc(funnelOf(cl.funnel_status).label)}</span>
             </span>
             <span class="text-[10px] text-faint whitespace-nowrap">${timeLabel(cl.last_activity)}</span>
           </button>`).join('')}
       </div>
-      ${list && !list.done ? `<button onclick="SF.actions.moreFunnel('${SF.js(businessId)}', '${days}', '${status}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}
+      ${list && !list.done ? `<button onclick="SF.actions.moreSellerFunnel('${SF.js(c.id)}', '${SF.js(c.businessId || '')}', '${days}', '${status}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">Показать ещё</button>` : ''}
     `;
   }
 
-  // «По шагам»: one SI-seller — how many reached each step, are on it now, refused on it; where they stop
-  function funnelStepsProject(route) {
-    const list = store().data.office.consultants;
-    // By default — the first SI-seller that already has steps
-    return list.find(c => c.id === route.fproject) || list.find(c => (c.steps || []).length) || list[0] || null;
-  }
-
-  function renderFunnelSteps(route, state, days) {
-    const consultants = store().data.office.consultants;
+  function renderFunnelSteps(route, state, days, { single = false } = {}) {
+    const consultants = single ? [] : store().data.office.consultants;
     const c = funnelStepsProject(route);
     if (!c) return SF.emptyState('consultant', 'Пока нет SI-продавцов', 'Создайте SI-продавца — здесь будет видно, на каком шаге каждый клиент.');
     const report = state.remote.funnelSteps[`${c.id}|${days}`];
@@ -311,7 +434,7 @@
         <div class="glass-card-3d p-4 space-y-2 text-xs">
           <div class="font-bold text-ink">У «${SF.esc(c.name)}» пока нет шагов воронки</div>
           <p class="text-muted leading-relaxed">Шаги — это путь клиента к покупке: например, знакомство → материал → вопросы → встреча или оффер → оплата. SI ведёт каждого клиента от шага к шагу, а здесь видно, где люди останавливаются.</p>
-          ${c.assisting ? '<p class="text-faint">Шаги добавляет владелец бизнеса.</p>' : `<button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить шаги</button>`}
+          ${c.assisting ? '<p class="text-faint">Шаги добавляет владелец бизнеса.</p>' : `<button onclick="${single ? "SF.patch({ tab: 'methodology' })" : `SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'methodology' })`}" class="w-full py-2.5 rounded-xl btn-3d-tiffany">Добавить шаги</button>`}
         </div>` : ''}
       ${steps.length ? `
         <div class="space-y-1.5">
@@ -424,8 +547,9 @@
       </div>`;
   }
 
-  function renderCalendar(state) {
-    const key = calendarKey(state);
+  // businessKey: the business of the SI-продавец (the calendar is shared by all SI-продавцы of the business)
+  function renderCalendar(state, businessKey = null) {
+    const key = businessKey || calendarKey(state);
     if (key === null) return '<div class="text-xs text-muted">Загружаю…</div>';
     const cal = key && state.remote.calendar[key];
     if (key && !cal) return '<div class="text-xs text-muted">Загружаю…</div>';
@@ -581,9 +705,16 @@
       ${brainBusy ? `<div class="text-[11px] text-si flex items-center gap-1.5"><span class="si-dot"></span>Читаю «${SF.esc(brainBusy)}»… Это может занять до минуты.</div>` : ''}`;
   }
 
+  // A material belongs to a business; one uploaded before any business existed — to the main one
+  function inBusiness(m, businessId) {
+    const list = (store().data.remote.businesses && store().data.remote.businesses.businesses) || [];
+    return !businessId || (m.businessId || (list[0] && list[0].id)) === businessId;
+  }
+
   function renderBrain(state) {
-    const materials = state.remote.brain;
-    const consultants = store().ownConsultants();
+    const bid = store().currentBusinessId();
+    const materials = state.remote.brain && state.remote.brain.filter(m => inBusiness(m, bid));
+    const consultants = store().consultantsOfCurrent();
     return `
       <div class="glass-card-3d p-4 space-y-3">
         <div class="flex items-center gap-2">
@@ -636,7 +767,7 @@
 
   // In the consultant's tab: which materials this SI knows
   function renderConsultantBrain(c, state) {
-    const materials = state.remote.brain;
+    const materials = state.remote.brain && state.remote.brain.filter(m => inBusiness(m, c.businessId));
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('brain', 'SI-мозг: что знает этот SI')}
@@ -651,14 +782,14 @@
             </span>
           </label>`).join('')}
         ${brainUploadButtons(c.id)}
-        <div class="text-[10px] text-faint">Новый материал отсюда сразу откроется этому SI. Все материалы — в Офисе, раздел «SI-мозг».</div>
+        <div class="text-[10px] text-faint">Новый материал отсюда сразу откроется этому SI. Все материалы бизнеса — в Офисе, раздел «Мозг».</div>
       </div>
     `;
   }
 
   // ---------------- "Мне написали" ----------------
-  function renderInbox(state) {
-    const all = state.office.consultants.flatMap(c =>
+  function renderInbox(state, only = null) {
+    const all = state.office.consultants.filter(c => !only || c.id === only.id).flatMap(c =>
       (state.remote.inquiries[c.id] || []).map(i => ({ ...i, consultant: c })));
     all.sort((a, b) => (a.status === 'waiting' ? 0 : 1) - (b.status === 'waiting' ? 0 : 1) ||
       String(b.created_at).localeCompare(String(a.created_at)));
@@ -836,12 +967,12 @@
   function renderConsultant(route, state) {
     const c = store().findOfficeConsultant(route.id);
     if (!c) return SF.emptyState('assistant', 'SI-продавец не найден', 'Вернитесь в Офис и выберите другого.');
-    if (c.assisting) return renderAssistedConsultant(c, state);
-    const tab = route.tab || 'methodology';
+    if (c.assisting) return renderAssistedConsultant(c, route, state);
+    const tab = CONSULTANT_TABS.some(t => t.id === route.tab) ? route.tab : 'analytics';
     let body = '';
-    if (tab === 'methodology') body = renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
-    if (tab === 'analytics') body = renderAnalytics(c, state);
-    if (tab === 'income') body = renderClients(c, state);
+    if (tab === 'methodology') body = renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
+    if (tab === 'analytics') body = renderSellerFunnel(c, route, state) + renderAnalytics(c, state);
+    if (tab === 'income') body = renderSellerClients(c, route, state);
     if (tab === 'broadcasts') body = renderBroadcasts(c, state);
 
     return `
@@ -873,8 +1004,9 @@
 
       <div class="grid grid-cols-4 gap-1 bg-raised p-1 rounded-2xl border border-line">
         ${CONSULTANT_TABS.map(t => `
-          <button onclick="SF.patch({ tab: '${t.id}' })" class="py-2 px-1 rounded-xl text-[10px] font-semibold leading-tight flex flex-col items-center gap-1 ${tab === t.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+          <button onclick="SF.patch({ tab: '${t.id}' })" class="relative py-2 px-1 rounded-xl text-[10px] font-semibold leading-tight flex flex-col items-center gap-1 ${tab === t.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${t.icon}" class="w-4 h-4"></i>${t.label}
+            ${t.id === 'income' && waitingCount(state, c.id) ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingCount(state, c.id)}</span>` : ''}
           </button>`).join('')}
       </div>
 
@@ -943,7 +1075,41 @@
   };
 
   // The assistant: the SI-seller's clients only
-  function renderAssistedConsultant(c, state) {
+  // Клиенты of one SI-продавец: «Мне написали» · all clients · the calendar of its business
+  function renderSellerClients(c, route, state) {
+    const ctab = CLIENT_TABS.some(([id]) => id === route.ctab) ? route.ctab : (waitingCount(state, c.id) ? 'inbox' : 'all');
+    return `
+      <div class="grid grid-cols-3 gap-1 bg-raised p-1 rounded-2xl border border-line">
+        ${CLIENT_TABS.map(([id, label]) => `
+          <button onclick="SF.patch({ ctab: '${id}' })" class="relative py-2 rounded-xl text-[11px] font-semibold ${ctab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">${label}
+            ${id === 'inbox' && waitingCount(state, c.id) ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingCount(state, c.id)}</span>` : ''}
+          </button>`).join('')}
+      </div>
+      ${ctab === 'inbox' ? renderInbox(state, c) : ''}
+      ${ctab === 'all' ? renderClients(c, state) : ''}
+      ${ctab === 'calendar' ? `<div class="text-[10px] text-faint px-1">Календарь общий для всех SI-продавцов этого бизнеса.</div>${c.businessId ? renderCalendar(state, c.businessId) : '<div class="text-xs text-muted">Загружаю…</div>'}` : ''}
+    `;
+  }
+
+  // Which product of the business this SI-продавец sells: what is not in its card, it takes from the product
+  function renderProductPicker(c, state) {
+    const products = c.businessId ? state.remote.products[c.businessId] : [];
+    if (!products) return '';
+    return `
+      <div class="glass-card-3d p-3.5 space-y-2 text-xs">
+        ${SF.sectionTitle('shopping-bag', 'Продукт')}
+        ${products.length ? `
+          <select onchange="SF.actions.attachProduct('${SF.js(c.id)}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs">
+            <option value="">Без продукта</option>
+            ${products.map(p => `<option value="${SF.esc(p.id)}" ${c.productId === p.id ? 'selected' : ''}>${SF.esc(p.name)} · ${SF.esc(productPrice(p))}</option>`).join('')}
+          </select>
+          <div class="text-[10px] text-faint leading-snug">Чего нет в карточке этого SI-продавца (оффер, цена, ссылки), он возьмёт из продукта. Своё в карточке главнее.</div>`
+        : `<div class="text-muted leading-snug">Продуктов пока нет. Добавьте их в Офисе → «Мозг» — и привяжите здесь.</div>`}
+      </div>`;
+  }
+
+  function renderAssistedConsultant(c, route, state) {
+    const tab = ['income', 'analytics', 'broadcasts'].includes(route.tab) ? route.tab : 'income';
     return `
       <div class="glass-card-3d p-4 flex items-center gap-3 border-[var(--si-bubble-line)]">
         ${SF.avatar(c.photoUrl, { size: 56, kind: 'si' })}
@@ -953,8 +1119,13 @@
           <div class="text-[10px] text-brand mt-0.5">Бизнес: ${SF.esc(c.ownerName)} · вы помощник</div>
         </div>
       </div>
-      ${renderClients(c, state)}
-      ${renderBroadcasts(c, state)}
+      <div class="grid grid-cols-3 gap-1 bg-raised p-1 rounded-2xl border border-line">
+        ${[['analytics', 'Воронка'], ['income', 'Клиенты'], ['broadcasts', 'Рассылки']].map(([id, label]) => `
+          <button onclick="SF.patch({ tab: '${id}' })" class="py-2 rounded-xl text-[11px] font-semibold ${tab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">${label}</button>`).join('')}
+      </div>
+      ${tab === 'income' ? renderSellerClients(c, route, state) : ''}
+      ${tab === 'analytics' ? renderSellerFunnel(c, route, state) : ''}
+      ${tab === 'broadcasts' ? renderBroadcasts(c, state) : ''}
     `;
   }
 
@@ -1533,6 +1704,7 @@
     if (button) { button.disabled = true; button.textContent = 'Создаю…'; }
     try {
       const project = await api().quickStart({
+        businessId: store().currentBusinessId() || undefined,
         goal, about: val('about'), offer: val('offer'),
         priceMode: f.priceMode ? f.priceMode.value : (goal === 'sell' ? 'fixed' : undefined),
         priceLabel: val('priceLabel'), link: val('link')
@@ -1556,7 +1728,7 @@
     const roleTitle = roleWithSi(f.role.value);
     const goal = f.goal.value.trim();
     try {
-      const project = await api().createProject({ name, customAiSettings: { goal, clientLimit: 40 } });
+      const project = await api().createProject({ name, businessId: store().currentBusinessId() || undefined, customAiSettings: { goal, clientLimit: 40 } });
       await api().updateProject(project.id, { role_title: roleTitle });
       SF.data.invalidate('consultants');
       await SF.data.myConsultants();
@@ -1689,9 +1861,10 @@
     const code = e.target.supportCode.value.trim();
     if (!code) return;
     try {
-      await api().addAssistant(code);
+      const bid = store().currentBusinessId() || '';
+      await api().addAssistant(code, bid);
       SF.data.invalidate('business');
-      await SF.data.business();
+      await SF.data.business(bid);
       showToast('Помощник добавлен. Бот сообщит ему об этом в Telegram');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось пригласить', err));
@@ -1702,9 +1875,10 @@
     if (needServer()) return;
     if (!window.confirm(`Убрать помощника ${name}? Его диалоги вернутся к вам.`)) return;
     try {
-      await api().removeAssistant(userId);
+      const bid = store().currentBusinessId() || '';
+      await api().removeAssistant(userId, bid);
       SF.data.invalidate('business');
-      await SF.data.business();
+      await SF.data.business(bid);
       showToast('Помощник убран');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
@@ -1933,19 +2107,16 @@
     }
   };
 
-  SF.actions.moreFunnel = async (businessId, days, status) => {
+  SF.actions.moreSellerFunnel = async (projectId, businessId, days, status) => {
     if (needServer()) return;
-    const key = `${businessId}|${days}|${status}`;
-    const list = store().data.remote.funnelLists[key];
+    const key = `${projectId}|${days}|${status}`;
+    const list = store().data.remote.sellerFunnelLists[key];
     if (!list) return;
     try {
-      const res = await api().getFunnel({ businessId, days: days === 'all' ? '' : days, status, offset: list.clients.length });
+      const res = await api().getFunnel({ businessId, projectId, days: days === 'all' ? '' : days, status, offset: list.clients.length });
       const more = res.clients || [];
       const seen = new Set(list.clients.map(c => c.id));
-      store().setRemote(`funnelLists.${key}`, {
-        clients: list.clients.concat(more.filter(c => !seen.has(c.id))),
-        done: more.length < (res.pageSize || 30)
-      });
+      store().setRemote(`sellerFunnelLists.${key}`, { clients: list.clients.concat(more.filter(c => !seen.has(c.id))), done: more.length < (res.pageSize || 30) });
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не загрузилось', err));
     }
@@ -2152,11 +2323,14 @@
 
   // consultantId: upload from a consultant's tab (only this SI gets it); empty: all my SI get it
   async function uploadMaterial(file, { name, title = '', consultantId = '' }) {
-    const consultantIds = consultantId ? [consultantId] : store().ownConsultants().map(c => c.id);
+    const seller = consultantId ? store().findOfficeConsultant(consultantId) : null;
+    const consultantIds = consultantId ? [consultantId] : store().consultantsOfCurrent().map(c => c.id);
+    // Into the business of this SI-продавец, or the one open in the Office
+    const businessId = (seller && seller.businessId) || store().currentBusinessId() || '';
     brainBusy = title || name;
     store().notify();
     try {
-      const res = await api().uploadBrainMaterial(file, { name, title, consultantIds });
+      const res = await api().uploadBrainMaterial(file, { name, title, consultantIds, businessId });
       replaceMaterial(res.material);
       const known = res.material.consultantIds.length;
       showToast(consultantId
@@ -2248,7 +2422,8 @@
     'office-create': 'Новый SI-продавец',
     'office-ready': 'SI-продавец готов',
     'office-consultant': 'SI-продавец',
-    'office-client': 'Клиент'
+    'office-client': 'Клиент',
+    'office-product': 'Продукт'
   };
 
   SF.office = {
@@ -2269,6 +2444,7 @@
       if (route.screen === 'office-ready') return renderQuickReady(route);
       if (route.screen === 'office-consultant') return renderConsultant(route, state);
       if (route.screen === 'office-client') return renderClient(route, state);
+      if (route.screen === 'office-product') return renderProduct(route, state);
       return renderOffice(route, state);
     },
     afterRender(route, state) {
@@ -2276,49 +2452,52 @@
       SF.data.officeLists();
       if (!store().isBusinessActive() && !store().isAssistant()) return;
       if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.afterRender(route, state);
+      if (store().isBusinessActive()) SF.data.businesses();
       if (route.screen === 'office') {
         SF.data.allInquiries();
-        if (route.section === 'brain') SF.data.brain();
-        if (route.section === 'team') SF.data.business();
-        if (route.section === 'calendar') {
-          SF.data.business();
-          const key = calendarKey(state);
-          if (key) SF.data.calendar(key);
+        const bid = store().currentBusinessId();
+        if (route.section === 'brain') {
+          SF.data.brain();
+          if (bid) SF.data.products(bid);
         }
-        if (route.section === 'funnel') {
-          SF.data.business();
-          const businessId = funnelBusinessId(state);
-          if (businessId) {
-            const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
-            const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
-            if (route.fview === 'steps') {
-              const c = funnelStepsProject(route);
-              const report = c && state.remote.funnelSteps[`${c.id}|${days}`];
-              if (c) SF.data.funnelSteps(c.id, days);
-              const steps = (report && report.steps) || [];
-              const stepId = steps.some(st => st.id === route.fstep) ? route.fstep : (steps[0] && steps[0].id);
-              if (c && stepId) SF.data.funnelStepList(c.id, days, stepId);
-            } else {
-              SF.data.funnel(businessId, days);
-              SF.data.funnelList(businessId, days, status);
-            }
-          }
-        }
+        if (route.section === 'team') SF.data.business(bid || '');
       } else if (route.screen === 'office-consultant') {
         const c = store().findOfficeConsultant(route.id);
-        if (c && c.assisting) {
+        const tab = c && c.assisting
+          ? (['income', 'analytics', 'broadcasts'].includes(route.tab) ? route.tab : 'income')
+          : (CONSULTANT_TABS.some(t => t.id === route.tab) ? route.tab : 'analytics');
+        if (c && !c.assisting) SF.data.projectLinks(route.id);
+        if (tab === 'broadcasts') SF.data.broadcasts(route.id);
+        if (tab === 'methodology') {
+          SF.data.brain();
+          if (c && c.businessId) SF.data.products(c.businessId);
+        }
+        if (tab === 'analytics') {
+          const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
+          if (route.fview === 'steps') {
+            const report = state.remote.funnelSteps[`${route.id}|${days}`];
+            SF.data.funnelSteps(route.id, days);
+            const steps = (report && report.steps) || [];
+            const stepId = steps.some(st => st.id === route.fstep) ? route.fstep : (steps[0] && steps[0].id);
+            if (stepId) SF.data.funnelStepList(route.id, days, stepId);
+          } else {
+            const status = FUNNEL.some(f => f.id === route.fstatus) ? route.fstatus : 'waiting_human';
+            const bid = (c && c.businessId) || '';
+            SF.data.sellerFunnel(route.id, bid, days);
+            SF.data.sellerFunnelList(route.id, bid, days, status);
+          }
+          if (c && !c.assisting) {
+            SF.data.analytics(route.id);
+            SF.data.projectReviews(route.id);
+          }
+        }
+        if (tab === 'income') {
+          SF.data.allInquiries();
           SF.data.clients(route.id);
-          SF.data.broadcasts(route.id);
-          return;
+          if (route.ctab === 'calendar' && c && c.businessId) SF.data.calendar(c.businessId);
         }
-        if (route.tab === 'broadcasts') SF.data.broadcasts(route.id);
-        SF.data.projectLinks(route.id);
-        if (!route.tab || route.tab === 'methodology') SF.data.brain();
-        if (route.tab === 'analytics') {
-          SF.data.analytics(route.id);
-          SF.data.projectReviews(route.id);
-        }
-        if (route.tab === 'income') SF.data.clients(route.id);
+      } else if (route.screen === 'office-product') {
+        SF.data.products(route.businessId);
       } else if (route.screen === 'office-client') {
         SF.data.clients(route.projectId);
         SF.data.clientMessages(route.projectId, route.id);
