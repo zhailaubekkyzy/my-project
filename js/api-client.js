@@ -480,7 +480,10 @@
       decide: (pid, decision, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
       endPercent: (pid, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/end`, { method: 'POST', body: JSON.stringify({ reason }) }),
       apply: (pid, projectId, materials, brainAccess) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/apply`, { method: 'POST', body: JSON.stringify({ projectId, materials, brainAccess }) }),
-      detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' })
+      detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' }),
+      // Step 4: the bought template becomes a new SI-продавец; a complaint about a template
+      launch: (pid, data) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/launch`, { method: 'POST', body: JSON.stringify(data) }),
+      report: (id, reason) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/report`, { method: 'POST', body: JSON.stringify({ reason }) })
     },
 
     // Marketplace and public profiles (no login needed)

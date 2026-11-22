@@ -69,7 +69,23 @@
       </button>`;
   }
 
-  function renderList(state) {
+  // Two parts of the Marketplace (owner's decision 22 Nov.): experts' products for everyone, and «Для бизнеса» —
+  // templates of AI-продавцов, also seen by everyone (buying them is in the business profile)
+  function marketTabs(route) {
+    if (!SF.feature('funnels')) return '';
+    const tab = route.mtab === 'biz' ? 'biz' : 'experts';
+    return `
+      <div class="grid grid-cols-2 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
+        ${[['experts', 'Эксперты', 'store'], ['biz', 'Для бизнеса', 'layers']].map(([id, label, icon]) => `
+          <button onclick="SF.patch({ mtab: '${id}' })" class="py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 ${tab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+            <i data-lucide="${icon}" class="w-4 h-4"></i>${label}</button>`).join('')}
+      </div>`;
+  }
+
+  function renderList(state, route = {}) {
+    if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) {
+      return `${officeEntry(state)}${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
+    }
     const filter = state.ui.marketplaceFilter || 'all';
     const all = state.remote.marketplace;
     const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
@@ -78,6 +94,7 @@
     const items = (all || []).filter(c => (filter === 'all' || c.category === filter) && matches(c));
     return `
       ${officeEntry(state)}
+      ${marketTabs(route)}
 
       <div class="relative">
         <i data-lucide="search" class="w-4 h-4 text-faint absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -337,13 +354,14 @@
       return SF.office.title(route, state);
     },
     render(route, state) {
-      if (route.screen === 'list') return renderList(state);
+      if (route.screen === 'list') return renderList(state, route);
       if (route.screen === 'consultant') return renderConsultant(route, state);
       if (route.screen === 'person') return renderPerson(route, state);
       return SF.office.render(route, state);
     },
     afterRender(route, state) {
       if (route.screen === 'list') {
+        if (route.mtab === 'biz' && SF.funnels) SF.funnels.loadInline(route);
         SF.data.marketplace();
         if (store().isBusinessView()) SF.data.allInquiries();
       } else if (route.screen === 'consultant') {

@@ -112,7 +112,7 @@
         ${tile({ icon: 'mic', title: 'Проверка микрофона', sub: 'перед голосовыми', onclick: "SF.push('admin-mic')" })}
         ${tile({ icon: 'award', title: 'Партнёры', sub: 'кто приводит людей', onclick: "SF.push('admin-partners')" })}
         ${tile({ icon: 'users', title: 'Сообщества', sub: 'скрыть по жалобе', onclick: "SF.push('admin-communities')" })}
-        ${tile({ icon: 'layers', title: 'Воронки', sub: o.funnelsToReview ? `${o.funnelsToReview} на проверке` : 'на проверке нет', onclick: "SF.push('admin-funnels')", alert: o.funnelsToReview > 0 })}
+        ${tile({ icon: 'layers', title: 'Шаблоны', sub: 'снять по жалобе', onclick: "SF.push('admin-funnels')" })}
       </div>
 
       ${card(`
@@ -779,21 +779,21 @@
     `;
   }
 
-  // ---------------- Ready-made funnels: the team approves each one (owner's decision 21 Nov.) ----------------
-  const FUNNEL_TABS = [['review', 'На проверке'], ['published', 'Опубликованы'], ['rejected', 'Отклонены'], ['hidden', 'Сняты']];
+  // ---------------- Templates: published at once since step 4 (owner's decision 22 Nov.); the team hides after a complaint ----------------
+  const FUNNEL_TABS = [['published', 'Опубликованы'], ['hidden', 'Сняты']];
   const SC_WHEN = { objection: 'Клиент возразил', offer_answered: 'Ответил на оффер', buy_clicked: 'Нажал «Купить»', receipt_sent: 'Прислал чек', refused: 'Отказался', silent: 'Замолчал', custom: 'Своё условие', step_reached: 'Перешёл на шаг' };
   const SC_THEN = { si_says: 'SI отвечает так', send_text: 'отправить текст или ссылку', handover: 'передать человеку', notify: 'сообщить эксперту' };
-  const FUNNEL_STATUS = { review: 'На проверке', published: 'Опубликована', rejected: 'Отклонена', hidden: 'Снята командой', withdrawn: 'Убрана автором' };
+  const FUNNEL_STATUS = { review: 'Опубликован', published: 'Опубликован', rejected: 'Снят командой', hidden: 'Снят командой', withdrawn: 'Убран автором' };
 
   function renderFunnels(route) {
-    const status = route.status || 'review';
+    const status = route.status || 'published';
     const key = `funnels:${status}`;
-    const tabs = `<div class="grid grid-cols-4 gap-1 bg-raised p-1 rounded-2xl border border-line">${FUNNEL_TABS.map(([id, label]) => `
+    const tabs = `<div class="grid grid-cols-2 gap-1 bg-raised p-1 rounded-2xl border border-line">${FUNNEL_TABS.map(([id, label]) => `
       <button onclick="SF.patch({ status: '${id}' })" class="py-1.5 rounded-xl text-[10px] font-semibold ${status === id ? 'bg-[#81D8D0] text-[#08302c]' : 'text-muted'}">${label}</button>`).join('')}</div>`;
     const list = cache[key];
     if (!list) return tabs + loading(key);
     return `${tabs}
-      <div class="text-[11px] text-muted px-1 leading-snug">Проверяем на безопасность: честные обещания (без выдуманных цифр и гарантий), без давления и обмана клиентов, нет медицинских/финансовых советов, ссылка на оплату — настоящая.</div>
+      <div class="text-[11px] text-muted px-1 leading-snug">Шаблоны публикуются сразу, без проверки. Жалобы на них приходят в «Жалобы». Снимаем, если: нечестные обещания (выдуманные цифры и гарантии), давление или обман клиентов, медицинские или финансовые советы, ненастоящая ссылка на оплату.</div>
       ${list.length ? list.map(f => `
         <button onclick="SF.push('admin-funnel', { id: '${SF.js(f.id)}' })" class="glass-card-3d p-3 w-full text-left space-y-1">
           <div class="flex justify-between gap-2"><span class="text-xs font-bold text-ink">${esc(f.title)}</span><span class="text-[10px] text-muted flex-shrink-0">${fmtTime(f.submittedAt)}</span></div>
@@ -835,8 +835,8 @@
     const steps = s.steps || [];
     const scenarios = s.scenarios || [];
     const text = (v) => `<div class="text-[11px] text-ink-2 whitespace-pre-line leading-snug">${esc(v || '—')}</div>`;
-    const canApprove = ['review', 'hidden'].includes(f.status);
-    const canReject = f.status === 'review';
+    const canApprove = f.status === 'hidden';
+    const canReject = false;
     const canHide = f.status === 'published';
     return `
       ${card(`
@@ -870,9 +870,9 @@
         </div>`).join('') : '<div class="text-[11px] text-muted">Нет</div>'}`)}
       ${canApprove || canReject || canHide ? card(`
         <div class="text-xs font-bold text-ink">Решение</div>
-        <textarea id="funnel-note" rows="3" maxlength="600" placeholder="Причина — автор увидит её (нужна, чтобы отклонить или снять)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs"></textarea>
+        <textarea id="funnel-note" rows="3" maxlength="600" placeholder="Причина — автор увидит её (нужна, чтобы снять)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs"></textarea>
         <div class="grid ${canApprove && (canReject || canHide) ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
-          ${canApprove ? `<button onclick="SF.admin.decideFunnel('${SF.js(f.id)}', 'approve')" class="py-2.5 rounded-xl btn-3d-tiffany text-xs">Одобрить и опубликовать</button>` : ''}
+          ${canApprove ? `<button onclick="SF.admin.decideFunnel('${SF.js(f.id)}', 'approve')" class="py-2.5 rounded-xl btn-3d-tiffany text-xs">Вернуть в каталог</button>` : ''}
           ${canReject ? `<button onclick="SF.admin.decideFunnel('${SF.js(f.id)}', 'reject')" class="py-2.5 rounded-xl btn-3d-dark text-xs">Отклонить</button>` : ''}
           ${canHide ? `<button onclick="SF.admin.decideFunnel('${SF.js(f.id)}', 'hide')" class="py-2.5 rounded-xl btn-3d-dark text-xs">Снять с публикации</button>` : ''}
         </div>
@@ -889,7 +889,7 @@
     }
     try {
       await api().admin.decideFunnel(id, decision, note.trim());
-      showToast(decision === 'approve' ? 'Опубликовано' : decision === 'reject' ? 'Отклонено, автор получит причину' : 'Снято с публикации');
+      showToast(decision === 'approve' ? 'Возвращено в каталог' : decision === 'reject' ? 'Отклонено, автор получит причину' : 'Снято с публикации');
       refresh('funnel');
       refresh('overview');
       store().popRoute();
@@ -911,8 +911,8 @@
     'admin-help': 'Как чинить',
     'admin-mic': 'Проверка микрофона',
     'admin-partners': 'Партнёры',
-    'admin-funnels': 'Воронки на проверке',
-    'admin-funnel': 'Проверка воронки',
+    'admin-funnels': 'Шаблоны',
+    'admin-funnel': 'Шаблон',
     'admin-communities': 'Сообщества'
   };
 
@@ -952,7 +952,7 @@
       case 'admin-team': return load('staff', async () => (await a.staff()).staff);
       case 'admin-partners': return load('partners', () => a.partners(), 60000);
       case 'admin-funnels': {
-        const status = route.status || 'review';
+        const status = route.status || 'published';
         return load(`funnels:${status}`, async () => (await a.funnels(status)).funnels);
       }
       case 'admin-funnel': return load(`funnel:${route.id}`, async () => (await a.funnel(route.id)).funnel);

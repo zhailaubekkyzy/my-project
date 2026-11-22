@@ -459,12 +459,12 @@ router.get('/actions', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------
-// Ready-made funnels from marketers: the team approves each one before experts see it
-// (owner's decision 21 Nov.). The team sees everything: instructions, scenarios, step materials.
+// Templates (ready-made funnels): published at once since step 4 (owner's decision 22 Nov.); the team hides
+// one after a complaint and may bring it back. The team sees everything: instructions, scenarios, step materials.
 // ---------------------------------------------------------------
 router.get('/funnels', async (req, res, next) => {
   try {
-    res.json({ funnels: await readyFunnels.listForStaff(String(req.query.status || 'review')) });
+    res.json({ funnels: await readyFunnels.listForStaff(String(req.query.status || 'published')) });
   } catch (err) {
     next(err);
   }
@@ -473,7 +473,7 @@ router.get('/funnels', async (req, res, next) => {
 router.get('/funnels/:id', async (req, res, next) => {
   try {
     const funnel = await readyFunnels.getForStaff(req.params.id);
-    if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Воронка не найдена' });
+    if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Шаблон не найден' });
     res.json({ funnel });
   } catch (err) {
     next(err);
@@ -481,9 +481,9 @@ router.get('/funnels/:id', async (req, res, next) => {
 });
 
 const FUNNEL_DECISION_TEXT = {
-  approve: (f) => `✅ Ваша воронка «${f.title}» прошла проверку команды SmartFlow и опубликована: эксперты видят её в Офисе → «Готовые воронки».`,
-  reject: (f, note) => `Воронка «${f.title}» пока не прошла проверку команды SmartFlow.\n\nПричина: ${note}\n\nИсправьте и отправьте снова: Офис → «Готовые воронки» → «Мои воронки».`,
-  hide: (f, note) => `Воронка «${f.title}» снята с публикации командой SmartFlow.\n\nПричина: ${note}\n\nИсправьте и отправьте на проверку снова: Офис → «Готовые воронки» → «Мои воронки».`
+  approve: (f) => `✅ Ваш шаблон «${f.title}» снова опубликован: эксперты видят его в Маркетплейсе → «Для бизнеса».`,
+  reject: (f, note) => `Шаблон «${f.title}» снят командой SmartFlow.\n\nПричина: ${note}`,
+  hide: (f, note) => `Шаблон «${f.title}» снят с публикации командой SmartFlow после жалобы.\n\nПричина: ${note}\n\nНапишите в «Поддержку», если не согласны.`
 };
 
 /** POST /api/admin/funnels/:id/decision { decision: approve|reject|hide, note } */
@@ -496,7 +496,7 @@ router.post('/funnels/:id/decision', async (req, res, next) => {
     });
     analytics.capture('ready_funnel_reviewed', before.author_id, { funnel_id: before.id, decision, price_type: before.price_type });
     const text = FUNNEL_DECISION_TEXT[decision](before, after.review_note || '');
-    telegramBot.notifyUser(before.author_id, text, { buttonText: 'Открыть воронку', startParam: `F_${before.id}` })
+    telegramBot.notifyUser(before.author_id, text, { buttonText: 'Открыть шаблон', startParam: `F_${before.id}` })
       .catch(err => console.warn('[SmartFlow Funnels] author not notified:', err.message));
     res.json({ funnel: readyFunnels.toFunnel(after, 'staff') });
   } catch (err) {

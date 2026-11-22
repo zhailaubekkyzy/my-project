@@ -1127,7 +1127,7 @@
           <div class="text-[11px] font-bold text-muted uppercase tracking-wider">Что брать из Мозга</div>
           ${funnel ? `
             <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
-              <span><span class="block font-semibold text-ink">Доступ воронки к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть в Мозге, подставится в ответы само. Ваши ответы тоже сохранятся в Мозг.</span></span>
+              <span><span class="block font-semibold text-ink">Доступ шаблона к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть в Мозге, подставится в ответы само. Ваши ответы тоже сохранятся в Мозг.</span></span>
               <input type="checkbox" ${pz.access.brain ? 'checked' : ''} onchange="SF.actions.setPuzzleBrain('${SF.js(c.id)}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
             </label>` : ''}
           ${toggle('knowsBusiness', 'Знает о бизнесе', 'Что вы делаете и для кого — из Офиса → «Мозг».', pz.access.knowsBusiness)}
@@ -1228,8 +1228,8 @@
       ${funnel ? `
         <div class="p-2.5 rounded-xl text-[11px] leading-snug ${pz.release.released ? 'bg-[#81D8D0]/15 border border-[#81D8D0] text-ink' : 'bg-amber-500/10 border border-amber-500/50 text-ink'}">
           ${pz.release.released
-            ? `<b class="text-brand">Воронка${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} работает</b> — SI продаёт по ней. Кусочки этой воронки выбрал её автор.`
-            : `<b class="text-amber-500">Воронка${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} включится</b>, ${SF.esc(pz.release.text)} — так решил её автор, чтобы SI не продавал без нужного. Пока SI работает по вашей методологии.`}
+            ? `<b class="text-brand">Шаблон${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} работает</b> — SI продаёт по нему. Кусочки этого шаблона выбрал его автор.`
+            : `<b class="text-amber-500">Шаблон${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} включится</b>, ${SF.esc(pz.release.text)} — так решил его автор, чтобы SI не продавал без нужного. Пока SI работает по вашей методологии.`}
         </div>` : ''}
       <div class="p-3 rounded-2xl bg-sunken border border-line space-y-1.5">
         <div class="flex items-center justify-between gap-2">
@@ -1290,7 +1290,7 @@
       return `
         <div class="glass-card-3d p-3.5 flex items-center gap-3 text-xs">
           <i data-lucide="puzzle" class="w-5 h-5 text-brand flex-shrink-0"></i>
-          <span class="flex-1 text-ink-2 leading-snug"><b class="text-ink">Пазл для покупателей воронки</b><br>${d.pieces.length ? `Кусочков: ${d.pieces.length}. Эксперт ответит на ваши вопросы, и воронка включится по вашему условию.` : 'Какие сведения нужны вашей воронке от эксперта — решаете вы.'}</span>
+          <span class="flex-1 text-ink-2 leading-snug"><b class="text-ink">Пазл для покупателей шаблона</b><br>${d.pieces.length ? `Кусочков: ${d.pieces.length}. Эксперт ответит на ваши вопросы, и шаблон включится по вашему условию.` : 'Какие сведения нужны вашему шаблону от эксперта — решаете вы.'}</span>
           <button onclick="SF.actions.authorPuzzleOpen(true)" class="px-3 py-2 rounded-xl btn-3d-dark text-[11px] flex-shrink-0">${d.pieces.length ? 'Изменить' : 'Создать'}</button>
         </div>`;
     }
@@ -1298,10 +1298,10 @@
     return `
       <div id="author-puzzle" class="glass-card-3d p-4 space-y-3 text-xs">
         <div class="flex items-center justify-between gap-2">
-          ${SF.sectionTitle('puzzle', 'Пазл для покупателей воронки')}
+          ${SF.sectionTitle('puzzle', 'Пазл для покупателей шаблона')}
           <button onclick="SF.actions.authorPuzzleOpen(false)" class="p-1 text-faint" aria-label="Свернуть"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
         </div>
-        <div class="text-[11px] text-muted leading-snug">Эксперт, купивший воронку, увидит эти кусочки вокруг своего SI и ответит на вопросы по одному. Что уже есть в его Мозге, подставится само. Без лишнего: только то, что нужно этой воронке. До ${MAX_AUTHOR_PIECES} кусочков, в каждом до ${MAX_AUTHOR_QUESTIONS} вопросов. Изменения дойдут до покупателей, когда вы снова опубликуете воронку.</div>
+        <div class="text-[11px] text-muted leading-snug">Эксперт, купивший шаблон, увидит эти кусочки вокруг своего SI и ответит на вопросы по одному. Что уже есть в его Мозге, подставится само. Без лишнего: только то, что нужно этому шаблону. До ${MAX_AUTHOR_PIECES} кусочков, в каждом до ${MAX_AUTHOR_QUESTIONS} вопросов. Изменения дойдут до покупателей, когда вы сохраните шаблон снова.</div>
         ${d.pieces.map((p, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-2">
             <div class="flex items-center gap-1.5">
@@ -1377,7 +1377,7 @@
       store().updateOfficeConsultant(id, { puzzle });
       authorPuzzle = { projectId: id, open: false, pieces: JSON.parse(JSON.stringify(puzzle.pieces)), release: { ...puzzle.release } };
       store().notify();
-      showToast(puzzle.pieces.length ? `Пазл сохранён: кусочков ${puzzle.pieces.length}. Опубликуйте воронку снова, чтобы он дошёл до покупателей` : 'Пазл пуст: кусочек без названия или без вопросов не сохраняется');
+      showToast(puzzle.pieces.length ? `Пазл сохранён: кусочков ${puzzle.pieces.length}. Сохраните шаблон снова («Мои шаблоны» → «Изменить»), чтобы он дошёл до покупателей` : 'Пазл пуст: кусочек без названия или без вопросов не сохраняется');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
     }
@@ -1476,7 +1476,7 @@
       SF.data.invalidate('office'); // the funnel may have just started
       // Dopamine on every «Сохранить» (owner's decision): the bigger the step, the bigger the word
       SF.confetti();
-      if (saved.released) showToast('Пазл собран — воронка включена, SI продаёт по ней 🎉');
+      if (saved.released) showToast('Пазл собран — шаблон включён, SI продаёт по нему 🎉');
       else if (saved.newlyDone) showToast(`Кусочек «${piece.label}» на месте 🧩 Собрано ${next.done} из ${next.total}`);
       else if (saved.done) showToast('Сохранено — SI уже знает это ✨');
       else showToast(`Сохранено. Осталось ответить: ${piece.questions.filter(q => !answers[q.id]).length}`);
@@ -1489,7 +1489,7 @@
   SF.actions.setPuzzleBrain = async (projectId, on) => {
     try {
       store().setRemote(`puzzle.${projectId}`, await api().setPuzzleBrain(projectId, on));
-      showToast(on ? 'Воронка берёт ответы из Мозга' : 'Воронка не берёт ответы из Мозга');
+      showToast(on ? 'Шаблон берёт ответы из Мозга' : 'Шаблон не берёт ответы из Мозга');
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не получилось', err));
     }
@@ -1643,13 +1643,13 @@
     if (!f) return '';
     return `
       <div class="glass-card-3d p-3.5 space-y-1.5 text-xs border border-[#81D8D0]">
-        <div class="font-bold text-ink flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4 text-brand"></i>${f.waitingPuzzle ? 'Готовая воронка ждёт пазл' : f.active ? 'Подключена готовая воронка' : 'Готовая воронка не продлена'} «${SF.esc(f.title)}»</div>
+        <div class="font-bold text-ink flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4 text-brand"></i>${f.waitingPuzzle ? 'Шаблон ждёт пазл' : f.active ? 'Работает по шаблону' : 'Шаблон не продлён'} «${SF.esc(f.title)}»</div>
         <div class="text-[11px] text-ink-2 leading-snug">${f.waitingPuzzle
-          ? 'Соберите пазл выше — и SI начнёт вести клиентов по её шагам. Пока он работает по вашей методологии ниже.'
+          ? 'Соберите пазл выше — и SI начнёт вести клиентов по шагам шаблона. Пока он работает по вашей методологии ниже.'
           : f.active
-          ? `SI ведёт клиентов по её шагам: ${f.steps.map(st => SF.esc(st.title)).join(' → ')}. Ваши цель, инструкции, шаги и сценарии ниже сохранены и снова заработают, если отключить воронку${f.until ? ' или не продлить оплату' : ''}.`
-          : 'Оплаченный месяц закончился — SI снова работает по вашей методологии ниже. Оплатите следующий месяц, чтобы вернуть воронку.'}</div>
-        <button type="button" onclick="SF.push('office-funnels', { view: 'bought' })" class="text-[11px] text-brand font-semibold">Купленные воронки →</button>
+          ? `SI ведёт клиентов по его шагам: ${f.steps.map(st => SF.esc(st.title)).join(' → ')}. Ваши цель, инструкции, шаги и сценарии ниже сохранены и снова заработают, если отключить шаблон${f.until ? ' или не продлить оплату' : ''}.`
+          : 'Оплаченный месяц закончился — SI снова работает по вашей методологии ниже. Оплатите следующий месяц, чтобы вернуть шаблон.'}</div>
+        <button type="button" onclick="SF.push('office-funnels', { view: 'bought' })" class="text-[11px] text-brand font-semibold">Купленные шаблоны →</button>
       </div>`;
   }
 
@@ -2922,7 +2922,8 @@
     render(route, state) {
       if (route.screen === 'office') return renderOffice(route, state);
       // Ready-made funnels (js/screens/funnels.js): for anyone with an open Office
-      if (SF.funnels && SF.funnels.owns(route.screen)) return store().isBusinessActive() ? SF.funnels.render(route, state) : renderTerms();
+      // Templates (js/screens/funnels.js): the catalogue and a template for everyone, the rest with an open Office
+      if (SF.funnels && SF.funnels.owns(route.screen)) return store().isBusinessActive() || SF.funnels.open(route) ? SF.funnels.render(route, state) : renderTerms();
       if (route.screen === 'office-create' && !store().isBusinessActive()) return renderTerms();
       if (!store().isBusinessActive() && !store().isAssistant()) return renderTerms();
       if (route.screen === 'office-create') return renderCreate(route);
@@ -2935,6 +2936,7 @@
     afterRender(route, state) {
       // New or removed assistant roles show up without reopening the app
       SF.data.officeLists();
+      if (SF.funnels && SF.funnels.owns(route.screen) && SF.funnels.open(route)) return SF.funnels.afterRender(route, state);
       if (!store().isBusinessActive() && !store().isAssistant()) return;
       if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.afterRender(route, state);
       if (store().isBusinessActive()) SF.data.businesses();

@@ -3137,7 +3137,7 @@ async function runAllTests() {
     assert.strictEqual((await db.get('SELECT COUNT(*) AS n FROM project_slug_aliases WHERE slug = ?', [oldSlug])).n, 0);
   });
 
-  await test('71. Готовые воронки: маркетолог публикует, команда проверяет, эксперт видит описание и шаги без текстов', async () => {
+  await test('71. Шаблоны: публикуются сразу без проверки, команда скрывает по жалобе, эксперт видит описание и шаги без текстов', async () => {
     const analytics = require('../server/services/analytics-service');
     const saved = { features: config.features, betaUsers: config.betaUsers, adminUsers: config.adminUsers };
     const sent = [];
@@ -3173,27 +3173,29 @@ async function runAllTests() {
       const created = await post(good);
       assert.strictEqual(created.status, 201);
       const id = created.body.funnel.id;
-      assert.strictEqual(created.body.funnel.status, 'review');
+      assert.strictEqual(created.body.funnel.status, 'published', 'Published at once: no review since step 4');
       const percent = await post({ ...good, title: 'Процент', priceType: 'percent', priceLabel: '10% с продаж', paymentUrl: '' });
       assert.strictEqual(percent.status, 201, 'A percentage can go without a link');
-
-      // Not in the catalogue until the team approves; the expert cannot open it either
-      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
-      assert.strictEqual((await api('GET', `/api/ready-funnels/${id}`, expertToken)).status, 404);
       assert.strictEqual((await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels.length, 2);
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 2, 'In the catalogue at once');
 
-      // The team: only staff, sees the full texts, a reason is required to reject
+      // A complaint goes to the team; the team (only staff, sees the full texts) hides with a reason
+      assert.strictEqual((await api('POST', `/api/ready-funnels/${percent.body.funnel.id}/report`, expertToken, { reason: '' })).status, 400);
+      assert.strictEqual((await api('POST', `/api/ready-funnels/${percent.body.funnel.id}/report`, expertToken, { reason: 'Обещает невозможное' })).status, 200);
+      const complaint = await db.get(`SELECT text FROM feedback WHERE text LIKE 'Жалоба на шаблон%' ORDER BY created_at DESC LIMIT 1`);
+      assert(complaint && complaint.text.includes('Обещает невозможное'));
       assert.strictEqual((await api('GET', '/api/admin/funnels', expertToken)).status, 403);
-      const queue = (await api('GET', '/api/admin/funnels', teamToken)).body.funnels;
-      assert.strictEqual(queue.length, 2);
-      assert(queue[0].snapshot.instructions.length > 0, 'The team sees the instructions');
-      assert.strictEqual((await api('GET', '/api/admin/overview', teamToken)).body.funnelsToReview, 2);
+      const shownToTeam = (await api('GET', '/api/admin/funnels?status=published', teamToken)).body.funnels;
+      assert.strictEqual(shownToTeam.length, 2);
+      assert(shownToTeam[0].snapshot.instructions.length > 0, 'The team sees the instructions');
       const decide = (fid, decision, note) => api('POST', `/api/admin/funnels/${fid}/decision`, teamToken, { decision, note });
-      assert.strictEqual((await decide(percent.body.funnel.id, 'reject', '')).status, 400);
-      assert.strictEqual((await decide(percent.body.funnel.id, 'reject', 'Опишите результат честнее')).status, 200);
+      assert.strictEqual((await decide(percent.body.funnel.id, 'hide', '')).status, 400, 'A reason to hide');
+      assert.strictEqual((await decide(percent.body.funnel.id, 'hide', 'Опишите результат честнее')).status, 200);
       const mine = (await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels;
       assert.strictEqual(mine.find(f => f.id === percent.body.funnel.id).reviewNote, 'Опишите результат честнее');
-      assert.strictEqual((await decide(id, 'approve')).status, 200);
+      // The author's change does not bring back a hidden one
+      await api('PUT', `/api/ready-funnels/${percent.body.funnel.id}`, marketerToken, { ...good, title: 'Процент 2', priceType: 'percent', priceLabel: '10%', paymentUrl: '' });
+      assert.strictEqual((await api('GET', '/api/ready-funnels/mine', marketerToken)).body.funnels.find(f => f.id === percent.body.funnel.id).status, 'hidden');
       assert.strictEqual((await decide(id, 'approve')).status, 409, 'Already published');
 
       // The expert: the catalogue shows the description, step names and the result — not the texts
@@ -3214,12 +3216,13 @@ async function runAllTests() {
       assert.strictEqual((await api('GET', '/api/ready-funnels?q=курса', expertToken)).body.funnels.length, 1);
       assert.strictEqual((await api('GET', '/api/ready-funnels?q=йога', expertToken)).body.funnels.length, 0);
 
-      // The author changes it → back to the team, gone from the catalogue
+      // The author changes it → stays published at once
       assert.strictEqual((await api('PUT', `/api/ready-funnels/${id}`, expertToken, good)).status, 404, 'Only the author');
       const edited = await api('PUT', `/api/ready-funnels/${id}`, marketerToken, { ...good, priceType: 'monthly', priceLabel: '5 000 ₸ в месяц' });
-      assert.strictEqual(edited.body.funnel.status, 'review');
-      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
-      await decide(id, 'approve');
+      assert.strictEqual(edited.body.funnel.status, 'published');
+      assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 1);
+      assert.strictEqual((await decide(id, 'hide', 'Жалоба эксперта')).status, 200);
+      assert.strictEqual((await decide(id, 'approve')).status, 200, 'The team may bring it back');
       assert.strictEqual((await decide(id, 'hide', 'Жалоба эксперта')).status, 200);
       assert.strictEqual((await api('GET', '/api/ready-funnels', expertToken)).body.funnels.length, 0);
       assert.strictEqual((await api('DELETE', `/api/ready-funnels/${id}`, marketerToken)).status, 200);
@@ -3227,9 +3230,9 @@ async function runAllTests() {
 
       // Every decision is in the team's log; the numbers carry no names or texts
       const log = await db.all(`SELECT action FROM admin_actions WHERE action LIKE 'funnel_%'`);
-      assert.deepStrictEqual(log.map(r => r.action).sort(), ['funnel_approve', 'funnel_approve', 'funnel_hide', 'funnel_reject']);
+      assert.deepStrictEqual(log.map(r => r.action).sort(), ['funnel_approve', 'funnel_hide', 'funnel_hide', 'funnel_hide']);
       const names = sent.map(e => e.event);
-      for (const e of ['ready_funnel_submitted', 'ready_funnel_reviewed', 'ready_funnel_catalog_opened', 'ready_funnel_viewed', 'ready_funnel_withdrawn']) assert(names.includes(e), `${e} is sent`);
+      for (const e of ['ready_funnel_submitted', 'ready_funnel_reviewed', 'ready_funnel_catalog_opened', 'ready_funnel_viewed', 'ready_funnel_withdrawn', 'ready_funnel_reported']) assert(names.includes(e), `${e} is sent`);
       assert(!JSON.stringify(sent).includes('Продажа курса'), 'No titles in the numbers');
     } finally {
       analytics._setClientForTests(null);
@@ -3831,6 +3834,58 @@ async function runAllTests() {
       pz = (await api('GET', `/api/projects/${seller.id}/puzzle`, ex)).body;
       assert.strictEqual(pz.mode, 'own');
       await api('POST', `/api/admin/funnels/${f.id}/decision`, teamToken, { decision: 'hide' }); // the catalogue stays empty for other tests
+    } finally {
+      Object.assign(config, saved);
+    }
+  });
+
+  await test('80. Шаблон как продукт: продавец шаблона и видео, шаблон в Мозге автора, покупка → новый AI-продавец', async () => {
+    const saved = { features: config.features };
+    try {
+      config.features = ['funnels:all'];
+      const mk = await tokenFor({ id: 800001, first_name: 'Автор', last_name: 'Шаблона' });
+      const ex = await tokenFor({ id: 800002, first_name: 'Покупатель', last_name: 'Шаблона' });
+      const mkProf = (await api('GET', '/api/me/profile', mk)).body.user.profile;
+      await api('PUT', '/api/me/profile', mk, { ...mkProf, businessAgreedAt: new Date().toISOString() });
+      const src = (await api('POST', '/api/projects/quick-start', mk, { goal: 'consult', about: 'маркетолог', offer: 'Разбор' })).body;
+      const other = (await api('POST', '/api/projects', ex, { name: 'чужой' })).body;
+      const base = { projectId: src.id, title: 'Запись на разбор', niche: 'Коучинг', description: 'Ведёт к записи', result: 'Записи на разбор', priceType: 'once', priceLabel: '9 000 ₸', paymentUrl: 'https://pay.example.com/t' };
+      assert.strictEqual((await api('POST', '/api/ready-funnels', mk, { ...base, sellerProjectId: other.id })).status, 404, 'Only one’s own seller sells it');
+      assert.strictEqual((await api('POST', '/api/ready-funnels', mk, { ...base, videoUrl: 'http://video.example.com' })).status, 400);
+      const f = (await api('POST', '/api/ready-funnels', mk, { ...base, videoUrl: 'https://video.example.com/v' })).body.funnel;
+      assert.strictEqual(f.status, 'published');
+      // Who sells it: by default the same seller; experts write to it before buying
+      const card = (await api('GET', `/api/ready-funnels/${f.id}`, ex)).body.funnel;
+      assert.strictEqual(card.seller.slug, src.slug);
+      assert.strictEqual(card.videoUrl, 'https://video.example.com/v');
+      // The template is in the author's Brain as a product
+      const product = await db.get('SELECT * FROM products WHERE id = ?', [f.productId]);
+      assert(product && product.name === 'Шаблон «Запись на разбор»' && product.price_label === '9 000 ₸');
+      await api('PUT', `/api/ready-funnels/${f.id}`, mk, { ...base, title: 'Запись на разбор 2', sellerProjectId: '' });
+      assert.strictEqual((await db.get('SELECT name FROM products WHERE id = ?', [f.productId])).name, 'Шаблон «Запись на разбор 2»', 'The product follows the template');
+      assert.strictEqual((await api('GET', `/api/ready-funnels/${f.id}`, ex)).body.funnel.seller, null, 'Nobody sells it');
+
+      // Buying → a NEW AI-продавец in the chosen business; the old ones stay as they were
+      const exProf = (await api('GET', '/api/me/profile', ex)).body.user.profile;
+      await api('PUT', '/api/me/profile', ex, { ...exProf, businessAgreedAt: new Date().toISOString() });
+      const biz = (await api('POST', '/api/business/businesses', ex, { name: 'Второй бизнес' })).body.business;
+      const pid = (await api('POST', `/api/ready-funnels/${f.id}/buy`, ex, { note: 'Kaspi' })).body.purchase.id;
+      const launch = (body) => api('POST', `/api/ready-funnels/purchases/${pid}/launch`, ex, body);
+      assert.strictEqual((await launch({ businessId: biz.id, name: 'Рано' })).status, 400, 'Not before the author confirms');
+      await api('POST', `/api/ready-funnels/purchases/${pid}/decision`, mk, { decision: 'confirm' });
+      const before = (await db.get('SELECT COUNT(*) AS n FROM projects WHERE owner_id = (SELECT owner_id FROM projects WHERE id = ?)', [other.id])).n;
+      assert.strictEqual((await launch({ businessId: 'biz_nope', name: 'x' })).status, 404, 'Only my business');
+      assert.strictEqual((await db.get('SELECT COUNT(*) AS n FROM projects WHERE owner_id = (SELECT owner_id FROM projects WHERE id = ?)', [other.id])).n, before, 'Nothing half-made');
+      const launched = await launch({ businessId: biz.id, name: 'Продавец разборов', brainAccess: true });
+      assert.strictEqual(launched.status, 201);
+      const seller = await db.get('SELECT * FROM projects WHERE id = ?', [launched.body.projectId]);
+      assert.strictEqual(seller.business_id, biz.id);
+      assert.strictEqual(seller.name, 'Продавец разборов');
+      assert(seller.funnel_settings && seller.funnel_purchase_id === pid, 'The template works in it');
+      assert.strictEqual(launched.body.purchase.connectedTo.projectId, seller.id);
+      assert.strictEqual((await db.get('SELECT funnel_settings FROM projects WHERE id = ?', [other.id])).funnel_settings, null, 'The old seller is untouched');
+      await api('POST', `/api/admin/funnels/${f.id}/decision`, mk, { decision: 'hide', note: 'x' }); // not staff: ignored
+      await db.run(`UPDATE ready_funnels SET status = 'withdrawn' WHERE id = ?`, [f.id]); // the catalogue stays empty for other tests
     } finally {
       Object.assign(config, saved);
     }

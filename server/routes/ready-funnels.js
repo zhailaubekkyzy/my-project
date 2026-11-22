@@ -7,7 +7,6 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const appInfo = require('../services/app-info');
 const analytics = require('../services/analytics-service');
-const supportService = require('../services/support-service');
 const telegramBot = require('../services/telegram-bot');
 const funnels = require('../services/ready-funnel-service');
 const purchases = require('../services/funnel-purchase-service');
@@ -19,7 +18,7 @@ router.use(requireAuth);
 router.use(async (req, res, next) => {
   try {
     if (await appInfo.isOn('funnels', req.user.userId)) return next();
-    res.status(404).json({ error: 'not_found', code: 'FEATURE_OFF', message: 'Готовые воронки пока недоступны' });
+    res.status(404).json({ error: 'not_found', code: 'FEATURE_OFF', message: 'Шаблоны пока недоступны' });
   } catch (err) {
     next(err);
   }
@@ -34,19 +33,6 @@ function handle(fn) {
       next(err);
     }
   };
-}
-
-// The team learns there is something to review (a bot message to everyone in the team)
-async function tellTeam(funnel, isUpdate) {
-  try {
-    const team = await supportService.staffUserIds();
-    const text = `${isUpdate ? '✏️ Воронку изменили' : '🧩 Новая воронка'} на проверку: «${funnel.title}» (${funnel.niche}). Проверьте в панели поддержки → «Воронки».`;
-    for (const userId of team) {
-      await telegramBot.notifyUser(userId, text, { buttonText: 'Проверить', startParam: 'FREVIEW' });
-    }
-  } catch (err) {
-    console.warn('[SmartFlow Funnels] team not notified:', err.message);
-  }
 }
 
 /** GET /api/ready-funnels?q=&niche= — the catalogue: published funnels */
@@ -97,12 +83,12 @@ router.post('/purchases/:pid/decision', handle(async (req, res) => {
   let text;
   if (decision === 'confirm') {
     text = renewal
-      ? `✅ ${marketer} подтвердил(а) оплату следующего месяца воронки ${title}. Воронка работает дальше.`
+      ? `✅ ${marketer} подтвердил(а) оплату следующего месяца шаблона ${title}. Шаблон работает дальше.`
       : row.price_type === 'percent'
-        ? `✅ ${marketer} согласен(на) подключить воронку ${title} на условиях «${row.price_label}». Подключите её к своему SI-продавцу: Офис → «Готовые воронки» → «Купленные».`
-        : `✅ ${marketer} подтвердил(а) оплату воронки ${title}. Подключите её к своему SI-продавцу: Офис → «Готовые воронки» → «Купленные».`;
+        ? `✅ ${marketer} согласен(на) подключить шаблон ${title} на условиях «${row.price_label}». Запустите AI-продавца: Маркетплейс → «Для бизнеса» → «Купленные».`
+        : `✅ ${marketer} подтвердил(а) оплату шаблона ${title}. Запустите AI-продавца: Маркетплейс → «Для бизнеса» → «Купленные».`;
   } else {
-    text = `${marketer} пока не подтвердил(а) ${renewal ? 'оплату следующего месяца' : 'оплату'} воронки ${title}.\n\nПричина: ${row.reason}\n\nНапишите автору в SmartFlow, чтобы разобраться.`;
+    text = `${marketer} пока не подтвердил(а) ${renewal ? 'оплату следующего месяца' : 'оплату'} шаблона ${title}.\n\nПричина: ${row.reason}\n\nНапишите автору в SmartFlow, чтобы разобраться.`;
   }
   notify(row.expert_id, text, `F_${row.funnel_id}`);
   res.json({ purchase: await purchases.toPurchase(row, 'marketer') });
@@ -112,7 +98,7 @@ router.post('/purchases/:pid/decision', handle(async (req, res) => {
 router.post('/purchases/:pid/end', handle(async (req, res) => {
   const row = await purchases.endPercent(req.user.userId, req.params.pid, (req.body || {}).reason);
   analytics.capture('ready_funnel_percent_ended', req.user.userId, { funnel_id: row.funnel_id });
-  notify(row.expert_id, `${await nameOfUser(req.user.userId)} отключил(а) воронку «${row.funnel_title}».\n\nПричина: ${row.reason}\n\nВаш SI-продавец снова работает по вашей методологии.`, `F_${row.funnel_id}`);
+  notify(row.expert_id, `${await nameOfUser(req.user.userId)} отключил(а) шаблон «${row.funnel_title}».\n\nПричина: ${row.reason}\n\nВаш SI-продавец снова работает по вашей методологии.`, `F_${row.funnel_id}`);
   res.json({ purchase: await purchases.toPurchase(row, 'marketer') });
 }));
 
@@ -123,6 +109,21 @@ router.post('/purchases/:pid/apply', handle(async (req, res) => {
   const { row, first, moved, released, puzzle } = await purchases.apply(req.user.userId, req.params.pid, body.projectId, body.materials, brainAccess);
   if (first || moved) analytics.capture('ready_funnel_applied', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, project_id: row.project_id, moved, puzzle, released, brain_access: brainAccess !== false });
   res.json({ purchase: await purchases.toPurchase(row, 'expert'), released, puzzle });
+}));
+
+/**
+ * POST /api/ready-funnels/purchases/:pid/launch { businessId, productId, name, materials, brainAccess } — the expert:
+ * the bought template becomes a new AI-продавец (owner's decision 22 Nov.)
+ */
+router.post('/purchases/:pid/launch', handle(async (req, res) => {
+  const body = req.body || {};
+  const brainAccess = body.brainAccess === undefined ? undefined : Boolean(body.brainAccess);
+  const { row, released, puzzle, projectId } = await purchases.launch(req.user.userId, req.params.pid, {
+    businessId: body.businessId, productId: body.productId, name: body.name, materials: body.materials, brainAccess
+  });
+  analytics.capture('si_seller_created', req.user.userId);
+  analytics.capture('ready_funnel_applied', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, project_id: projectId, moved: false, puzzle, released, brain_access: brainAccess !== false, launched: true });
+  res.status(201).json({ purchase: await purchases.toPurchase(row, 'expert'), released, puzzle, projectId });
 }));
 
 /** POST /api/ready-funnels/purchases/:pid/detach — the expert switches the funnel off */
@@ -141,10 +142,10 @@ router.post('/:id/buy', handle(async (req, res) => {
   analytics.capture('ready_funnel_purchase_requested', req.user.userId, { funnel_id: row.funnel_id, price_type: row.price_type, renewal });
   const expert = await nameOfUser(req.user.userId);
   const what = row.price_type === 'percent'
-    ? `хочет подключить вашу воронку «${row.funnel_title}» на условиях «${row.price_label}»`
-    : `оплатил(а) ${renewal ? 'следующий месяц воронки' : 'воронку'} «${row.funnel_title}» (${row.price_label})`;
+    ? `хочет подключить ваш шаблон «${row.funnel_title}» на условиях «${row.price_label}»`
+    : `оплатил(а) ${renewal ? 'следующий месяц шаблона' : 'шаблон'} «${row.funnel_title}» (${row.price_label})`;
   const note = renewal ? row.renewal_note : row.note;
-  notify(row.marketer_id, `💳 ${expert} ${what}.${note ? `\n\nКомментарий: ${note}` : ''}\n\n${row.price_type === 'percent' ? 'Согласитесь или откажите' : 'Проверьте поступление и подтвердите'}: Офис → «Готовые воронки» → «Мои воронки».`, 'FSALES');
+  notify(row.marketer_id, `💳 ${expert} ${what}.${note ? `\n\nКомментарий: ${note}` : ''}\n\n${row.price_type === 'percent' ? 'Согласитесь или откажите' : 'Проверьте поступление и подтвердите'}: Маркетплейс → «Для бизнеса» → «Мои шаблоны».`, 'FSALES');
   res.status(201).json({ purchase: await purchases.toPurchase(row, 'expert') });
 }));
 
@@ -152,7 +153,7 @@ router.post('/:id/buy', handle(async (req, res) => {
 router.get('/:id', handle(async (req, res) => {
   let funnel = await funnels.getForUser(req.user.userId, req.params.id);
   if (!funnel && await purchases.mineFor(req.user.userId, req.params.id)) funnel = await funnels.getBought(req.params.id);
-  if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Воронка не найдена или снята с публикации' });
+  if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Шаблон не найден или снят с публикации' });
   funnel.myPurchase = await purchases.mineFor(req.user.userId, funnel.id);
   funnel.results = (await purchases.resultsFor([funnel.id]))[funnel.id] || null;
   if (funnel.author.id !== req.user.userId) {
@@ -162,8 +163,9 @@ router.get('/:id', handle(async (req, res) => {
 }));
 
 /**
- * POST /api/ready-funnels — publish a funnel from one's own SI-seller (goes to the team first)
- * { projectId, title, niche, description, result, priceType: once|monthly|percent, priceLabel, paymentUrl }
+ * POST /api/ready-funnels — publish a template from one's own SI-seller: at once, without the team's review
+ * { projectId, title, niche, description, result, priceType: once|monthly|percent, priceLabel, paymentUrl,
+ *   sellerProjectId (who sells it; '' — nobody; default — the same seller), videoUrl }
  */
 router.post('/', handle(async (req, res) => {
   const row = await funnels.submit(req.user.userId, req.body || {});
@@ -171,18 +173,16 @@ router.post('/', handle(async (req, res) => {
   analytics.capture('ready_funnel_submitted', req.user.userId, {
     funnel_id: funnel.id, price_type: funnel.priceType, steps: funnel.steps.length, scenarios: funnel.scenarioCount, resubmitted: false
   });
-  tellTeam(funnel, false);
   res.status(201).json({ funnel });
 }));
 
-/** PUT /api/ready-funnels/:id — change it: goes back to the team */
+/** PUT /api/ready-funnels/:id — change it: published at once (one hidden by the team stays hidden) */
 router.put('/:id', handle(async (req, res) => {
   const row = await funnels.update(req.user.userId, req.params.id, req.body || {});
   const funnel = funnels.toFunnel(row, 'author');
   analytics.capture('ready_funnel_submitted', req.user.userId, {
     funnel_id: funnel.id, price_type: funnel.priceType, steps: funnel.steps.length, scenarios: funnel.scenarioCount, resubmitted: true
   });
-  tellTeam(funnel, true);
   res.json({ funnel });
 }));
 
@@ -191,6 +191,13 @@ router.delete('/:id', handle(async (req, res) => {
   await funnels.withdraw(req.user.userId, req.params.id);
   analytics.capture('ready_funnel_withdrawn', req.user.userId, { funnel_id: req.params.id });
   res.json({ ok: true });
+}));
+
+/** POST /api/ready-funnels/:id/report { reason } — a complaint goes to the team (it may hide the template) */
+router.post('/:id/report', handle(async (req, res) => {
+  await funnels.report(req.user.userId, req.params.id, (req.body || {}).reason);
+  analytics.capture('ready_funnel_reported', req.user.userId, { funnel_id: req.params.id });
+  res.json({ reported: true });
 }));
 
 module.exports = router;

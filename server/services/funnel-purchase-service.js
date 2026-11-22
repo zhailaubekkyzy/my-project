@@ -139,8 +139,8 @@ async function toPurchase(row, view = 'expert') {
 
 async function requestPurchase(expertId, funnelId, rawNote = '') {
   const funnel = await db.get('SELECT * FROM ready_funnels WHERE id = ?', [funnelId]);
-  if (!funnel || funnel.status !== 'published') throw new PurchaseError('Воронка не найдена или снята с публикации', 404, 'not_found');
-  if (funnel.author_id === expertId) throw new PurchaseError('Это ваша воронка — подключите её к своему SI-продавцу как обычно: она уже в его методологии');
+  if (!funnel || funnel.status !== 'published') throw new PurchaseError('Шаблон не найден или снят с публикации', 404, 'not_found');
+  if (funnel.author_id === expertId) throw new PurchaseError('Это ваш шаблон — он уже в методологии вашего AI-продавца');
   const note = cleanText(rawNote, 300);
   if (funnel.price_type !== 'percent' && !note) {
     throw new PurchaseError('Напишите, как и когда оплатили — автору будет проще найти платёж');
@@ -151,7 +151,7 @@ async function requestPurchase(expertId, funnelId, rawNote = '') {
   );
   if (existing && existing.status === 'pending') throw new PurchaseError('Уже ждём подтверждения автора', 409, 'conflict');
   if (existing && existing.status === 'active') {
-    if (existing.price_type !== 'monthly') throw new PurchaseError('Воронка уже ваша', 409, 'conflict');
+    if (existing.price_type !== 'monthly') throw new PurchaseError('Шаблон уже ваш', 409, 'conflict');
     // Monthly: the next month
     if (existing.renewal_requested_at) throw new PurchaseError('Уже ждём, когда автор подтвердит оплату следующего месяца', 409, 'conflict');
     await db.run(
@@ -181,7 +181,7 @@ async function expertRow(expertId, purchaseId) {
  */
 async function apply(expertId, purchaseId, projectId, materials = {}, brainAccess) {
   const row = await expertRow(expertId, purchaseId);
-  if (row.status !== 'active') throw new PurchaseError('Воронку можно подключить после того, как автор подтвердит оплату');
+  if (row.status !== 'active') throw new PurchaseError('Шаблон можно подключить после того, как автор подтвердит оплату');
   if (isExpired(row)) throw new PurchaseError('Оплаченный месяц закончился — оплатите следующий, чтобы подключить снова');
   const project = projectId ? await db.get('SELECT * FROM projects WHERE id = ?', [projectId]) : null;
   if (!project || project.owner_id !== expertId) throw new PurchaseError('Выберите своего SI-продавца', 404, 'not_found');
@@ -233,6 +233,32 @@ async function apply(expertId, purchaseId, projectId, materials = {}, brainAcces
   return { row: await getRow(row.id), moved: Boolean(row.project_id && row.project_id !== project.id), first: !row.project_id, released: Boolean(released), puzzle: Boolean(fpz) };
 }
 
+/**
+ * A bought template becomes a NEW AI-продавец of the expert (owner's decision 22 Nov.; the sellers made before
+ * keep working): in the business and with the product the expert chose, with the name they gave. Then the
+ * template is connected to it as by apply() (the Brain access, the author's puzzle).
+ */
+async function launch(expertId, purchaseId, { businessId = null, productId = null, name = '', materials = {}, brainAccess } = {}) {
+  const row = await expertRow(expertId, purchaseId);
+  if (row.status !== 'active') throw new PurchaseError('AI-продавца можно запустить после того, как автор подтвердит оплату');
+  if (isExpired(row)) throw new PurchaseError('Оплаченный месяц закончился — оплатите следующий, чтобы запустить снова');
+  const projectService = require('./project-service');
+  const sellerName = cleanText(name, 80) || row.funnel_title;
+  let project;
+  try {
+    project = await projectService.createProject(expertId, { name: sellerName, businessId: businessId ? String(businessId) : null, productId: productId ? String(productId) : null });
+  } catch (err) {
+    throw new PurchaseError(err.message || 'Не получилось создать AI-продавца', err.status || 400, err.code || 'bad_request');
+  }
+  try {
+    const out = await apply(expertId, purchaseId, project.id, materials, brainAccess);
+    return { ...out, projectId: project.id };
+  } catch (err) {
+    await db.run('DELETE FROM projects WHERE id = ?', [project.id]); // nothing half-made stays behind
+    throw err;
+  }
+}
+
 async function detachProject(row) {
   if (!row.project_id) return;
   await db.run(
@@ -244,7 +270,7 @@ async function detachProject(row) {
 
 async function detach(expertId, purchaseId) {
   const row = await expertRow(expertId, purchaseId);
-  if (!row.project_id) throw new PurchaseError('Воронка не подключена');
+  if (!row.project_id) throw new PurchaseError('Шаблон не подключён');
   await detachProject(row);
   return getRow(row.id);
 }
@@ -313,7 +339,7 @@ async function decide(marketerId, purchaseId, decision, rawReason = '') {
 // A percentage the expert does not pay: the marketer stops it (with a reason); the SI-seller goes back
 async function endPercent(marketerId, purchaseId, rawReason = '') {
   const row = await marketerRow(marketerId, purchaseId);
-  if (row.price_type !== 'percent' || row.status !== 'active') throw new PurchaseError('Отключить можно только воронку за процент с продаж');
+  if (row.price_type !== 'percent' || row.status !== 'active') throw new PurchaseError('Отключить можно только шаблон за процент с продаж');
   const reason = cleanText(rawReason, 300);
   if (!reason) throw new PurchaseError('Напишите причину — эксперт её увидит');
   await detachProject(row);
@@ -372,6 +398,7 @@ module.exports = {
   toPurchase,
   requestPurchase,
   apply,
+  launch,
   detach,
   listForExpert,
   mineFor,

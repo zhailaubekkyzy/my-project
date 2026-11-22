@@ -1,7 +1,10 @@
-// server/services/ready-funnel-service.js - Ready-made funnels from marketers (migration 026), part 1:
-// publishing from one's own SI-seller → the team's review → the catalogue for experts in the Office.
-// Owner's decisions 20–21 Nov.:
-//  - anyone can publish; at the start the team approves every funnel (a safety review);
+// server/services/ready-funnel-service.js - Templates (ready-made funnels, migration 026; «шаблон» in the app):
+// publishing from one's own SI-seller → the catalogue «Для бизнеса» in the Marketplace.
+// Owner's decisions 20–22 Nov.:
+//  - anyone can publish; since step 4 of «Бизнес-режим 2.0» (migration 033) without the team's review —
+//    published at once, the team only hides one after a complaint (as communities);
+//  - the author chooses who sells the template (their AI-продавец experts write to before buying) and may add a video;
+//  - the template goes into the author's Brain as a product of their business;
 //  - the marketer chooses the payment: once, monthly or a percentage of sales, by their own link;
 //  - before buying the expert sees the description, the steps and the result — not the full texts;
 //  - funnels live in the Office only: clients never see them.
@@ -66,7 +69,11 @@ const SELECT = `
   SELECT f.*, u.display_name AS author_display_name, u.profile AS author_profile,
          u.photo_media_id AS author_photo_media_id, u.avatar_url AS author_avatar_url, u.support_code AS author_support_code
   FROM ready_funnels f
-  LEFT JOIN users u ON u.id = f.author_id`;
+  LEFT JOIN users u ON u.id = f.author_id`
+  .replace('FROM ready_funnels f', `, sp.slug AS seller_slug, sp.name AS seller_name, sp.photo_media_id AS seller_photo_media_id,
+         sp.role_title AS seller_role_title, sp.status AS seller_status
+  FROM ready_funnels f
+  LEFT JOIN projects sp ON sp.id = f.seller_project_id`);
 
 /**
  * view: 'public' (the catalogue — no texts; the author's payment link to buy),
@@ -97,7 +104,12 @@ function toFunnel(row, view = 'public') {
     },
     publishedAt: row.status === 'published' ? (row.reviewed_at || row.submitted_at) : null,
     // The author's own link: the expert pays by it (part 2); the marketer confirms the payment
-    paymentUrl: row.payment_url || null
+    paymentUrl: row.payment_url || null,
+    videoUrl: row.video_url || null,
+    // The author's AI-продавец of this template: experts write to it before buying (owner's decision 22 Nov.)
+    seller: row.seller_slug && row.seller_status === 'active' ? {
+      id: row.seller_project_id, slug: row.seller_slug, name: row.seller_name || '', photoUrl: mediaUrl(row.seller_photo_media_id), roleTitle: row.seller_role_title || 'SI-консультант'
+    } : null
   };
   if (view === 'author' || view === 'staff') {
     Object.assign(result, {
@@ -105,7 +117,9 @@ function toFunnel(row, view = 'public') {
       reviewNote: row.review_note || '',
       reviewedAt: row.reviewed_at || null,
       submittedAt: row.submitted_at,
-      sourceProjectId: row.source_project_id || null
+      sourceProjectId: row.source_project_id || null,
+      sellerProjectId: row.seller_project_id || null,
+      productId: row.product_id || null
     });
   }
   if (view === 'staff') {
@@ -125,15 +139,18 @@ function readFields(body) {
   const rawUrl = String(body.paymentUrl || '').trim();
   const paymentUrl = rawUrl && /^https:\/\//i.test(rawUrl) ? cleanUrl(rawUrl) : null;
 
-  if (!title) throw new FunnelError('Напишите название воронки');
-  if (!niche) throw new FunnelError('Напишите, для какой ниши воронка');
-  if (!description) throw new FunnelError('Опишите, что это за воронка и как она ведёт клиента');
+  if (!title) throw new FunnelError('Напишите название шаблона');
+  if (!niche) throw new FunnelError('Напишите, для какой ниши шаблон');
+  if (!description) throw new FunnelError('Опишите, что это за шаблон и как он ведёт клиента');
   if (!result) throw new FunnelError('Напишите, какой результат получит эксперт');
   if (!priceType) throw new FunnelError('Выберите, как вам платят: разово, подписка или процент с продаж');
   if (!priceLabel) throw new FunnelError(priceType === 'percent' ? 'Напишите процент, например «10% с продаж»' : 'Напишите цену, например «15 000 ₸»');
   if (rawUrl && !paymentUrl) throw new FunnelError('Ссылка на оплату должна начинаться с https://');
   if (priceType !== 'percent' && !paymentUrl) throw new FunnelError('Добавьте свою ссылку на оплату — деньги идут вам напрямую');
-  return { title, niche, description, result, priceType, priceLabel, paymentUrl };
+  const rawVideo = String(body.videoUrl || '').trim();
+  const videoUrl = rawVideo && /^https:\/\//i.test(rawVideo) ? cleanUrl(rawVideo) : null;
+  if (rawVideo && !videoUrl) throw new FunnelError('Ссылка на видео должна начинаться с https://');
+  return { title, niche, description, result, priceType, priceLabel, paymentUrl, videoUrl };
 }
 
 async function ownProject(userId, projectId) {
@@ -150,6 +167,42 @@ async function getRow(id) {
   return id ? db.get(`${SELECT} WHERE f.id = ?`, [id]) : null;
 }
 
+// Who sells the template (owner's decision 22 Nov.): one of the author's own AI-продавцы — this same one, another
+// made for it, or one bought in the Marketplace. Not given — the source seller; '' / 'none' — nobody.
+async function sellerOf(userId, body, sourceProject) {
+  if (body.sellerProjectId === undefined) return sourceProject.id;
+  const id = String(body.sellerProjectId || '');
+  if (!id || id === 'none') return null;
+  const seller = await db.get('SELECT id, owner_id FROM projects WHERE id = ?', [id]);
+  if (!seller || seller.owner_id !== userId) throw new FunnelError('Выберите своего AI-продавца, который будет продавать шаблон', 404, 'not_found');
+  return seller.id;
+}
+
+// The template goes into the author's Brain as a product of the business of its seller (or source).
+// Kept in step with the template; nothing breaks if the business has no room for one more product.
+async function syncProduct(userId, row, fields, projectId) {
+  const productService = require('./product-service');
+  const data = {
+    name: `Шаблон «${fields.title}»`.slice(0, 120),
+    description: fields.description,
+    result: fields.result,
+    priceLabel: fields.priceLabel,
+    paymentUrl: fields.paymentUrl || ''
+  };
+  try {
+    if (row && row.product_id) {
+      const p = await db.get(`SELECT id FROM products WHERE id = ? AND status = 'active'`, [row.product_id]);
+      if (p) return (await productService.update(userId, p.id, data)).id;
+    }
+    const project = await db.get('SELECT business_id FROM projects WHERE id = ?', [projectId]);
+    if (!project || !project.business_id) return null;
+    return (await productService.create(userId, project.business_id, data)).id;
+  } catch (err) {
+    console.warn('[SmartFlow Templates] product not saved:', err.message);
+    return (row && row.product_id) || null;
+  }
+}
+
 async function submit(userId, body = {}) {
   const fields = readFields(body);
   const { project, snapshot } = await ownProject(userId, body.projectId);
@@ -158,40 +211,61 @@ async function submit(userId, body = {}) {
     [userId]
   );
   if (Number(mine && mine.count) >= MAX_PER_AUTHOR) {
-    throw new FunnelError(`Можно опубликовать до ${MAX_PER_AUTHOR} воронок. Уберите старую, чтобы добавить новую`);
+    throw new FunnelError(`Можно опубликовать до ${MAX_PER_AUTHOR} шаблонов. Уберите старый, чтобы добавить новый`);
   }
+  const sellerId = await sellerOf(userId, body, project);
+  const productId = await syncProduct(userId, null, fields, sellerId || project.id);
   const id = `rf_${crypto.randomBytes(8).toString('hex')}`;
+  // Published at once: no review by the team since step 4 (owner's decision 22 Nov.)
   await db.run(
-    `INSERT INTO ready_funnels (id, author_id, source_project_id, title, niche, description, result,
-       price_type, price_label, payment_url, snapshot, status, submitted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'review', ?)`,
-    [id, userId, project.id, fields.title, fields.niche, fields.description, fields.result,
-      fields.priceType, fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow()]
+    `INSERT INTO ready_funnels (id, author_id, source_project_id, seller_project_id, product_id, video_url, title, niche, description, result,
+       price_type, price_label, payment_url, snapshot, status, submitted_at, reviewed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
+    [id, userId, project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result,
+      fields.priceType, fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow()]
   );
   return getRow(id);
 }
 
 async function authorRow(userId, id) {
   const row = await getRow(id);
-  if (!row || row.author_id !== userId || row.status === 'withdrawn') throw new FunnelError('Воронка не найдена', 404, 'not_found');
+  if (!row || row.author_id !== userId || row.status === 'withdrawn') throw new FunnelError('Шаблон не найден', 404, 'not_found');
   return row;
 }
 
-// Any change goes back to the team: experts must get exactly what was approved.
-// projectId given → the steps and scenarios are taken again from that SI-seller.
+// A change is published at once (taken again from the SI-seller); one the team hid stays hidden
 async function update(userId, id, body = {}) {
   const row = await authorRow(userId, id);
   const fields = readFields(body);
   const { project, snapshot } = await ownProject(userId, body.projectId || row.source_project_id);
+  const sellerId = body.sellerProjectId === undefined ? row.seller_project_id : await sellerOf(userId, body, project);
+  const productId = await syncProduct(userId, row, fields, sellerId || project.id);
   await db.run(
-    `UPDATE ready_funnels SET source_project_id = ?, title = ?, niche = ?, description = ?, result = ?,
-       price_type = ?, price_label = ?, payment_url = ?, snapshot = ?, status = 'review', review_note = NULL,
-       reviewed_by = NULL, reviewed_at = NULL, submitted_at = ?, updated_at = ?
+    `UPDATE ready_funnels SET source_project_id = ?, seller_project_id = ?, product_id = ?, video_url = ?, title = ?, niche = ?, description = ?, result = ?,
+       price_type = ?, price_label = ?, payment_url = ?, snapshot = ?,
+       status = CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'published' END,
+       review_note = CASE WHEN status = 'hidden' THEN review_note ELSE NULL END,
+       reviewed_at = CASE WHEN status = 'published' THEN reviewed_at ELSE ? END, submitted_at = ?, updated_at = ?
      WHERE id = ?`,
-    [project.id, fields.title, fields.niche, fields.description, fields.result, fields.priceType,
-      fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow(), id]
+    [project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result, fields.priceType,
+      fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow(), sqlNow(), id]
   );
   return getRow(id);
+}
+
+/** «Пожаловаться» on a template: goes to the team as a complaint (the team may hide it). */
+async function report(userId, id, rawReason = '') {
+  const row = await getRow(id);
+  if (!row || row.status !== 'published') throw new FunnelError('Шаблон не найден', 404, 'not_found');
+  const reason = cleanText(rawReason, 300);
+  if (!reason) throw new FunnelError('Напишите, что не так — команда проверит');
+  const text = `Жалоба на шаблон «${row.title}» (автор ${authorName(row)}${row.author_support_code ? `, ${row.author_support_code}` : ''}).\nПричина: ${reason}`;
+  const fid = `fb_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  await db.run('INSERT INTO feedback (id, user_id, text, context) VALUES (?, ?, ?, ?)', [
+    fid, userId, text.slice(0, 4000), JSON.stringify({ screen: 'template', funnelId: row.id })
+  ]);
+  await require('./support-service').notifyStaffAboutFeedback(fid);
+  return { reported: true };
 }
 
 async function withdraw(userId, id) {
@@ -253,6 +327,7 @@ async function getForStaff(id) {
   return row ? toFunnel(row, 'staff') : null;
 }
 
+// Since step 4 there is no review: the team hides a template after a complaint and may bring it back
 const DECISIONS = {
   approve: { from: ['review', 'hidden'], to: 'published', needsNote: false },
   reject: { from: ['review'], to: 'rejected', needsNote: true },
@@ -267,7 +342,7 @@ async function decide(staffUserId, id, decision, rawNote = '') {
   const rule = DECISIONS[decision];
   if (!rule) throw new FunnelError('Неизвестное решение');
   const before = await getRow(id);
-  if (!before || before.status === 'withdrawn') throw new FunnelError('Воронка не найдена', 404, 'not_found');
+  if (!before || before.status === 'withdrawn') throw new FunnelError('Шаблон не найден', 404, 'not_found');
   if (!rule.from.includes(before.status)) throw new FunnelError('Воронка уже в другом статусе — обновите экран', 409, 'conflict');
   const note = cleanText(rawNote, 600);
   if (rule.needsNote && !note) throw new FunnelError('Напишите причину — автор увидит её и сможет исправить');
@@ -292,6 +367,7 @@ module.exports = {
   submit,
   update,
   withdraw,
+  report,
   listMine,
   catalogue,
   getForUser,
