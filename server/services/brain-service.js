@@ -240,7 +240,8 @@ function toMaterial(row, consultantIds = []) {
     chunkCount: Number(row.chunk_count) || 0,
     createdAt: row.created_at,
     preview: row.preview ? String(row.preview).slice(0, 300) : '',
-    consultantIds
+    consultantIds,
+    businessId: row.business_id || null
   };
 }
 
@@ -254,11 +255,12 @@ async function ownedProjectIds(ownerId, projectIds) {
   return wanted;
 }
 
-async function listMaterials(ownerId) {
+// businessId: only the materials of this business of mine («Бизнес-режим 2.0»: SI-мозг belongs to a business)
+async function listMaterials(ownerId, businessId = null) {
   const rows = await db.all(
     `SELECT m.*, (SELECT c.text FROM brain_chunks c WHERE c.material_id = m.id AND c.position = 0) AS preview
-     FROM brain_materials m WHERE m.owner_id = ? ORDER BY m.created_at DESC, m.id DESC`,
-    [ownerId]
+     FROM brain_materials m WHERE m.owner_id = ? ${businessId ? 'AND m.business_id = ?' : ''} ORDER BY m.created_at DESC, m.id DESC`,
+    businessId ? [ownerId, String(businessId)] : [ownerId]
   );
   const links = await db.all(
     `SELECT cm.material_id, cm.project_id FROM consultant_materials cm
@@ -277,8 +279,12 @@ async function getMaterial(ownerId, materialId) {
 /**
  * Saves a file's text as a new material. consultantIds: my consultants that may use it right away.
  */
-async function addMaterial(ownerId, { buffer, filename, title, consultantIds = [] }) {
+async function addMaterial(ownerId, { buffer, filename, title, consultantIds = [], businessId = null }) {
   const projectIds = await ownedProjectIds(ownerId, consultantIds);
+  // Which business the material belongs to: the one named (must be mine), otherwise my main one (if any yet)
+  const businessService = require('./business-service');
+  const business = businessId ? await businessService.ownBusiness(ownerId, businessId) : await businessService.businessOfOwner(ownerId);
+  if (businessId && !business) throw new BrainError('Бизнес не найден.', 404, 'NOT_FOUND');
   const usage = await db.get(
     'SELECT COUNT(*) AS count, COALESCE(SUM(char_count), 0) AS chars FROM brain_materials WHERE owner_id = ?',
     [ownerId]
@@ -296,9 +302,9 @@ async function addMaterial(ownerId, { buffer, filename, title, consultantIds = [
   const vectors = await embed(chunks);
   const materialId = newId('mat');
   await db.run(
-    `INSERT INTO brain_materials (id, owner_id, title, source_type, char_count, chunk_count)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [materialId, ownerId, String(title || '').trim().slice(0, 120) || titleFromName(filename), sourceType, text.length, chunks.length]
+    `INSERT INTO brain_materials (id, owner_id, business_id, title, source_type, char_count, chunk_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [materialId, ownerId, business ? business.id : null, String(title || '').trim().slice(0, 120) || titleFromName(filename), sourceType, text.length, chunks.length]
   );
   // Several pieces per INSERT: hundreds of single inserts are slow over the Supabase pooler
   for (let i = 0; i < chunks.length; i += INSERT_BATCH) {

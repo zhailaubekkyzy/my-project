@@ -131,8 +131,10 @@ async function reviewReceipt(project, client, receiptId, action, member) {
   const en = (await require('./i18n').langOfClient(client)) === 'en';
   if (confirm) {
     await chatService.markOutcome(project, client, 'paid', member);
-    text = project.access_url
-      ? (en ? `Payment confirmed, thank you! 🎉 Your access: ${project.access_url}` : `Оплата подтверждена, спасибо! 🎉 Ваш доступ: ${project.access_url}`)
+    // The access link of the seller, or of its product (server/services/inheritance.js)
+    const accessUrl = (await require('./inheritance').withInherited(project)).access_url;
+    text = accessUrl
+      ? (en ? `Payment confirmed, thank you! 🎉 Your access: ${accessUrl}` : `Оплата подтверждена, спасибо! 🎉 Ваш доступ: ${accessUrl}`)
       : (en ? 'Payment confirmed, thank you! 🎉 We will soon write how to get access.' : 'Оплата подтверждена, спасибо! 🎉 Скоро напишем, как получить доступ.');
   } else {
     await funnelService.recordEvent(client, 'receipt_rejected', author);

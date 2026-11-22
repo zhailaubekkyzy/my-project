@@ -38,14 +38,16 @@ router.get('/', async (req, res, next) => {
  */
 router.post('/', async (req, res, next) => {
   try {
-    const { name, templateId, niche, customAiSettings, pricingOptions } = req.body;
+    const { name, templateId, niche, customAiSettings, pricingOptions, businessId, productId } = req.body;
 
     const project = await projectService.createProject(req.user.userId, {
       name,
       templateId,
       niche,
       customAiSettings: projectService.limitAiSettings(customAiSettings),
-      pricingOptions
+      pricingOptions,
+      businessId: businessId ? String(businessId) : null,
+      productId: productId ? String(productId) : null
     });
 
     analytics.capture('si_seller_created', req.user.userId);

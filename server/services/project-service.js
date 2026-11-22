@@ -195,7 +195,7 @@ async function getUserProjects(userId) {
 /**
  * Create a new expert project instance (optionally from a template)
  */
-async function createProject(userId, { name, templateId, niche, customAiSettings, pricingOptions }) {
+async function createProject(userId, { name, templateId, niche, customAiSettings, pricingOptions, businessId = null, productId = null }) {
   const owned = await db.get('SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?', [userId]);
   if (Number(owned && owned.count) >= MAX_PROJECTS_PER_OWNER) throw projectLimitError();
   const projectId = `proj_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -215,16 +215,23 @@ async function createProject(userId, { name, templateId, niche, customAiSettings
     }
   }
 
-  // The expert turns a new SI-seller on: their business exists from now on
-  const business = await businessService.ensureBusiness(userId);
+  // The expert turns a new SI-seller on: their business exists from now on. businessId: one of my businesses
+  // (up to 3, «Бизнес-режим 2.0»); without it — my main one.
+  const business = await businessService.targetBusiness(userId, businessId);
+  let product = null;
+  if (productId) {
+    product = await db.get(`SELECT id FROM products WHERE id = ? AND business_id = ? AND status = 'active'`, [String(productId), business.id]);
+    if (!product) throw new businessService.BusinessError('Продукт не найден в этом бизнесе', 404, 'NOT_FOUND');
+  }
 
   await db.run(
-    `INSERT INTO projects (id, owner_id, business_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
-     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 0)`,
+    `INSERT INTO projects (id, owner_id, business_id, product_id, template_id, name, slug, status, niche, custom_ai_settings, pricing_options, stats, is_demo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 0)`,
     [
       projectId,
       userId,
       business.id,
+      product ? product.id : null,
       templateId || null,
       name || 'Новый проект',
       cleanSlug,

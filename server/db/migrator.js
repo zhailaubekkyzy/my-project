@@ -21,8 +21,10 @@ async function getAppliedMigrations() {
 
 // Blocks between "-- postgres-only:begin" and "-- postgres-only:end" run on PostgreSQL only
 // (e.g. Row Level Security for Supabase); SQLite does not support those statements.
+// Blocks between "-- sqlite-only:begin" and "-- sqlite-only:end" run on SQLite only (e.g. rebuilding a table
+// to drop a constraint, which SQLite cannot do in place).
 function sqlForDriver(sql, driver) {
-  if (driver === 'postgres') return sql;
+  if (driver === 'postgres') return sql.replace(/--\s*sqlite-only:begin[\s\S]*?--\s*sqlite-only:end/g, '');
   return sql.replace(/--\s*postgres-only:begin[\s\S]*?--\s*postgres-only:end/g, '');
 }
 
