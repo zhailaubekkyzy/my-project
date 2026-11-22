@@ -60,6 +60,7 @@ const defaultData = {
   remote: {
     marketplace: null,       // listed consultant cards
     partners: null,          // [{ id, count }] people with the «SMARTFLOW PARTNER» badge
+    niches: null,            // { sections, niches: [{ id, section, name, experts, templates }] } — filters of the Marketplace
     cards: {},               // consultant cards by slug (also unlisted, opened by link)
     profiles: {},            // public profiles by user id
     chats: null,             // my chats with SI-consultants (as a client)
@@ -331,6 +332,9 @@ class Store {
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         steps: Array.isArray(settings.steps) ? settings.steps : [],
+        // The niche of the card and its «Вопросы и ответы» (migration 034)
+        nicheId: p.niche_id || null,
+        faq: Array.isArray(p.faq) ? p.faq : [],
         // The puzzle the buyers of this seller's funnel fill in (the author decides it)
         puzzle: settings.puzzle && Array.isArray(settings.puzzle.pieces) ? settings.puzzle : { pieces: [], release: { mode: 'required' } },
         category: p.category || settings.category || 'sales',

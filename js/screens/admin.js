@@ -113,6 +113,7 @@
         ${tile({ icon: 'award', title: 'Партнёры', sub: 'кто приводит людей', onclick: "SF.push('admin-partners')" })}
         ${tile({ icon: 'users', title: 'Сообщества', sub: 'скрыть по жалобе', onclick: "SF.push('admin-communities')" })}
         ${tile({ icon: 'layers', title: 'Шаблоны', sub: 'снять по жалобе', onclick: "SF.push('admin-funnels')" })}
+        ${tile({ icon: 'tags', title: 'Ниши', sub: 'переименовать, объединить', onclick: "SF.push('admin-niches')" })}
       </div>
 
       ${card(`
@@ -827,6 +828,65 @@
     }
   }
 
+  // ---------------- Niches of the Marketplace: people create them at once; the team tidies up ----------------
+  function renderNiches() {
+    const data = cache.niches;
+    if (!data) return loading('niches');
+    const all = data.niches;
+    return `
+      <div class="text-[11px] text-muted px-1 leading-snug">Ниши создают сами эксперты и авторы шаблонов — сразу, без проверки. Здесь можно исправить название или раздел и объединить похожие («нутрициолог» → «Нутрициология»): SI-продавцы и шаблоны перейдут в главную нишу.</div>
+      ${data.sections.map(sec => {
+        const list = all.filter(n => n.section === sec.id);
+        if (!list.length) return '';
+        return card(`
+          <div class="text-xs font-bold text-ink">${esc(sec.label)} · ${list.length}</div>
+          ${list.map(n => `
+            <div class="flex items-center gap-2 py-1 border-t border-line">
+              <span class="flex-1 min-w-0 text-[11px] text-ink truncate">${esc(n.name)} <span class="text-faint">· экспертов ${n.experts}, шаблонов ${n.templates}</span></span>
+              <button onclick="SF.admin.renameNiche('${SF.js(n.id)}')" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Изменить"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+              <button onclick="SF.admin.mergeNiche('${SF.js(n.id)}')" class="p-1.5 rounded-lg btn-3d-dark" aria-label="Объединить"><i data-lucide="merge" class="w-3.5 h-3.5"></i></button>
+            </div>`).join('')}`);
+      }).join('')}`;
+  }
+
+  async function renameNiche(id) {
+    const data = cache.niches;
+    const n = data && data.niches.find(x => x.id === id);
+    if (!n) return;
+    const name = window.prompt('Название ниши', n.name);
+    if (!name || !name.trim()) return;
+    const sections = data.sections.map((s, i) => `${i + 1}. ${s.label}`).join('\n');
+    const pick = window.prompt(`Раздел (номер):\n${sections}`, String(data.sections.findIndex(s => s.id === n.section) + 1));
+    const section = data.sections[(parseInt(pick, 10) || 0) - 1];
+    try {
+      await api().admin.renameNiche(id, name.trim(), section ? section.id : n.section);
+      showToast('Сохранено');
+      SF.data.invalidate('niches');
+      refresh('niches');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
+  async function mergeNiche(id) {
+    const data = cache.niches;
+    const n = data && data.niches.find(x => x.id === id);
+    if (!n) return;
+    const into = window.prompt(`Объединить «${n.name}» с какой нишей? Напишите её название точно как в списке`);
+    if (!into || !into.trim()) return;
+    const target = data.niches.find(x => x.name.toLowerCase() === into.trim().toLowerCase() && x.id !== id);
+    if (!target) return showToast('Такой ниши нет в списке');
+    if (!window.confirm(`«${n.name}» → «${target.name}». Её SI-продавцы и шаблоны перейдут в «${target.name}». Продолжить?`)) return;
+    try {
+      const res = await api().admin.mergeNiche(id, target.id);
+      showToast(`Объединено: SI-продавцов ${res.sellers}, шаблонов ${res.templates}`);
+      SF.data.invalidate('niches');
+      refresh('niches');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
   function renderFunnelReview(route) {
     const key = `funnel:${route.id}`;
     const f = cache[key];
@@ -913,7 +973,8 @@
     'admin-partners': 'Партнёры',
     'admin-funnels': 'Шаблоны',
     'admin-funnel': 'Шаблон',
-    'admin-communities': 'Сообщества'
+    'admin-communities': 'Сообщества',
+    'admin-niches': 'Ниши'
   };
 
   const RENDER = {
@@ -931,7 +992,8 @@
     'admin-partners': renderPartners,
     'admin-funnels': renderFunnels,
     'admin-funnel': renderFunnelReview,
-    'admin-communities': renderCommunities
+    'admin-communities': renderCommunities,
+    'admin-niches': renderNiches
   };
 
   function afterRender(route, state) {
@@ -957,6 +1019,7 @@
       }
       case 'admin-funnel': return load(`funnel:${route.id}`, async () => (await a.funnel(route.id)).funnel);
       case 'admin-communities': return load('communities', async () => (await a.communities()).communities);
+      case 'admin-niches': return load('niches', () => a.niches());
       default: return null;
     }
   }
@@ -987,6 +1050,8 @@
     addStaff,
     removeStaff,
     decideFunnel,
-    hideCommunity
+    hideCommunity,
+    renameNiche,
+    mergeNiche
   };
 })(window);

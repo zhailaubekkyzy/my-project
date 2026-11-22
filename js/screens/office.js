@@ -1653,6 +1653,12 @@
       </div>`;
   }
 
+  // The niche's name by its id (the list of niches is loaded with the Office)
+  function nicheName(id) {
+    const n = id && store().data.remote.niches && store().data.remote.niches.niches.find(x => x.id === id);
+    return n ? n.name : '';
+  }
+
   function renderMethodology(c, route = {}) {
     return `${readyFunnelNote(c)}
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
@@ -1661,6 +1667,7 @@
           ${field('slug', 'Адрес ссылки — латиницей', c.slug, { placeholder: 'Например: aliya-nutri', max: 32, hint: 'Короткий и понятный адрес для Instagram и рассылок. Старая ссылка продолжит работать.' })}
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
           ${field('description', 'Описание', c.description, { placeholder: 'Коротко: для кого, как проходит, что внутри', rows: 3, max: 1000 })}
+          ${SF.niches.field({ value: nicheName(c.nicheId), hint: 'По нише клиенты находят вас в Маркетплейсе. Начните писать — появятся подсказки; нет вашей — создастся сама.' })}
           ${SF.feature('card-cta') ? cardOfferFields(c) : field('priceLabel', 'Цена', c.priceLabel, { placeholder: 'Например: 25 000 ₽ или Бесплатно', max: 80 })}
           ${field('paymentUrl', 'Ваша ссылка на оплату', c.paymentUrl, { type: 'url', placeholder: 'https://...', max: 300, hint: 'Своя у каждого SI-продавца. Кнопка «Купить» ведёт сюда, деньги приходят вам напрямую.' })}
           ${field('accessUrl', 'Ссылка на доступ после оплаты (необязательно)', c.accessUrl, { type: 'url', placeholder: 'https://... (курс, закрытый канал)', max: 300, hint: 'Клиент получит её, только когда вы или помощник подтвердите его чек. SI эту ссылку не знает и сам не выдаёт.' })}
@@ -1678,6 +1685,11 @@
             <input type="checkbox" name="isListed" ${c.isListed ? 'checked' : ''} class="w-4 h-4 accent-[#0d9488]" />
             <span class="text-xs font-semibold text-ink">Показывать в Маркетплейсе</span>
           </label>
+          <div class="space-y-1.5 pt-1">
+            <div class="font-semibold text-ink-2">Вопросы и ответы</div>
+            <div class="text-[10px] text-faint leading-snug">Видны всем в карточке, как на маркетплейсах. SI отвечает по ним; чего здесь и в сведениях нет — передаёт вопрос вам, и клиент ждёт вашего ответа в чате.</div>
+            ${SF.niches.faqEditor(c.faq)}
+          </div>
           <div class="text-[10px] text-faint leading-snug px-1">Показанный в Маркетплейсе SI-продавец может появляться и в чатах других экспертов — когда их клиенту что-то не подошло. Чем подробнее в методологии описан продукт и закрыты возражения (общее описание, сценарии, шаги), тем чаще он появляется.</div>
         </div>
 
@@ -2254,10 +2266,15 @@
         category: f.category.value,
         trial_days: parseInt(f.trialDays.value, 10) || 0,
         is_listed: f.isListed.checked,
+        niche_name: f.nicheName ? f.nicheName.value.trim() : undefined,
+        niche_section: f.nicheSection ? f.nicheSection.value : undefined,
+        faq: SF.niches.readFaq(f),
         custom_ai_settings: { ...(project.custom_ai_settings || {}), goal, instructions, clientLimit }
       });
       SF.data.invalidate('consultants');
       SF.data.invalidate('marketplace');
+      SF.data.invalidate('niches'); // a new niche may have appeared
+      SF.data.niches(0);
       SF.data.invalidate('puzzle:'); // what the SI knows changed
       SF.data.puzzle(id, 0);
       await SF.data.myConsultants();
@@ -2940,6 +2957,7 @@
       if (!store().isBusinessActive() && !store().isAssistant()) return;
       if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.afterRender(route, state);
       if (store().isBusinessActive()) SF.data.businesses();
+      SF.data.niches();
       if (route.screen === 'office') {
         SF.data.allInquiries();
         const bid = store().currentBusinessId();

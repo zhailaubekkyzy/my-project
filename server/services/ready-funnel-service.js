@@ -71,9 +71,10 @@ const SELECT = `
   FROM ready_funnels f
   LEFT JOIN users u ON u.id = f.author_id`
   .replace('FROM ready_funnels f', `, sp.slug AS seller_slug, sp.name AS seller_name, sp.photo_media_id AS seller_photo_media_id,
-         sp.role_title AS seller_role_title, sp.status AS seller_status
+         sp.role_title AS seller_role_title, sp.status AS seller_status, nn.name AS niche_name, nn.section AS niche_section
   FROM ready_funnels f
-  LEFT JOIN projects sp ON sp.id = f.seller_project_id`);
+  LEFT JOIN projects sp ON sp.id = f.seller_project_id
+  LEFT JOIN niches nn ON nn.id = f.niche_id`);
 
 /**
  * view: 'public' (the catalogue — no texts; the author's payment link to buy),
@@ -84,7 +85,12 @@ function toFunnel(row, view = 'public') {
   const result = {
     id: row.id,
     title: row.title,
-    niche: row.niche || '',
+    niche: row.niche_name || row.niche || '',
+    // The niche from the list (migration 034): for the filters «раздел → ниша»
+    nicheId: row.niche_id || null,
+    nicheSection: row.niche_section || null,
+    // «Вопросы и ответы» — seen by everyone
+    faq: require('./faq').normalizeFaq(row.faq),
     description: row.description || '',
     result: row.result || '',
     priceType: row.price_type,
@@ -150,7 +156,14 @@ function readFields(body) {
   const rawVideo = String(body.videoUrl || '').trim();
   const videoUrl = rawVideo && /^https:\/\//i.test(rawVideo) ? cleanUrl(rawVideo) : null;
   if (rawVideo && !videoUrl) throw new FunnelError('Ссылка на видео должна начинаться с https://');
-  return { title, niche, description, result, priceType, priceLabel, paymentUrl, videoUrl };
+  const faq = body.faq === undefined ? undefined : JSON.stringify(require('./faq').normalizeFaq(body.faq));
+  return { title, niche, nicheSection: String(body.nicheSection || ''), description, result, priceType, priceLabel, paymentUrl, videoUrl, faq };
+}
+
+// The niche the author wrote: found in the list or created at once (niche-service)
+async function nicheOf(userId, fields) {
+  const n = await require('./niche-service').resolve(userId, fields.niche, fields.nicheSection);
+  return n ? n.id : null;
 }
 
 async function ownProject(userId, projectId) {
@@ -215,13 +228,14 @@ async function submit(userId, body = {}) {
   }
   const sellerId = await sellerOf(userId, body, project);
   const productId = await syncProduct(userId, null, fields, sellerId || project.id);
+  const nicheId = await nicheOf(userId, fields);
   const id = `rf_${crypto.randomBytes(8).toString('hex')}`;
   // Published at once: no review by the team since step 4 (owner's decision 22 Nov.)
   await db.run(
-    `INSERT INTO ready_funnels (id, author_id, source_project_id, seller_project_id, product_id, video_url, title, niche, description, result,
+    `INSERT INTO ready_funnels (id, author_id, source_project_id, seller_project_id, product_id, video_url, niche_id, faq, title, niche, description, result,
        price_type, price_label, payment_url, snapshot, status, submitted_at, reviewed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
-    [id, userId, project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
+    [id, userId, project.id, sellerId, productId, fields.videoUrl, nicheId, fields.faq || '[]', fields.title, fields.niche, fields.description, fields.result,
       fields.priceType, fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow()]
   );
   return getRow(id);
@@ -240,14 +254,15 @@ async function update(userId, id, body = {}) {
   const { project, snapshot } = await ownProject(userId, body.projectId || row.source_project_id);
   const sellerId = body.sellerProjectId === undefined ? row.seller_project_id : await sellerOf(userId, body, project);
   const productId = await syncProduct(userId, row, fields, sellerId || project.id);
+  const nicheId = await nicheOf(userId, fields);
   await db.run(
-    `UPDATE ready_funnels SET source_project_id = ?, seller_project_id = ?, product_id = ?, video_url = ?, title = ?, niche = ?, description = ?, result = ?,
+    `UPDATE ready_funnels SET niche_id = ?, faq = COALESCE(?, faq), source_project_id = ?, seller_project_id = ?, product_id = ?, video_url = ?, title = ?, niche = ?, description = ?, result = ?,
        price_type = ?, price_label = ?, payment_url = ?, snapshot = ?,
        status = CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'published' END,
        review_note = CASE WHEN status = 'hidden' THEN review_note ELSE NULL END,
        reviewed_at = CASE WHEN status = 'published' THEN reviewed_at ELSE ? END, submitted_at = ?, updated_at = ?
      WHERE id = ?`,
-    [project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result, fields.priceType,
+    [nicheId, fields.faq === undefined ? null : fields.faq, project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result, fields.priceType,
       fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow(), sqlNow(), id]
   );
   return getRow(id);

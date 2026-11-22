@@ -62,6 +62,8 @@ router.post('/', async (req, res, next) => {
 // ---------------------------------------------------------------
 const puzzleService = require('../services/puzzle-service');
 const puzzleSpec = require('../services/puzzle-spec');
+const nicheService = require('../services/niche-service');
+const faqService = require('../services/faq');
 const puzzleRoute = (fn, status = 200) => async (req, res, next) => {
   try {
     res.status(status).json(await fn(req));
@@ -224,6 +226,18 @@ router.put('/:projectId', requireProjectPermission('funnel:write'), async (req, 
     const { name, niche, custom_ai_settings, pricing_options, role_title } = req.body;
     const card = readCardFields(req.body, req.project);
     if (card.error) return res.status(card.status || 400).json({ error: card.status === 403 ? 'forbidden' : 'bad_request', message: card.error });
+    // The niche of the card (migration 034): the one the expert wrote — found or created at once
+    if (req.body.niche_name !== undefined) {
+      try {
+        const n = await nicheService.resolve(req.user.userId, req.body.niche_name, req.body.niche_section);
+        card.fields.niche_id = n ? n.id : null;
+      } catch (err) {
+        if (err instanceof nicheService.NicheError) return res.status(err.status).json({ error: 'bad_request', message: err.message });
+        throw err;
+      }
+    }
+    // «Вопросы и ответы» of the card: seen by everyone, the SI answers by them
+    if (req.body.faq !== undefined) card.fields.faq = JSON.stringify(faqService.normalizeFaq(req.body.faq));
 
     // The short link («aliya-nutri»): the old address keeps working (slug-service)
     if (req.body.slug !== undefined) {

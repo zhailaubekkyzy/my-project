@@ -5,12 +5,6 @@
 (function (window) {
   const SF = window.SF;
 
-  const CATEGORIES = [
-    { id: 'all', label: 'Все' },
-    { id: 'sales', label: 'Продажи' },
-    { id: 'warmup', label: 'Прогрев и заявки' }
-  ];
-
   const startLink = (param) => SF.appLink(param);
   const store = () => window.funnelStore;
 
@@ -69,14 +63,14 @@
       </button>`;
   }
 
-  // Two parts of the Marketplace (owner's decision 22 Nov.): experts' products for everyone, and «Для бизнеса» —
-  // templates of AI-продавцов, also seen by everyone (buying them is in the business profile)
+  // Two parts of the Marketplace (owner's decisions 22 Nov.): experts' products for everyone, and «Шаблоны» (was
+  // «Для бизнеса») — templates of AI-продавцов, also seen by everyone (buying them is in the business profile)
   function marketTabs(route) {
     if (!SF.feature('funnels')) return '';
     const tab = route.mtab === 'biz' ? 'biz' : 'experts';
     return `
       <div class="grid grid-cols-2 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
-        ${[['experts', 'Эксперты', 'store'], ['biz', 'Для бизнеса', 'layers']].map(([id, label, icon]) => `
+        ${[['experts', 'Эксперты', 'store'], ['biz', 'Шаблоны', 'layers']].map(([id, label, icon]) => `
           <button onclick="SF.patch({ mtab: '${id}' })" class="py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 ${tab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${icon}" class="w-4 h-4"></i>${label}</button>`).join('')}
       </div>`;
@@ -86,12 +80,12 @@
     if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) {
       return `${officeEntry(state)}${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
     }
-    const filter = state.ui.marketplaceFilter || 'all';
     const all = state.remote.marketplace;
     const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
     const matches = (c) => !q || [c.name, c.offer, c.roleTitle, c.description, c.priceLabel, c.author && c.author.name]
       .some(v => String(v || '').toLowerCase().includes(q));
-    const items = (all || []).filter(c => (filter === 'all' || c.category === filter) && matches(c));
+    // Filters by niche, like on marketplaces: a section, then a niche inside it
+    const items = (all || []).filter(c => SF.niches.matches(c, route) && matches(c));
     return `
       ${officeEntry(state)}
       ${marketTabs(route)}
@@ -102,17 +96,14 @@
           class="w-full bg-card border border-line-2 rounded-xl pl-9 pr-3 py-2.5 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
       </div>
 
-      <div class="flex gap-1.5 overflow-x-auto pb-1">
-        ${CATEGORIES.map(cat => `
-          <button onclick="SF.actions.setMarketFilter('${cat.id}')" class="px-3 py-1.5 rounded-xl text-xs whitespace-nowrap border font-semibold ${filter === cat.id ? 'bg-[#81D8D0]/20 border-[#81D8D0] text-brand' : 'bg-card border-line text-muted'}">${cat.label}</button>
-        `).join('')}
-      </div>
+      ${SF.niches.filter('experts', route)}
 
       <div class="space-y-2.5">
         ${all === null ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
         ${items.map(card).join('')}
         ${all && !items.length && q ? '<div class="text-xs text-muted px-1">Ничего не нашли. Людей можно найти во вкладке «Чаты».</div>' : ''}
-        ${all && !items.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
+        ${all && all.length && !items.length && !q ? '<div class="text-xs text-muted px-1">В этой нише пока никого. Посмотрите другие разделы.</div>' : ''}
+        ${all && !all.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
           store().isBusinessView()
             ? 'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».'
             : 'Здесь появятся SI-продавцы экспертов.') : ''}
@@ -179,7 +170,7 @@
         ${c.description ? `<p class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(c.description)}</p>` : ''}
         ${priceText(c) ? `<div class="text-lg font-extrabold text-ink">${SF.esc(priceText(c))}</div>` : ''}
         <div class="flex flex-wrap gap-1.5 text-[10px] font-semibold">
-          <span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${c.category === 'warmup' ? 'Прогрев и заявки' : 'Продажи'}</span>
+          ${c.niche ? `<button onclick="SF.openIn('marketplace', 'list', { sec: '${SF.js(c.niche.section)}', nic: '${SF.js(c.niche.id)}' })" class="px-2 py-0.5 rounded-full bg-[#81D8D0]/15 text-brand border border-[#81D8D0]">${SF.esc(c.niche.name)}</button>` : ''}
           ${c.trialDays ? `<span class="px-2 py-0.5 rounded-full bg-raised text-ink-2 border border-line">${trialLabel(c)}</span>` : ''}
         </div>
       </div>
@@ -193,13 +184,16 @@
       <!-- 4. Reviews of real clients (short names only) -->
       ${renderReviews(c, state)}
 
-      <!-- 5. Buttons -->
+      <!-- 5. Questions and answers (seen by everyone, like on marketplaces); the SI answers by them -->
+      ${SF.niches.faqView(c.faq, { askHint: 'Нет вашего вопроса? Спросите SI-продавца в чате — если он не знает, ответит эксперт.' })}
+
+      <!-- 6. Buttons -->
       ${cardButtons(c)}
       <button onclick="SF.copyText('${startLink('C_' + SF.js(c.id))}', 'Ссылка на карточку скопирована')" class="w-full py-2 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
         <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться карточкой
       </button>
 
-      <!-- 6. Author -->
+      <!-- 7. Author -->
       <button onclick="SF.push('person', { id: '${SF.js(c.author.id)}' })" class="w-full glass-card-3d p-3 flex items-center gap-3 text-left">
         ${SF.avatar(c.author.photoUrl, { size: 36, kind: 'human', userId: c.author.id })}
         <div class="flex-1 min-w-0">
@@ -304,11 +298,6 @@
     store().notify();
   };
 
-  SF.actions.setMarketFilter = (filter) => {
-    store().data.ui.marketplaceFilter = filter;
-    store().notify();
-  };
-
   // The card button: the person becomes the expert's client (a purchase from the card is not invisible)
   SF.actions.cardCta = (id) => {
     const c = findCard(store().data, id);
@@ -361,6 +350,7 @@
     },
     afterRender(route, state) {
       if (route.screen === 'list') {
+        SF.data.niches();
         if (route.mtab === 'biz' && SF.funnels) SF.funnels.loadInline(route);
         SF.data.marketplace();
         if (store().isBusinessView()) SF.data.allInquiries();

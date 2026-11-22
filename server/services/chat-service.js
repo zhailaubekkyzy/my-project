@@ -242,9 +242,17 @@ async function handleClientMessage(project, lead, text, voice = null) {
     }),
     analyze(project, lead, past, text)
   ]);
-  const reply = await saveMessage(lead, SI, result.text);
+  // Nothing about it in the FAQ and the details: the question goes to the expert, the client waits for a person
+  const asked = siEngine.takeAskExpert(result.text);
+  const reply = await saveMessage(lead, SI, asked.text || result.text);
   await applyAnalysis(project, lead, analysis, text);
-  return { message, reply, source: result.source };
+  if (asked.question) {
+    await createHumanRequest(project, lead, {
+      reason: `SI не знает ответа: ${asked.question}. Вопрос клиента: «${String(text).slice(0, 500)}»`,
+      notice: `❓ ${lead.name || 'Клиент'} спросил то, чего нет в карточке и сведениях SI: «${String(text).slice(0, 300)}».\nSI-продавец: «${project.name}». Ответьте в чате — клиент ждёт. Ответ можно сразу добавить в «Вопросы и ответы» карточки.`
+    });
+  }
+  return { message, reply, source: result.source, askedExpert: Boolean(asked.question) };
 }
 
 // The last alternative-offers pick in progress (tests wait for it)
@@ -481,7 +489,7 @@ async function startConversation(project, lead) {
  * "Связаться с человеком": a request in "Мне написали", the owner becomes responsible for the
  * dialog (SI pauses), the owner and the assistant get a bot message with a button to the request.
  */
-async function createHumanRequest(project, lead, { reason, leadName, leadUsername } = {}) {
+async function createHumanRequest(project, lead, { reason, leadName, leadUsername, notice } = {}) {
   const inquiryId = newId('inq');
   const text = (reason || 'Клиент нажал «Связаться с человеком»').slice(0, 1000);
   await db.run(
@@ -498,7 +506,7 @@ async function createHumanRequest(project, lead, { reason, leadName, leadUsernam
   for (const userId of people) {
     const sent = await telegramBot.notifyUser(
       userId,
-      `🔔 ${leadName || lead.name || 'Клиент'} просит связаться лично.\nSI-продавец: «${project.name}».\n\n«${text}»`,
+      notice || `🔔 ${leadName || lead.name || 'Клиент'} просит связаться лично.\nSI-продавец: «${project.name}».\n\n«${text}»`,
       { buttonText: 'Открыть обращение', startParam: `I_${project.id}` }
     );
     if (userId === project.owner_id) notified = sent;

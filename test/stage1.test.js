@@ -3891,6 +3891,85 @@ async function runAllTests() {
     }
   });
 
+  await test('81. Ниши и «Вопросы и ответы»: ниша находится или создаётся сама, фильтры, FAQ у SI, неизвестный вопрос — эксперту', async () => {
+    const saved = { features: config.features, adminUsers: config.adminUsers };
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    try {
+      config.features = ['funnels:all'];
+      const ex = await tokenFor({ id: 810001, first_name: 'Нишевый', last_name: 'Эксперт' });
+      const client = await tokenFor({ id: 810002, first_name: 'Клиент', last_name: 'Ниши' });
+      const team = { id: 810009, first_name: 'Команда', last_name: 'Ниши' };
+      config.adminUsers = [String(team.id)];
+      const teamToken = await tokenFor(team);
+      // The list: sections and niches from the start
+      let cat = (await api('GET', '/api/niches')).body;
+      assert(cat.sections.length >= 10 && cat.sections.some(x => x.id === 'other'));
+      assert(cat.niches.some(n => n.name === 'Нутрициология' && n.section === 'health'));
+
+      const seller = (await api('POST', '/api/projects', ex, { name: 'нишевый' })).body;
+      // The same niche whatever the letters — no duplicate
+      let put = await api('PUT', `/api/projects/${seller.id}`, ex, { offer: 'Питание без диет', is_listed: true, niche_name: '  нутрициология ', niche_section: 'sport' });
+      assert.strictEqual(put.status, 200);
+      const nutri = cat.niches.find(n => n.name === 'Нутрициология');
+      assert.strictEqual(put.body.niche_id, nutri.id, 'An existing niche is found');
+      // A new one is created at once in the chosen section and seen by everyone
+      put = await api('PUT', `/api/projects/${seller.id}`, ex, { niche_name: 'кето-питание', niche_section: 'health',
+        faq: [{ q: 'Есть рассрочка?', a: 'Да, Kaspi Red на 3 месяца' }, { q: 'Без ответа', a: '' }] });
+      cat = (await api('GET', '/api/niches')).body;
+      const keto = cat.niches.find(n => n.name === 'Кето-питание');
+      assert(keto && keto.section === 'health' && keto.experts === 1);
+      assert.deepStrictEqual(put.body.faq, [{ q: 'Есть рассрочка?', a: 'Да, Kaspi Red на 3 месяца' }], 'Only pairs with an answer');
+      const card = (await api('GET', `/api/marketplace/consultants/${seller.id}`)).body.consultant;
+      assert.strictEqual(card.niche.name, 'Кето-питание');
+      assert.strictEqual(card.faq.length, 1);
+      // The team merges similar niches: the sellers move
+      assert.strictEqual((await api('POST', `/api/admin/niches/${keto.id}/merge`, ex, { intoId: nutri.id })).status, 403);
+      assert.strictEqual((await api('POST', `/api/admin/niches/${keto.id}/merge`, teamToken, { intoId: nutri.id })).body.sellers, 1);
+      assert.strictEqual((await db.get('SELECT niche_id FROM projects WHERE id = ?', [seller.id])).niche_id, nutri.id);
+      put = await api('PUT', `/api/projects/${seller.id}`, ex, { niche_name: 'Кето-питание' });
+      assert.strictEqual(put.body.niche_id, nutri.id, 'The merged name leads to the main niche');
+
+      // The SI gets the FAQ; a question it cannot answer goes to the expert and the SI waits
+      let system = '';
+      config.openaiApiKey = 'sk-test-not-real';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          const body = JSON.parse(options.body);
+          if (body.response_format) return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 });
+          system = body.messages[0].content;
+          return new Response(JSON.stringify({ choices: [{ message: { content: 'Хороший вопрос! Передаю его эксперту — он ответит здесь, в этом чате.\n[[ЭКСПЕРТУ: можно ли беременным]]' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      const slug = (await db.get('SELECT slug FROM projects WHERE id = ?', [seller.id])).slug;
+      const sent = await api('POST', `/api/chat/${slug}/messages`, client, { text: 'А беременным можно?' });
+      assert(system.includes('Есть рассрочка? — Да, Kaspi Red на 3 месяца'), 'The FAQ is in the SI instructions');
+      assert.strictEqual(sent.body.reply.text, 'Хороший вопрос! Передаю его эксперту — он ответит здесь, в этом чате.', 'The client does not see the line');
+      assert.strictEqual(sent.body.askedExpert, true);
+      const inquiry = await db.get(`SELECT * FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id]);
+      assert(inquiry && inquiry.reason.includes('можно ли беременным'), 'The expert gets the question');
+      const lead = await db.get('SELECT * FROM clients WHERE project_id = ?', [seller.id]);
+      assert.strictEqual(lead.responsible_type, 'human', 'The client waits for a person');
+
+      // Templates: the niche from the list, the FAQ on the page
+      const prof = (await api('GET', '/api/me/profile', ex)).body.user.profile;
+      await api('PUT', '/api/me/profile', ex, { ...prof, businessAgreedAt: new Date().toISOString() });
+      const src = (await api('POST', '/api/projects/quick-start', ex, { goal: 'consult', about: 'нутрициолог', offer: 'Разбор' })).body;
+      const f = (await api('POST', '/api/ready-funnels', ex, { projectId: src.id, title: 'Шаблон нутрициолога', niche: 'нутрициология', nicheSection: 'health', description: 'О', result: 'Р', priceType: 'once', priceLabel: '1 ₸', paymentUrl: 'https://pay.example.com/n', faq: [{ q: 'Для новичков?', a: 'Да' }] })).body.funnel;
+      assert.strictEqual(f.nicheId, nutri.id);
+      assert.strictEqual(f.niche, 'Нутрициология');
+      assert.deepStrictEqual(f.faq, [{ q: 'Для новичков?', a: 'Да' }]);
+      cat = (await api('GET', '/api/niches')).body;
+      assert.strictEqual(cat.niches.find(n => n.id === nutri.id).templates, 1);
+      await db.run(`UPDATE ready_funnels SET status = 'withdrawn' WHERE id = ?`, [f.id]); // the catalogue stays empty for other tests
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+      Object.assign(config, saved);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

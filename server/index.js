@@ -129,6 +129,7 @@ app.use('/api/me', meRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/niches', require('./routes/niches'));
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/brain', brainRoutes);
 app.use('/api/support', supportRoutes);

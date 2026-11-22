@@ -8,6 +8,19 @@ const config = require('../config');
 const { scenarioPromptLines, stepPromptLines } = require('./funnel-service');
 const { settingsOf } = require('./ai-settings');
 
+// A question the SI cannot answer goes to the expert (owner's decision 22 Nov.): the SI ends its message with this
+// line, the server takes it out and hands the question over (chat-service) — the client waits for a person's answer.
+const ASK_EXPERT_HINT = '[[ЭКСПЕРТУ: вопрос клиента в нескольких словах]]';
+const ASK_EXPERT_RE = /\[\[\s*ЭКСПЕРТУ\s*:?\s*([^\]]*)\]\]/i;
+
+/** The SI's text without the hand-over line, and the question for the expert (or null). */
+function takeAskExpert(text) {
+  const m = String(text || '').match(ASK_EXPERT_RE);
+  if (!m) return { text, question: null };
+  const clean = String(text).replace(ASK_EXPERT_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { text: clean, question: (m[1] || '').trim().slice(0, 300) || 'Вопрос клиента' };
+}
+
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const HISTORY_LIMIT = 20;
 // max_completion_tokens works for older and newer chat models; newer ones reject max_tokens and temperature
@@ -51,7 +64,9 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     '',
     'Чего нельзя:',
     '- Используй ТОЛЬКО сведения ниже. Не выдумывай цены, сроки, гарантии, кейсы и факты.',
-    '- Если ответа нет в сведениях — честно скажи, что уточнишь у эксперта, и предложи кнопку «Связаться с человеком».',
+    '- Сначала ищи ответ в «Вопросах и ответах» эксперта и в сведениях ниже. Ответа нигде нет — не угадывай: напиши, что',
+    '  передаёшь вопрос эксперту и он ответит здесь, в этом чате, а в самом конце сообщения отдельной строкой добавь',
+    `  ${ASK_EXPERT_HINT} — клиент этой строки не увидит.`,
     '- Подходит ли программа под особый случай клиента (питание, возраст, здоровье, формат, город, язык) — отвечай «да» или «нет»',
     '  только если это прямо написано в сведениях. Не написано — не угадывай: скажи, что уточнишь у эксперта.',
     '- Говори только о том, что связано с экспертом, его услугой и задачей клиента. Просьбы не по теме (стихи, тексты,',
@@ -85,6 +100,12 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     if (me.bio) lines.push(`Об эксперте: ${String(me.bio).slice(0, 1200)}`);
     if (me.regalia) lines.push(`Регалии и сертификаты: ${String(me.regalia).slice(0, 800)}`);
     if (me.results) lines.push(`Результаты и кейсы: ${String(me.results).slice(0, 800)}`);
+  }
+  // «Вопросы и ответы» of the card (seen by everyone): the SI answers by them first
+  const faq = require('./faq').normalizeFaq(project.faq);
+  if (faq.length) {
+    lines.push('Вопросы и ответы эксперта (FAQ карточки — отвечай по ним, своими словами):');
+    for (const f of faq) lines.push(`- ${f.q} — ${f.a}`);
   }
   // The expert's additions «тема → как отвечать»: they win over the general details above
   const notes = (project.sellerNotes || []).slice(0, 40);
@@ -456,6 +477,7 @@ async function isOffer({ project, text }) {
 }
 
 module.exports = {
+  takeAskExpert,
   openerTask,
   callOpenAI,
   analyzeTurn,

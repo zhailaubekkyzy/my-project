@@ -120,27 +120,27 @@
     return `catalog:${route.q || ''}|${route.niche || ''}`;
   }
 
-  function renderCatalog(route) {
-    const key = catalogKey(route);
+  // The catalogue: the search goes to the server; sections and niches filter right here (like on marketplaces).
+  // inline — inside the Marketplace tab «Шаблоны» (its own route keys, so the experts' filter is kept apart)
+  function renderCatalog(route, { inline = false } = {}) {
+    const keys = inline ? { sec: 'tsec', nic: 'tnic' } : { sec: 'sec', nic: 'nic' };
+    const q = inline ? (route.tq || '') : (route.q || '');
+    const key = catalogKey({ q, niche: '' });
     const data = cache[key];
     const intro = `<div class="text-[11px] text-muted px-1 leading-snug">Шаблоны AI-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.</div>`;
     const search = `
-      <form onsubmit="SF.funnels.search(event)" class="flex gap-2">
-        <input name="q" value="${esc(route.q || '')}" autocomplete="off" placeholder="Ниша или задача: нутрициолог, запись…" class="flex-1 p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
+      <form onsubmit="SF.funnels.${inline ? 'searchInline' : 'search'}(event)" class="flex gap-2">
+        <input name="q" value="${esc(q)}" autocomplete="off" placeholder="Задача или слово: запись, вебинар, курс…" class="flex-1 p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
         <button type="submit" class="px-3 rounded-xl btn-3d-tiffany text-xs" aria-label="Найти"><i data-lucide="search" class="w-4 h-4"></i></button>
       </form>`;
     if (!data) return intro + search + waiting(key);
-    const niches = data.niches || [];
-    const chips = niches.length > 1 ? `
-      <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-        ${[['', 'Все'], ...niches.map(n => [n, n])].map(([value, label]) => `
-          <button onclick="SF.patch({ niche: '${SF.js(value)}' })" class="px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap border ${(route.niche || '') === value ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-card text-ink-2 border-line'}">${esc(label)}</button>`).join('')}
-      </div>` : '';
-    const list = data.funnels.length
-      ? data.funnels.map(f => funnelCard(f)).join('')
-      : SF.emptyState('consultant', route.q || route.niche ? 'Ничего не нашлось' : 'Шаблонов пока нет',
-        route.q || route.niche ? 'Попробуйте другое слово или уберите фильтр.' : 'Здесь появятся шаблоны маркетологов и экспертов. Опубликовать свой можно из своего SI-продавца.');
-    return `${intro}${search}${chips}<div class="space-y-2.5">${list}</div>`;
+    const filtered = data.funnels.filter(f => SF.niches.matches(f, route, keys));
+    const any = q || route[keys.sec] || route[keys.nic];
+    const list = filtered.length
+      ? filtered.map(f => funnelCard(f)).join('')
+      : SF.emptyState('consultant', any ? 'Ничего не нашлось' : 'Шаблонов пока нет',
+        any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов. Опубликовать свой можно из своего SI-продавца.');
+    return `${intro}${search}${SF.niches.filter('templates', route, keys)}<div class="space-y-2.5">${list}</div>`;
   }
 
   function renderMine() {
@@ -154,7 +154,7 @@
         <div class="text-xs font-bold text-ink">Как это работает</div>
         <div>1. Соберите воронку в своём SI-продавце: шаги, сценарии «если…, то…», общее описание и пазл для покупателей.</div>
         <div>2. Опубликуйте: название, ниша, что внутри, результат, как вам платят и кто продаёт шаблон.</div>
-        <div>3. Шаблон сразу появляется в Маркетплейсе → «Для бизнеса» и в вашем Мозге как продукт. Команда снимает только по жалобе.</div>
+        <div>3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны» и в вашем Мозге как продукт. Команда снимает только по жалобе.</div>
         <div>4. Эксперты увидят описание, шаги и результат и смогут переписаться с вашим SI-продавцом. Ваши инструкции и тексты сценариев они не видят.</div>
       </div>`;
     if (!data) return publish + how + waiting('mine');
@@ -272,6 +272,7 @@
         <div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${esc(f.description)}</div>
         ${f.videoUrl ? `<button onclick="SF.openLink('${SF.js(f.videoUrl)}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="play-circle" class="w-4 h-4"></i> Видео-презентация</button>` : ''}
       </div>
+      ${SF.niches.faqView(f.faq, { askHint: f.seller && !mine ? 'Нет вашего вопроса? Спросите продавца шаблона ниже — если он не знает, ответит автор.' : '' })}
       ${f.seller && !mine ? `
         <button onclick="SF.actions.openChat('${SF.js(f.seller.slug)}')" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3 border border-[var(--si-bubble-line)]">
           ${SF.avatar(f.seller.photoUrl, { size: 40, kind: 'si' })}
@@ -426,7 +427,7 @@
     const d = draft[route.id || 'new'] || (draft[route.id || 'new'] = editing ? {
       projectId: editing.sourceProjectId, title: editing.title, niche: editing.niche, description: editing.description,
       result: editing.result, priceType: editing.priceType, priceLabel: editing.priceLabel, paymentUrl: editing.paymentUrl || '',
-      videoUrl: editing.videoUrl || '', sellerProjectId: editing.sellerProjectId || ''
+      videoUrl: editing.videoUrl || '', sellerProjectId: editing.sellerProjectId || '', nicheSection: editing.nicheSection || '', faq: editing.faq || []
     } : { projectId: (consultants.find(c => (c.steps || []).length >= 2) || consultants[0]).id, priceType: 'once' });
     // Who sells the template: by default the same SI-продавец it is made from
     const sellerId = d.sellerProjectId === undefined ? (d.projectId || '') : d.sellerProjectId;
@@ -456,9 +457,15 @@
         <div class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('file-text', 'Что увидят эксперты')}
           ${fieldBox('title', 'Название', { max: 80, placeholder: 'Например: Запись на консультацию за 3 шага' })}
-          ${fieldBox('niche', 'Ниша', { max: 60, placeholder: 'Например: Нутрициология' })}
+          ${SF.niches.field({ value: d.niche || '', section: d.nicheSection || '', label: 'Ниша', hint: 'По нише эксперты находят шаблон. Начните писать — появятся подсказки; нет вашей — создастся сама.',
+            onName: `SF.funnels.field('${SF.js(route.id || 'new')}', 'niche', this.value)`, onSection: `SF.funnels.field('${SF.js(route.id || 'new')}', 'nicheSection', this.value)` })}
           ${fieldBox('description', 'Описание: кому подходит и кому нет, как ведёт клиента', { rows: 4, max: 1500, placeholder: 'Кому подходит шаблон и кому нет, как SI ведёт клиента, что внутри' })}
           ${fieldBox('result', 'Результат для эксперта', { rows: 3, max: 600, placeholder: 'Что получит эксперт. Только честные обещания — без цифр, которых вы не можете подтвердить', hint: 'Нечестное обещание — повод для жалобы, и команда снимет шаблон.' })}
+          <div class="space-y-1.5">
+            <div class="font-semibold text-ink-2">Вопросы и ответы</div>
+            <div class="text-[10px] text-faint leading-snug">Видны всем на странице шаблона: кому подходит, что нужно от эксперта, как платить.</div>
+            ${SF.niches.faqEditor(d.faq || [])}
+          </div>
           ${fieldBox('videoUrl', 'Видео-презентация (необязательно)', { type: 'url', max: 300, placeholder: 'https://… YouTube, Instagram, Google Drive' })}
         </div>
         <div class="glass-card-3d p-4 space-y-3">
@@ -492,16 +499,19 @@
     event.preventDefault();
     const d = { ...(draft[id || 'new'] || {}) };
     const form = new FormData(event.target);
-    for (const k of ['projectId', 'title', 'niche', 'description', 'result', 'priceType', 'priceLabel', 'paymentUrl', 'videoUrl', 'sellerProjectId']) {
+    for (const k of ['projectId', 'title', 'description', 'result', 'priceType', 'priceLabel', 'paymentUrl', 'videoUrl', 'sellerProjectId', 'nicheSection']) {
       if (form.has(k)) d[k] = String(form.get(k) || '').trim();
     }
+    if (form.has('nicheName')) d.niche = String(form.get('nicheName') || '').trim();
+    d.faq = SF.niches.readFaq(event.target);
     const button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
       const res = id ? await api().readyFunnels.update(id, d) : await api().readyFunnels.submit(d);
       delete draft[id || 'new'];
       refresh();
-      showToast(id ? 'Сохранено' : 'Шаблон опубликован — он уже в «Для бизнеса» 🎉');
+      SF.data.invalidate('niches');
+      showToast(id ? 'Сохранено' : 'Шаблон опубликован — он уже в Маркетплейсе → «Шаблоны» 🎉');
       if (!id) SF.confetti();
       store().popRoute();
       if (!id) SF.push('office-funnel', { id: res.funnel.id });
@@ -689,7 +699,6 @@
   // «Для бизнеса» in the Marketplace: the catalogue right there (everyone sees it); the business profile
   // also gets «Купленные» and «Мои шаблоны»
   function catalogInline(route) {
-    const r = { q: route.tq || '', niche: route.tniche || '' };
     const business = store().isBusinessView();
     const waitingSales = (cache.purchases && cache.purchases.waiting) || 0;
     return `
@@ -699,13 +708,12 @@
           <button onclick="SF.push('office-funnels', { view: 'mine' })" class="relative py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="pen-line" class="w-4 h-4"></i>Мои шаблоны
             ${waitingSales ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingSales}</span>` : ''}</button>
         </div>` : ''}
-      ${renderCatalog(r).replace("SF.funnels.search(event)", "SF.funnels.searchInline(event)").replace(/SF\.patch\(\{ niche: '([^']*)' \}\)/g, "SF.patch({ tniche: '$1' })")}`;
+      ${renderCatalog(route, { inline: true })}`;
   }
 
   function loadInline(route) {
     if (!SF.feature('funnels')) return;
-    const r = { q: route.tq || '', niche: route.tniche || '' };
-    load(catalogKey(r), () => api().readyFunnels.catalogue(r.q, r.niche));
+    load(catalogKey({ q: route.tq || '', niche: '' }), () => api().readyFunnels.catalogue(route.tq || '', ''));
     if (store().isBusinessView()) load('purchases', () => api().readyFunnels.purchases());
   }
 
@@ -721,7 +729,7 @@
         <span class="w-10 h-10 rounded-2xl bg-sunken border border-line flex items-center justify-center flex-shrink-0"><i data-lucide="layers" class="w-5 h-5 text-brand"></i></span>
         <span class="flex-1 min-w-0">
           <span class="block text-sm font-bold text-ink">Шаблоны</span>
-          <span class="block text-[11px] text-muted leading-snug">Купленные и мои. Каталог — в Маркетплейсе → «Для бизнеса»</span>
+          <span class="block text-[11px] text-muted leading-snug">Купленные и мои. Каталог — в Маркетплейсе → «Шаблоны»</span>
         </span>
         <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
       </button>`;
@@ -746,11 +754,12 @@
     },
     afterRender(route) {
       if (!SF.feature('funnels')) return;
+      SF.data.niches();
       const a = api().readyFunnels;
       if (route.screen === 'office-funnels') {
         load('mine', () => a.mine());
         load('purchases', () => a.purchases());
-        if (route.view !== 'mine') load(catalogKey(route), () => a.catalogue(route.q || '', route.niche || ''));
+        if (route.view !== 'mine') load(catalogKey({ q: route.q || '', niche: '' }), () => a.catalogue(route.q || '', ''));
       } else if (route.screen === 'office-funnel' || (route.screen === 'office-funnel-publish' && route.id)) {
         load(`one:${route.id}`, async () => (await a.get(route.id)).funnel);
       }

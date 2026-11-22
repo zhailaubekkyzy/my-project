@@ -137,6 +137,8 @@ function decorateProject(p) {
       steps: (safeJsonParse(funnelSettings).steps || []).map(st => ({ id: st.id, title: st.title }))
     } : null,
     custom_ai_settings: safeJsonParse(p.custom_ai_settings),
+    // «Вопросы и ответы» карточки (миграция 034), видны всем
+    faq: require('./faq').normalizeFaq(p.faq),
     pricing_options: safeJsonParse(p.pricing_options),
     stats: safeJsonParse(p.stats),
     role_title: p.role_title || 'SI-консультант',
@@ -263,7 +265,7 @@ async function updateProject(projectId, updateData) {
     values.push(updateData.niche);
   }
   // Marketplace card (validated in routes/projects.js)
-  for (const key of ['offer', 'description', 'price_label', 'price_mode', 'cta_kind', 'cta_label', 'payment_url', 'access_url', 'trial_days', 'category', 'is_listed']) {
+  for (const key of ['offer', 'description', 'price_label', 'price_mode', 'cta_kind', 'cta_label', 'payment_url', 'access_url', 'trial_days', 'category', 'is_listed', 'niche_id', 'faq']) {
     if (updateData[key] !== undefined) {
       fields.push(`${key} = ?`);
       values.push(updateData[key]);

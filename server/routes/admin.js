@@ -481,7 +481,7 @@ router.get('/funnels/:id', async (req, res, next) => {
 });
 
 const FUNNEL_DECISION_TEXT = {
-  approve: (f) => `✅ Ваш шаблон «${f.title}» снова опубликован: эксперты видят его в Маркетплейсе → «Для бизнеса».`,
+  approve: (f) => `✅ Ваш шаблон «${f.title}» снова опубликован: эксперты видят его в Маркетплейсе → «Шаблоны».`,
   reject: (f, note) => `Шаблон «${f.title}» снят командой SmartFlow.\n\nПричина: ${note}`,
   hide: (f, note) => `Шаблон «${f.title}» снят с публикации командой SmartFlow после жалобы.\n\nПричина: ${note}\n\nНапишите в «Поддержку», если не согласны.`
 };
@@ -531,6 +531,33 @@ router.post('/communities/:id/hide', async (req, res, next) => {
     next(err);
   }
 });
+
+// ---------------------------------------------------------------
+// Niches of the Marketplace (migration 034): created by people at once; the team renames or merges similar ones
+// ---------------------------------------------------------------
+const nicheService = require('../services/niche-service');
+const nicheRoute = (fn) => async (req, res, next) => {
+  try {
+    res.json(await fn(req));
+  } catch (err) {
+    if (err instanceof nicheService.NicheError) return res.status(err.status).json({ error: err.code, message: err.message });
+    next(err);
+  }
+};
+/** GET /api/admin/niches */
+router.get('/niches', nicheRoute(() => nicheService.catalog()));
+/** PUT /api/admin/niches/:id { name, section } */
+router.put('/niches/:id', nicheRoute(async (req) => {
+  const niche = await nicheService.rename(req.params.id, (req.body || {}).name, (req.body || {}).section);
+  await supportService.logAction(req.staff.userId, null, 'niche_rename', { nicheId: niche.id, name: niche.name, section: niche.section });
+  return { niche };
+}));
+/** POST /api/admin/niches/:id/merge { intoId } */
+router.post('/niches/:id/merge', nicheRoute(async (req) => {
+  const result = await nicheService.merge(req.params.id, (req.body || {}).intoId);
+  await supportService.logAction(req.staff.userId, null, 'niche_merge', { nicheId: req.params.id, intoId: result.into.id, sellers: result.sellers, templates: result.templates });
+  return result;
+}));
 
 // ---------------------------------------------------------------
 // The team (owner only)
