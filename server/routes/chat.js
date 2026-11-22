@@ -103,7 +103,10 @@ router.get('/:slug/messages', async (req, res, next) => {
       // Which buttons to show above the input (only when the conversation needs them)
       tools: await chatService.chatTools(project, lead, messages),
       // Other experts' SI-sellers for the client's doubt (shown above the chat)
-      altOffers: await altOfferService.forClient(lead)
+      altOffers: await altOfferService.forClient(lead),
+      // The author's test on a SmartFlow demo business (step 5): shown as a strip above the chat
+      demo: lead && lead.demo_id && lead.entry === 'self' && require('../services/demo-businesses').byId(lead.demo_id)
+        ? { id: lead.demo_id, title: require('../services/demo-businesses').byId(lead.demo_id).title } : null
     });
   } catch (err) {
     next(err);

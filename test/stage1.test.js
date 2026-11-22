@@ -3970,6 +3970,96 @@ async function runAllTests() {
     }
   });
 
+  await test('82. Конструктор шаблона: бриф → черновик (ИИ или ответы автора) → новый SI-продавец-шаблон, тест на демо-бизнесе', async () => {
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    try {
+      const author = await tokenFor({ id: 820001, first_name: 'Автор', last_name: 'Конструктора' });
+      const other = await tokenFor({ id: 820002, first_name: 'Чужой', last_name: 'Конструктор' });
+      const prof = (await api('GET', '/api/me/profile', author)).body.user.profile;
+      await api('PUT', '/api/me/profile', author, { ...prof, businessAgreedAt: new Date().toISOString() });
+      const brief = {
+        nicheName: 'Нутрициология', nicheSection: 'health', productType: 'course', product: 'Программа питания на 4 недели',
+        check: '45 000 ₸', audience: 'warm', sources: 'Instagram', goal: 'sale', fitsFor: 'Нутрициологам с личным брендом',
+        notFor: 'Товарному бизнесу', tone: 'soft', objections: 'дорого\nнет времени',
+        path: [{ title: 'Знакомство', content: 'узнать, что сейчас с питанием' }, { title: 'Польза', content: 'показать, как программа решает его задачу' }, { title: 'Оффер', content: 'предложить программу и рассрочку' }]
+      };
+      assert.strictEqual((await api('POST', '/api/projects/template-builder', author, { ...brief, path: [{ title: 'Один' }] })).status, 400, 'At least 2 steps');
+      assert.strictEqual((await api('POST', '/api/projects/template-builder', author, { ...brief, product: '' })).status, 400);
+
+      // Without OpenAI: the author's own words become the draft
+      let res = await api('POST', '/api/projects/template-builder', author, brief);
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.source, 'brief');
+      let s = res.body.project.custom_ai_settings;
+      assert.deepStrictEqual(s.steps.map(x => x.title), ['Знакомство', 'Польза', 'Оффер']);
+      assert.strictEqual(s.steps[0].goal, 'узнать, что сейчас с питанием');
+      assert.strictEqual(s.scenarios.filter(x => x.when === 'objection').length, 2, 'One per objection');
+      assert(s.puzzle.pieces.length >= 2, 'A puzzle for buyers');
+      assert.strictEqual(s.brief.fitsFor, 'Нутрициологам с личным брендом', 'The brief is kept');
+      assert(res.body.project.name.startsWith('Шаблон:'));
+      assert(res.body.project.niche_id, 'The niche from the list');
+
+      // With OpenAI: its own model, the draft follows the author's path
+      let sent = null;
+      config.openaiApiKey = 'sk-test-not-real';
+      const savedModel = config.templateModel;
+      config.templateModel = 'strong-model-test';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          sent = JSON.parse(options.body);
+          return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+            goal: 'продать программу', instructions: 'Мягко.', methodology: 'Знакомство → польза → оффер.',
+            steps: [{ title: 'Знакомство', goal: 'узнать ситуацию', doneWhen: 'рассказал' }, { title: 'Польза', goal: 'показать', doneWhen: 'интересно' }, { title: 'Оффер', goal: 'предложить', doneWhen: '' }],
+            scenarios: [{ title: 'Дорого', when: 'objection', words: 'дорого', then: 'si_says', text: 'Рассказать про рассрочку из сведений эксперта' }, { title: 'Молчит', when: 'silent', minutes: 120, after: 'offer', then: 'si_says', text: 'Мягко напомнить' }, { when: 'bad', then: 'x' }],
+            puzzle: { pieces: [{ title: 'Продукт', required: true, questions: [{ text: 'Что в программе?', source: 'product.description' }] }, { title: 'Кейсы', required: false, questions: [{ text: 'Лучший кейс?', source: 'nope' }] }], release: { mode: 'required' } }
+          }) } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      res = await api('POST', '/api/projects/template-builder', author, brief);
+      config.templateModel = savedModel;
+      assert.strictEqual(res.body.source, 'openai');
+      assert.strictEqual(sent.model, 'strong-model-test', 'TEMPLATE_MODEL');
+      assert(sent.messages[1].content.includes('Нутрициологам с личным брендом'), 'The brief goes to the AI');
+      s = res.body.project.custom_ai_settings;
+      assert.strictEqual(s.scenarios.length, 2, 'Unknown scenarios are dropped');
+      assert.strictEqual(s.puzzle.pieces[1].questions[0].source, '', 'Unknown sources are dropped');
+      const tpl = res.body.project;
+
+      // A test on a SmartFlow demo business: only the owner; the SI answers as if the demo bought it
+      assert.strictEqual((await api('GET', '/api/projects/template-demos', author)).body.demos.length, 6);
+      assert.strictEqual((await api('POST', `/api/projects/${tpl.id}/demo`, other, { demoId: 'nutri' })).status, 404);
+      assert.strictEqual((await api('POST', `/api/projects/${tpl.id}/demo`, author, { demoId: 'nope' })).status, 400);
+      const demo = await api('POST', `/api/projects/${tpl.id}/demo`, author, { demoId: 'nutri' });
+      assert.strictEqual(demo.body.demo.title, 'Нутрициолог');
+      let system = '';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          const body = JSON.parse(options.body);
+          if (body.response_format) return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 });
+          system = body.messages[0].content;
+          return new Response(JSON.stringify({ choices: [{ message: { content: 'Не знаю, уточню.\n[[ЭКСПЕРТУ: про скидки]]' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      const reply = await api('POST', `/api/chat/${tpl.slug}/messages`, author, { text: 'Сколько стоит?' });
+      assert(system.includes('Программа «Питание без диет»') && system.includes('45 000 ₸'), 'The demo product');
+      assert(system.includes('Подходит вегетарианцам?'), 'The demo FAQ');
+      assert.strictEqual(reply.body.askedExpert, false, 'A test never hands over to a person');
+      const msgs = (await api('GET', `/api/chat/${tpl.slug}/messages`, author)).body;
+      assert.strictEqual(msgs.demo.title, 'Нутрициолог');
+      // Back to my own data: the test chat starts over
+      await api('POST', `/api/projects/${tpl.id}/demo`, author, { demoId: '' });
+      const again = (await api('GET', `/api/chat/${tpl.slug}/messages`, author)).body;
+      assert.strictEqual(again.demo, null);
+      assert.strictEqual(again.messages.length, 0);
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

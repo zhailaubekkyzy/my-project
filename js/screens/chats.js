@@ -635,6 +635,7 @@
 
     return `
       ${buyBanner(state, slug, consultant, messages)}
+      ${thread && thread.demo ? `<div class="mx-1 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/50 text-[11px] text-ink leading-snug"><b class="text-amber-500">Пример: ${SF.esc(thread.demo.title)}.</b> Проверка шаблона — SI отвечает так, будто его купил этот бизнес. Это не настоящий клиент и не настоящие цифры.</div>` : ''}
       ${altOffers(slug, thread)}
 
       <div class="glass-card-3d p-3 border-[var(--si-bubble-line)] flex items-center gap-2.5">

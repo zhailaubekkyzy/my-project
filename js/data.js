@@ -168,6 +168,8 @@
         contactShared: Boolean(res.contactShared),
         broadcastsOff: Boolean(res.broadcastsOff),
         altOffers: res.altOffers || [],
+        // The author's test of a template on a SmartFlow demo business (step 5)
+        demo: res.demo || null,
         tools: res.tools || { contact: false, receipt: false }
       });
     }, maxAge),
@@ -299,6 +301,12 @@
       if (!signedIn()) return false;
       store().setRemote(`projectLinks.${projectId}`, await api().getProjectLinks(projectId));
     }, 30000),
+
+    // SmartFlow demo businesses to test a template on (step 5); they change only with a new version of the server
+    templateDemos: () => ensure('templateDemos', async () => {
+      if (!signedIn()) return false;
+      store().setRemote('templateDemos', (await api().templateDemos()).demos || []);
+    }, 3600000),
 
     // Sections and niches of the Marketplace (public): filters and suggestions while typing a niche
     niches: (maxAge = 120000) => ensure('niches', async () => {

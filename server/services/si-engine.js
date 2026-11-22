@@ -193,7 +193,9 @@ function fallbackOpener(project) {
   return `Здравствуйте! Как хорошо, что вы заглянули 🙂${offer} Расскажите, что для вас сейчас важнее всего?`;
 }
 
-async function callOpenAI(messages, extra = {}) {
+async function callOpenAI(messages, options = {}) {
+  // timeoutMs: how long to wait (the template constructor writes a long answer); the rest goes to OpenAI
+  const { timeoutMs = 25000, ...extra } = options;
   try {
     const res = await fetch(OPENAI_URL, {
       method: 'POST',
@@ -207,7 +209,7 @@ async function callOpenAI(messages, extra = {}) {
         max_completion_tokens: MAX_REPLY_TOKENS,
         ...extra
       }),
-      signal: AbortSignal.timeout(25000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
     const data = await res.json().catch(() => ({}));
     const text = data?.choices?.[0]?.message?.content?.trim();

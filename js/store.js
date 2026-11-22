@@ -61,6 +61,7 @@ const defaultData = {
     marketplace: null,       // listed consultant cards
     partners: null,          // [{ id, count }] people with the «SMARTFLOW PARTNER» badge
     niches: null,            // { sections, niches: [{ id, section, name, experts, templates }] } — filters of the Marketplace
+    templateDemos: null,     // SmartFlow demo businesses to test a template on (step 5)
     cards: {},               // consultant cards by slug (also unlisted, opened by link)
     profiles: {},            // public profiles by user id
     chats: null,             // my chats with SI-consultants (as a client)
@@ -332,6 +333,8 @@ class Store {
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         steps: Array.isArray(settings.steps) ? settings.steps : [],
+        // Made by the template constructor (step 5): the author's brief is kept in the methodology
+        isTemplate: Boolean(settings.brief),
         // The niche of the card and its «Вопросы и ответы» (migration 034)
         nicheId: p.niche_id || null,
         faq: Array.isArray(p.faq) ? p.faq : [],

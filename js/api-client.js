@@ -486,6 +486,17 @@
       report: (id, reason) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/report`, { method: 'POST', body: JSON.stringify({ reason }) })
     },
 
+    // The template constructor (step 5): the brief → a new SI-продавец-шаблон; a test on a demo business
+    async buildTemplate(brief) {
+      return await apiFetch('/api/projects/template-builder', { method: 'POST', body: JSON.stringify(brief), timeoutMs: 150000 });
+    },
+    async templateDemos() {
+      return await apiFetch('/api/projects/template-demos');
+    },
+    async testTemplateOnDemo(projectId, demoId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/demo`, { method: 'POST', body: JSON.stringify({ demoId: demoId || '' }) });
+    },
+
     // Sections and niches of the Marketplace (no login needed)
     async getNiches() {
       return await apiFetch('/api/niches');
