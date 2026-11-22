@@ -58,6 +58,56 @@ router.post('/', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------
+// Конструктор шаблона («Бизнес-режим 2.0», шаг 5): бриф → ИИ собирает черновик → новый SI-продавец-шаблон;
+// проверка на демо-бизнесах SmartFlow
+// ---------------------------------------------------------------
+const templateBuilder = require('../services/template-builder');
+const demoBusinesses = require('../services/demo-businesses');
+
+/** GET /api/projects/template-demos — the SmartFlow examples to test a template on */
+router.get('/template-demos', (req, res) => res.json({ demos: demoBusinesses.list() }));
+
+/** POST /api/projects/template-builder { businessId, title, nicheName, nicheSection, productType, product, check,
+ *  audience, sources, goal, fitsFor, notFor, tone, objections, path: [{ title, content }] } */
+router.post('/template-builder', async (req, res, next) => {
+  try {
+    const { project, source } = await templateBuilder.build(req.user.userId, req.body || {});
+    const s = projectService.safeJsonParse(project.custom_ai_settings);
+    analytics.capture('template_built', req.user.userId, {
+      project_id: project.id, source, steps: (s.steps || []).length, scenarios: (s.scenarios || []).length,
+      pieces: ((s.puzzle || {}).pieces || []).length
+    });
+    res.status(201).json({ project: projectService.decorateProject(await db.get('SELECT * FROM projects WHERE id = ?', [project.id])), source });
+  } catch (err) {
+    if (err instanceof templateBuilder.BuilderError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    if (err && err.status && err.message) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+});
+
+/**
+ * POST /api/projects/:id/demo { demoId } — the owner's test chat on a demo business (empty — on my own data).
+ * The test chat starts over: the owner's own «Вы (проверка)» conversation is cleared (never a real client's).
+ */
+router.post('/:id/demo', async (req, res, next) => {
+  try {
+    const project = await db.get('SELECT * FROM projects WHERE id = ? AND owner_id = ?', [req.params.id, req.user.userId]);
+    if (!project) return res.status(404).json({ error: 'not_found', message: 'SI-продавец не найден' });
+    const demoId = String((req.body || {}).demoId || '');
+    if (demoId && !demoBusinesses.byId(demoId)) return res.status(400).json({ error: 'bad_request', message: 'Такого примера нет' });
+    // Only the owner's own test conversation (external id = the owner, entry 'self') is removed
+    await db.run(`DELETE FROM clients WHERE project_id = ? AND external_client_id = ? AND entry = 'self'`, [project.id, req.user.userId]);
+    const chatService = require('../services/chat-service');
+    const lead = await chatService.leadForUser(project, req.user.userId);
+    if (demoId) await db.run('UPDATE clients SET demo_id = ? WHERE id = ?', [demoId, lead.id]);
+    analytics.capture('template_demo_tested', req.user.userId, { project_id: project.id, demo: demoId || 'own' });
+    res.json({ slug: project.slug, demo: demoId ? { id: demoId, title: demoBusinesses.byId(demoId).title } : null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------
 // «Пазл» of an SI-продавец («Бизнес-режим 2.0», шаг 3): permissions, «что дополнить», additions
 // ---------------------------------------------------------------
 const puzzleService = require('../services/puzzle-service');

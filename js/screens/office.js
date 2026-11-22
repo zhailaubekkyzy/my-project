@@ -951,11 +951,25 @@
       </div>`;
   }
 
+  // «Шаблон для продажи другим» (step 5 of «Бизнес-режим 2.0»): only where templates are open (flag funnels)
+  function templateEntry() {
+    if (!SF.feature('funnels')) return '';
+    return `
+      <button onclick="SF.push('office-template')" class="w-full p-3.5 rounded-2xl bg-card border-2 border-dashed border-[#81D8D0] flex items-center gap-3 text-left">
+        <span class="w-10 h-10 rounded-xl bg-[#81D8D0]/20 flex items-center justify-center flex-shrink-0"><i data-lucide="layers" class="w-5 h-5 text-brand"></i></span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm font-bold text-ink">Шаблон для продажи другим</span>
+          <span class="block text-[11px] text-muted leading-snug">Ответьте на бриф — ИИ соберёт скелет продавца, вы поправите, проверите на примерах бизнесов и опубликуете</span>
+        </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+      </button>`;
+  }
+
   function renderCreate(route = {}) {
     if (SF.feature('quick-start') && route.goal !== 'custom') {
-      return route.goal ? renderQuickForm(route.goal) : renderQuickGoals();
+      return route.goal ? renderQuickForm(route.goal) : renderQuickGoals() + templateEntry();
     }
-    return `
+    return `${templateEntry()}
       <form onsubmit="SF.actions.createConsultant(event)" class="glass-card-3d p-4 space-y-3 text-xs">
         <div class="text-[11px] text-muted leading-snug">У каждого SI-продавца есть цель, чёткие инструкции и лимит на клиента — он работает сам, без вашего участия.</div>
         ${field('name', 'Имя для клиентов', '', { placeholder: 'Например: Елена · менторство', max: 60 })}
@@ -971,6 +985,171 @@
     `;
   }
 
+  // ---------------- Конструктор шаблона: бриф по разделам → ИИ собирает → новый SI-продавец-шаблон ----------------
+  // Owner's decisions 22 Nov.: the brief — ниша и продукт · чек и клиенты · цель и кому подходит · стиль и возражения ·
+  // путь клиента шаг за шагом и что на каждом шаге. The answers live in memory until «Собрать шаблон».
+  const TPL_PARTS = ['Ниша и продукт', 'Чек и клиенты', 'Цель и кому подходит', 'Стиль и возражения', 'Путь клиента'];
+  const TPL_PRODUCT = [['consult', 'Консультация'], ['course', 'Курс'], ['mentoring', 'Наставничество'], ['service', 'Услуга'], ['webinar', 'Вебинар или интенсив'], ['goods', 'Товар'], ['other', 'Другое']];
+  const TPL_AUDIENCE = [['warm', 'Тёплые — подписчики, уже знают эксперта'], ['cold', 'Холодные — из рекламы, видят впервые'], ['both', 'И те, и другие']];
+  const TPL_GOAL = [['sale', 'Продать'], ['booking', 'Записать на встречу или консультацию'], ['lead', 'Собрать заявку'], ['free', 'Выдать бесплатный материал и прогреть']];
+  const TPL_TONE = [['soft', 'Мягкий и бережный'], ['expert', 'Экспертный, уверенный'], ['friendly', 'Дружеский, на лёгкой ноте']];
+  let tpl = null; // { part, building, data: { … , path: [{ title, content }] } }
+  const tplData = () => (tpl || (tpl = { part: 0, building: false, data: { productType: 'course', audience: 'both', goal: 'sale', tone: 'soft', path: [{ title: '', content: '' }, { title: '', content: '' }] } })).data;
+
+  function renderTemplateBuilder() {
+    const d = tplData();
+    const part = tpl.part;
+    const box = 'w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink';
+    const inp = (key, label, opts = {}) => `
+      <label class="block space-y-1">
+        <span class="font-semibold text-ink-2">${label}</span>
+        ${opts.rows
+          ? `<textarea rows="${opts.rows}" maxlength="${opts.max || 600}" placeholder="${SF.esc(opts.placeholder || '')}" oninput="SF.actions.tplSet('${key}', this.value)" class="${box}">${SF.esc(d[key] || '')}</textarea>`
+          : `<input maxlength="${opts.max || 120}" value="${SF.esc(d[key] || '')}" placeholder="${SF.esc(opts.placeholder || '')}" oninput="SF.actions.tplSet('${key}', this.value)" class="${box}" />`}
+        ${opts.hint ? `<span class="block text-[10px] text-faint">${opts.hint}</span>` : ''}
+      </label>`;
+    const choice = (key, list) => `
+      <div class="space-y-1.5">${list.map(([id, label]) => `
+        <label class="flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer ${d[key] === id ? 'bg-[#81D8D0]/15 border-[#81D8D0]' : 'bg-sunken border-line'}">
+          <input type="radio" name="tpl-${key}" ${d[key] === id ? 'checked' : ''} onchange="SF.actions.tplSet('${key}', '${id}', true)" class="accent-[#0d9488]" />
+          <span class="text-ink">${label}</span>
+        </label>`).join('')}</div>`;
+    let body = '';
+    if (part === 0) {
+      body = `
+        ${SF.niches.field({ value: d.nicheName || '', section: d.nicheSection || '', label: 'Ниша', hint: 'Для какой ниши шаблон. Начните писать — появятся подсказки; нет вашей — создастся сама.',
+          onName: "SF.actions.tplSet('nicheName', this.value)", onSection: "SF.actions.tplSet('nicheSection', this.value)" })}
+        <div class="font-semibold text-ink-2">Тип продукта</div>
+        ${choice('productType', TPL_PRODUCT)}
+        ${inp('product', 'Что продаёт SI-продавец на этом шаблоне', { rows: 3, placeholder: 'Например: программа питания на 4 недели с меню и поддержкой в чате' })}
+        ${inp('title', 'Название шаблона (можно потом)', { max: 80, placeholder: 'Например: Продажа программы нутрициолога' })}`;
+    } else if (part === 1) {
+      body = `
+        ${inp('check', 'Средний чек', { max: 80, placeholder: 'Например: 30 000–60 000 ₸' })}
+        <div class="font-semibold text-ink-2">Какие клиенты приходят</div>
+        ${choice('audience', TPL_AUDIENCE)}
+        ${inp('sources', 'Откуда приходят', { max: 300, placeholder: 'Например: Instagram, реклама в Telegram, сарафанное радио' })}`;
+    } else if (part === 2) {
+      body = `
+        <div class="font-semibold text-ink-2">Цель SI-продавца</div>
+        ${choice('goal', TPL_GOAL)}
+        ${inp('fitsFor', 'Кому подходит шаблон', { rows: 2, max: 500, placeholder: 'Например: нутрициологам и диетологам с личным брендом и своими курсами' })}
+        ${inp('notFor', 'Кому не подходит', { rows: 2, max: 500, placeholder: 'Например: товарному бизнесу, тем, у кого нет своего продукта' })}`;
+    } else if (part === 3) {
+      body = `
+        <div class="font-semibold text-ink-2">Стиль общения</div>
+        ${choice('tone', TPL_TONE)}
+        ${inp('objections', 'Главные возражения клиентов — каждое с новой строки', { rows: 4, max: 800, placeholder: 'дорого\nнет времени\nуже пробовал(а), не помогло' })}`;
+    } else {
+      body = `
+        <div class="text-[11px] text-muted leading-snug">Как клиент идёт к цели — по шагам, своими словами: что происходит на каждом шаге и что SI говорит или делает. ИИ возьмёт ваши шаги как есть и допишет детали. От 2 до ${MAX_STEPS} шагов.</div>
+        ${d.path.map((st, i) => `
+          <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-6 h-6 rounded-full bg-[#81D8D0] text-[#08302c] text-[11px] font-extrabold flex items-center justify-center flex-shrink-0">${i + 1}</span>
+              <input maxlength="60" value="${SF.esc(st.title)}" placeholder="Название шага: например «Знакомство»" oninput="SF.actions.tplStep(${i}, 'title', this.value)" class="w-full p-2 rounded-xl bg-card border border-line-2 text-ink" />
+              ${d.path.length > 2 ? `<button onclick="SF.actions.tplStepRemove(${i})" class="p-1 text-faint" aria-label="Удалить шаг"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
+            </div>
+            <textarea rows="2" maxlength="600" placeholder="Что на этом шаге: например «узнать, что сейчас с питанием и что хочется изменить»" oninput="SF.actions.tplStep(${i}, 'content', this.value)" class="w-full p-2 rounded-xl bg-card border border-line-2 text-ink">${SF.esc(st.content)}</textarea>
+          </div>`).join('')}
+        ${d.path.length < MAX_STEPS ? '<button onclick="SF.actions.tplStepAdd()" class="w-full py-2 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Шаг</button>' : ''}`;
+    }
+    const last = part === TPL_PARTS.length - 1;
+    if (tpl.building) {
+      return `
+        <div class="glass-card-3d p-6 text-center space-y-3">
+          <div class="mx-auto w-16 h-16 rounded-full bg-[var(--si-bubble)] flex items-center justify-center animate-pulse"><i data-lucide="sparkles" class="w-8 h-8 text-si"></i></div>
+          <div class="text-sm font-extrabold text-ink">ИИ собирает шаблон…</div>
+          <div class="text-[11px] text-muted leading-snug">Шаги по вашему пути, общее описание, сценарии на возражения и молчание, пазл для покупателей. Обычно до минуты — не закрывайте экран.</div>
+        </div>`;
+    }
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        <div class="flex gap-1">${TPL_PARTS.map((_, i) => `<span class="flex-1 h-1.5 rounded-full ${i < part ? 'bg-[#81D8D0]' : i === part ? 'bg-[#0d9488]' : 'bg-sunken'}"></span>`).join('')}</div>
+        <div class="text-[10px] text-faint">Бриф шаблона · ${part + 1} из ${TPL_PARTS.length}</div>
+        <div class="text-base font-extrabold text-ink">${TPL_PARTS[part]}</div>
+        ${body}
+        <div class="grid ${part > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1">
+          ${part > 0 ? '<button onclick="SF.actions.tplGo(-1)" class="py-2.5 rounded-xl bg-sunken border border-line text-ink-2">Назад</button>' : ''}
+          ${last
+            ? '<button onclick="SF.actions.tplBuild()" class="py-2.5 rounded-xl btn-3d-tiffany flex items-center justify-center gap-1.5"><i data-lucide="sparkles" class="w-4 h-4"></i>Собрать шаблон</button>'
+            : '<button onclick="SF.actions.tplGo(1)" class="py-2.5 rounded-xl btn-3d-tiffany">Дальше</button>'}
+        </div>
+      </div>
+      <div class="text-[10px] text-faint px-1 leading-snug">Получится новый SI-продавец «Шаблон: …» в открытом бизнесе. Всё можно поправить в его «Методологии», проверить на примерах бизнесов SmartFlow и потом опубликовать.</div>`;
+  }
+
+  // Typing keeps the answers without re-drawing; a choice re-draws (its highlight)
+  SF.actions.tplSet = (key, value, redraw = false) => { tplData()[key] = value; if (redraw) store().notify(); };
+  SF.actions.tplStep = (i, key, value) => { const st = tplData().path[i]; if (st) st[key] = value; };
+  SF.actions.tplStepAdd = () => { tplData().path.push({ title: '', content: '' }); store().notify(); };
+  SF.actions.tplStepRemove = (i) => { tplData().path.splice(i, 1); store().notify(); };
+  SF.actions.tplGo = (delta) => {
+    const d = tplData();
+    if (delta > 0) {
+      if (tpl.part === 0 && !String(d.product || '').trim()) return showToast('Опишите, что продаёт SI-продавец');
+      if (tpl.part === 2 && !String(d.fitsFor || '').trim()) return showToast('Напишите, кому подходит шаблон');
+    }
+    tpl.part = Math.max(0, Math.min(TPL_PARTS.length - 1, tpl.part + delta));
+    store().notify();
+    const body = document.getElementById('screen-body');
+    if (body) body.scrollTo(0, 0);
+  };
+  SF.actions.tplBuild = async () => {
+    if (needServer()) return;
+    const d = tplData();
+    const path = d.path.map(s => ({ title: String(s.title || '').trim(), content: String(s.content || '').trim() })).filter(s => s.title);
+    if (path.length < 2) return showToast('Опишите путь клиента хотя бы в 2 шага — с названиями');
+    tpl.building = true;
+    store().notify();
+    try {
+      const res = await api().buildTemplate({ ...d, path, businessId: store().currentBusinessId() });
+      tpl = null;
+      SF.data.invalidate('consultants');
+      SF.data.invalidate('niches');
+      await SF.data.myConsultants();
+      SF.confetti();
+      showToast(res.source === 'openai' ? 'Шаблон собран 🎉 Проверьте и поправьте методологию' : 'Черновик собран из ваших ответов 🎉 Допишите методологию');
+      store().popRoute();
+      SF.push('office-consultant', { id: res.project.id, tab: 'methodology' });
+    } catch (err) {
+      tpl.building = false;
+      store().notify();
+      showToast(SF.withErrorCode(err.message || 'Не получилось собрать', err));
+    }
+  };
+
+  // Test a template on a SmartFlow demo business («Пример»): the SI answers as if that business bought it
+  function renderDemoTest(c, state) {
+    if (!c.isTemplate) return '';
+    const demos = state.remote.templateDemos;
+    return `
+      <div class="glass-card-3d p-4 space-y-2.5 text-xs border border-amber-500/50">
+        ${SF.sectionTitle('flask-conical', 'Проверить на примере бизнеса')}
+        <div class="text-[11px] text-muted leading-snug">Переписка «как клиент», будто шаблон купил этот бизнес: продукт, цена и «Вопросы и ответы» — из примера, скелет — ваш. Настоящие клиенты и цифры не затрагиваются. Каждый раз чат начинается заново.</div>
+        ${demos ? `<div class="grid grid-cols-2 gap-1.5">${demos.map(dm => `
+          <button onclick="SF.actions.testOnDemo('${SF.js(c.id)}', '${SF.js(dm.id)}')" class="p-2.5 rounded-xl bg-sunken border border-line text-left space-y-0.5">
+            <span class="block font-bold text-ink">${SF.esc(dm.title)}</span>
+            <span class="block text-[10px] text-muted leading-snug">${SF.esc(dm.product)} · ${SF.esc(dm.price)}</span>
+          </button>`).join('')}</div>` : '<div class="text-[11px] text-muted">Загружаю примеры…</div>'}
+        <button onclick="SF.actions.testOnDemo('${SF.js(c.id)}', '')" class="w-full py-2 rounded-xl btn-3d-dark text-[11px]">На моих данных</button>
+      </div>`;
+  }
+
+  SF.actions.testOnDemo = async (projectId, demoId) => {
+    if (needServer()) return;
+    try {
+      const res = await api().testTemplateOnDemo(projectId, demoId);
+      // The test chat starts over on the server: forget the old one on the phone too
+      SF.data.invalidate(`messages:${res.slug}`);
+      store().setRemote(`messages.${res.slug}`, null);
+      showToast(res.demo ? `Проверка на примере «${res.demo.title}»` : 'Проверка на ваших данных');
+      SF.actions.openChat(res.slug);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
   // ---------------- One consultant ----------------
   function renderConsultant(route, state) {
     const c = store().findOfficeConsultant(route.id);
@@ -978,7 +1157,7 @@
     if (c.assisting) return renderAssistedConsultant(c, route, state);
     const tab = CONSULTANT_TABS.some(t => t.id === route.tab) ? route.tab : 'analytics';
     let body = '';
-    if (tab === 'methodology') body = renderPuzzle(c, route, state) + renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + renderAuthorPuzzle(c) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
+    if (tab === 'methodology') body = renderDemoTest(c, state) + renderPuzzle(c, route, state) + renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + renderAuthorPuzzle(c) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
     if (tab === 'analytics') body = renderSellerFunnel(c, route, state) + renderAnalytics(c, state);
     if (tab === 'income') body = renderSellerClients(c, route, state);
     if (tab === 'broadcasts') body = renderBroadcasts(c, state);
@@ -2925,7 +3104,8 @@
     'office-ready': 'SI-продавец готов',
     'office-consultant': 'SI-продавец',
     'office-client': 'Клиент',
-    'office-product': 'Продукт'
+    'office-product': 'Продукт',
+    'office-template': 'Шаблон для продажи другим'
   };
 
   SF.office = {
@@ -2948,6 +3128,7 @@
       if (route.screen === 'office-consultant') return renderConsultant(route, state);
       if (route.screen === 'office-client') return renderClient(route, state);
       if (route.screen === 'office-product') return renderProduct(route, state);
+      if (route.screen === 'office-template') return store().isBusinessActive() ? renderTemplateBuilder() : renderTerms();
       return renderOffice(route, state);
     },
     afterRender(route, state) {
@@ -2978,6 +3159,7 @@
         if (tab === 'methodology') {
           SF.data.brain();
           if (c && c.businessId) SF.data.products(c.businessId);
+          if (c && c.isTemplate) SF.data.templateDemos();
           if (c && !c.assisting) {
             SF.data.puzzle(route.id);
             const pz = state.remote.puzzle[route.id];

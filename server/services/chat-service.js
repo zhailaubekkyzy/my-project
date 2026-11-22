@@ -196,7 +196,15 @@ const CLIENT = { type: 'client' };
  * A client's message: saved, then the SI answers unless the expert took over (SI paused)
  * or the per-client limit is used up. Returns { message, reply } (reply may be null).
  */
+// The author's test on a SmartFlow demo business (step 5): the skeleton stays, the business, product and FAQ
+// come from the example (demo-businesses.js). Only the owner's own test chat can have one.
+function demoOf(project, lead) {
+  if (!lead || !lead.demo_id || lead.entry !== 'self') return project;
+  return require('./demo-businesses').overlay(project, lead.demo_id);
+}
+
 async function handleClientMessage(project, lead, text, voice = null) {
+  project = demoOf(project, lead);
   const past = await history(project.id, lead.id);
   const message = await saveMessage(lead, CLIENT, text, voice);
   await funnelService.recordEvent(lead, 'client_message', CLIENT);
@@ -226,7 +234,7 @@ async function handleClientMessage(project, lead, text, voice = null) {
   // Search the SI-brain by this message plus the client's previous one (a follow-up like
   // "а сколько это длится?" needs the earlier question to make sense). Only when OpenAI answers.
   let knowledge = [];
-  if (siEngine.isConfigured()) {
+  if (siEngine.isConfigured() && !project.demo) {
     const previous = [...past].reverse().find(m => m.sender === 'client');
     knowledge = await brainService.contextFor(project.id, [previous && previous.text, text].filter(Boolean).join('\n'));
   }
@@ -246,13 +254,13 @@ async function handleClientMessage(project, lead, text, voice = null) {
   const asked = siEngine.takeAskExpert(result.text);
   const reply = await saveMessage(lead, SI, asked.text || result.text);
   await applyAnalysis(project, lead, analysis, text);
-  if (asked.question) {
+  if (asked.question && !project.demo) {
     await createHumanRequest(project, lead, {
       reason: `SI не знает ответа: ${asked.question}. Вопрос клиента: «${String(text).slice(0, 500)}»`,
       notice: `❓ ${lead.name || 'Клиент'} спросил то, чего нет в карточке и сведениях SI: «${String(text).slice(0, 300)}».\nSI-продавец: «${project.name}». Ответьте в чате — клиент ждёт. Ответ можно сразу добавить в «Вопросы и ответы» карточки.`
     });
   }
-  return { message, reply, source: result.source, askedExpert: Boolean(asked.question) };
+  return { message, reply, source: result.source, askedExpert: Boolean(asked.question && !project.demo) };
 }
 
 // The last alternative-offers pick in progress (tests wait for it)
@@ -462,6 +470,7 @@ async function markOutcome(project, client, outcome, member) {
  * Returns the opening message or null if the chat already has messages.
  */
 async function startConversation(project, lead) {
+  project = demoOf(project, lead);
   const past = await history(project.id, lead.id);
   if (past.length) return null;
   const clientLang = await require('./i18n').langOfClient(lead);

@@ -64,6 +64,8 @@ const config = {
   transcribeModel: process.env.TRANSCRIBE_MODEL || 'whisper-1',
   buddyModel: process.env.BUDDY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
   // «Кратко» in groups — its own model, not tied to Buddy (owner's decision 21 Nov.)
+  // The template constructor (step 5 of «Бизнес-режим 2.0»): the strongest model, runs rarely; default — as the SI
+  templateModel: process.env.TEMPLATE_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
   groupSummaryModel: process.env.GROUP_SUMMARY_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
 
   // Owners of the support panel: their numbers from Profile (SF-48213), comma-separated.
