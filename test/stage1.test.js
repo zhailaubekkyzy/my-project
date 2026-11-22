@@ -3411,6 +3411,122 @@ async function runAllTests() {
     }
   });
 
+  await test('74. Сообщества: только бизнес-профиль, вход бесплатно / по заявке / по оплате (месяц), лента, комментарии, лайки, роли, команда скрывает', async () => {
+    const analytics = require('../server/services/analytics-service');
+    const notifyService = require('../server/services/notify-service');
+    const sent = [];
+    analytics._setClientForTests({ capture: (e) => sent.push(e), shutdown: async () => {} });
+    const phone = [];
+    const recorder = { name: 'test-phone', send: async (userId, { text, startParam }) => { phone.push({ userId, text, startParam }); return true; } };
+    notifyService.CHANNELS.push(recorder);
+    const saved = { adminUsers: config.adminUsers };
+    try {
+      const teamTg = { id: 740009, first_name: 'Команда', last_name: 'Сообществ' };
+      config.adminUsers = [String(teamTg.id)];
+      const team = await tokenFor(teamTg);
+      const expert = await tokenFor({ id: 740001, first_name: 'Эксперт', last_name: 'Сообществ' });
+      const ann = await tokenFor({ id: 740002, first_name: 'Анна', last_name: 'Участница' });
+      const bek = await tokenFor({ id: 740003, first_name: 'Бек', last_name: 'Участник' });
+      const idOf = async (token) => (await api('GET', '/api/me/profile', token)).body.user.id;
+      const [expertId, annId, bekId] = [await idOf(expert), await idOf(ann), await idOf(bek)];
+      const told = (userId) => phone.filter(n => n.userId === userId);
+
+      // Only a business profile creates
+      assert.strictEqual((await api('POST', '/api/communities', expert, { name: 'Йога' })).status, 403);
+      const prof = (await api('GET', '/api/me/profile', expert)).body.user.profile;
+      await api('PUT', '/api/me/profile', expert, { ...prof, businessAgreedAt: new Date().toISOString() });
+      assert.strictEqual((await api('POST', '/api/communities', expert, { name: 'Йога', joinMode: 'request', questions: [] })).status, 400, 'A request needs a question');
+      assert.strictEqual((await api('POST', '/api/communities', expert, { name: 'Йога', joinMode: 'paid', priceLabel: '5000', paymentUrl: 'javascript:x' })).status, 400, 'A safe payment link');
+
+      // Free: join at once; the feed, a post, a comment, a reply, likes
+      const free = (await api('POST', '/api/communities', expert, { name: 'Йога по утрам', about: 'Каждый день', categories: ['Вопросы', 'Победы'] })).body.communityId;
+      assert((await api('GET', '/api/communities', bek)).body.communities.some(c => c.id === free), 'In the catalog');
+      assert.strictEqual((await api('GET', `/api/communities/${free}/feed`, ann)).status, 403, 'Not a member yet');
+      assert.strictEqual((await api('POST', `/api/communities/${free}/join`, ann, {})).body.me.access, true);
+      const postRes = await api('POST', `/api/communities/${free}/posts`, ann, { text: 'Как дышать правильно?', category: 'Вопросы' });
+      assert.strictEqual(postRes.status, 201);
+      const postId = postRes.body.postId;
+      const feed = (await api('GET', `/api/communities/${free}/feed`, expert)).body;
+      assert.strictEqual(feed.posts[0].category, 'Вопросы');
+      const c1 = (await api('POST', `/api/communities/posts/${postId}/comments`, expert, { text: 'Животом 🙂' })).body;
+      assert(told(annId).some(n => n.text.includes('прокомментировал(а) ваш пост') && n.startParam === `KP_${postId}`), 'The post author is told');
+      await api('POST', `/api/communities/${free}/join`, bek, {});
+      await api('POST', `/api/communities/posts/${postId}/comments`, bek, { text: 'Спасибо!', parentId: c1.comments[0].id });
+      assert(told(expertId).some(n => n.text.includes('ответил(а) на ваш комментарий')), 'A reply is told');
+      const before = told(annId).length;
+      assert.strictEqual((await api('POST', `/api/communities/like/${postId}`, bek)).body.liked, true);
+      assert.strictEqual(told(annId).length, before, 'No notification about likes');
+      const opened = (await api('GET', `/api/communities/posts/${postId}`, ann)).body;
+      assert.strictEqual(opened.post.likes, 1);
+      assert.strictEqual(opened.comments[1].parentId, opened.comments[0].id, 'The reply is under its comment');
+      assert.strictEqual((await api('POST', `/api/communities/like/${postId}`, bek)).body.liked, false, 'Again takes it back');
+
+      // Staff: pin, posting by staff only, moderator, delete
+      assert.strictEqual((await api('PUT', `/api/communities/posts/${postId}/pin`, bek, { pinned: true })).status, 403);
+      await api('PUT', `/api/communities/posts/${postId}/pin`, expert, { pinned: true });
+      await api('PUT', `/api/communities/${free}`, expert, { posting: 'staff' });
+      assert.strictEqual((await api('POST', `/api/communities/${free}/posts`, bek, { text: 'Мой пост' })).status, 403, 'Staff only');
+      await api('PUT', `/api/communities/${free}/members/${bekId}`, expert, { role: 'moderator' });
+      assert.strictEqual((await api('POST', `/api/communities/${free}/posts`, bek, { text: 'Анонс от модератора', announcement: true })).status, 201);
+      assert(told(annId).some(n => n.text.includes('новый анонс')), 'An announcement reaches everyone');
+      assert.strictEqual((await api('DELETE', `/api/communities/posts/${postId}`, bek)).status, 200, 'A moderator deletes');
+      assert.strictEqual((await api('GET', `/api/communities/posts/${postId}`, ann)).status, 404);
+      await api('DELETE', `/api/communities/${free}/members/${annId}?ban=1`, expert);
+      assert.strictEqual((await api('POST', `/api/communities/${free}/join`, ann, {})).status, 403, 'Banned cannot come back');
+
+      // By request: answers → the owner accepts
+      const req1 = (await api('POST', '/api/communities', expert, { name: 'Клуб', joinMode: 'request', questions: ['Зачем вам клуб?'], visibility: 'hidden' })).body.communityId;
+      assert(!(await api('GET', '/api/communities', bek)).body.communities.some(c => c.id === req1), 'Hidden: not in the catalog');
+      assert.strictEqual((await api('GET', `/api/communities/${req1}`, ann)).status, 200, 'But opens by its link');
+      assert.strictEqual((await api('POST', `/api/communities/${req1}/join`, ann, { answers: [] })).status, 400);
+      assert.strictEqual((await api('POST', `/api/communities/${req1}/join`, ann, { answers: ['Хочу расти'] })).body.me.status, 'requested');
+      assert(told(expertId).some(n => n.text.includes('Заявка')), 'The owner is told');
+      const w = (await api('GET', `/api/communities/${req1}/waiting`, expert)).body.items;
+      assert.deepStrictEqual(w[0].answers, [{ q: 'Зачем вам клуб?', a: 'Хочу расти' }]);
+      await api('POST', `/api/communities/${req1}/waiting/${annId}`, expert, { accept: true });
+      assert.strictEqual((await api('GET', `/api/communities/${req1}`, ann)).body.me.access, true);
+
+      // Paid monthly: «Я оплатил(а)» → only the owner confirms → 30 days → the month ends → renewal
+      const paid = (await api('POST', '/api/communities', expert, { name: 'Марафон', joinMode: 'paid', priceType: 'monthly', priceLabel: '5 000 ₸ в месяц', paymentUrl: 'https://pay.example.com/m' })).body.communityId;
+      const page = (await api('GET', `/api/communities/${paid}`, bek)).body;
+      assert.strictEqual(page.paymentUrl, 'https://pay.example.com/m');
+      assert.strictEqual((await api('POST', `/api/communities/${paid}/join`, bek, { note: '' })).status, 400, 'Say how you paid');
+      await api('POST', `/api/communities/${paid}/join`, bek, { note: 'Kaspi 21.11' });
+      assert.strictEqual((await api('GET', `/api/communities/${paid}/feed`, bek)).status, 403, 'Not until confirmed');
+      await api('POST', `/api/communities/${paid}/waiting/${bekId}`, expert, { accept: true });
+      const paidView = (await api('GET', `/api/communities/${paid}`, bek)).body.me;
+      assert.strictEqual(paidView.access, true);
+      assert(new Date(paidView.paidUntil) > new Date(Date.now() + 29 * 24 * 3600000), '30 days');
+      await db.run('UPDATE community_members SET paid_until = ? WHERE community_id = ? AND user_id = ?', ['2020-01-01 00:00:00.000', paid, bekId]);
+      assert.strictEqual((await api('GET', `/api/communities/${paid}/feed`, bek)).status, 403, 'The month ended');
+      await api('POST', `/api/communities/${paid}/join`, bek, { note: 'Kaspi за декабрь' });
+      assert.strictEqual((await api('GET', `/api/communities/${paid}/waiting`, expert)).body.items[0].kind, 'renewal');
+      await api('POST', `/api/communities/${paid}/waiting/${bekId}`, expert, { accept: true });
+      assert.strictEqual((await api('GET', `/api/communities/${paid}`, bek)).body.me.access, true, 'Renewed');
+
+      // The owner's numbers and «Мои»
+      const stats = (await api('GET', `/api/communities/${paid}`, expert)).body.stats;
+      assert.strictEqual(stats.members, 2);
+      assert((await api('GET', '/api/communities/mine', bek)).body.communities.some(c => c.id === paid));
+
+      // The team hides: out of the catalog, no new members
+      assert.strictEqual((await api('GET', '/api/admin/communities', bek)).status, 403);
+      await api('POST', `/api/admin/communities/${paid}/hide`, team, { hidden: true });
+      assert(!(await api('GET', '/api/communities', ann)).body.communities.some(c => c.id === paid));
+      assert.strictEqual((await api('POST', `/api/communities/${paid}/join`, ann, { note: 'x' })).status, 403);
+
+      const inBuddy = await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE SUBSTR(start_param, 1, 2) IN ('K_', 'KP')`);
+      assert.strictEqual(Number(inBuddy.n), 0, 'Nothing from communities goes to Buddy');
+      const names = sent.map(e => e.event);
+      for (const e of ['community_created', 'community_joined', 'community_requested', 'community_post', 'community_comment', 'community_like', 'community_payment_claimed', 'community_payment_confirmed']) assert(names.includes(e), `Event ${e}`);
+      assert(!JSON.stringify(sent).includes('Йога'), 'No names or texts in the numbers');
+    } finally {
+      analytics._setClientForTests(null);
+      notifyService.CHANNELS.splice(notifyService.CHANNELS.indexOf(recorder), 1);
+      Object.assign(config, saved);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

@@ -506,6 +506,33 @@ router.post('/funnels/:id/decision', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------
+// Communities: the team hides one from the catalog (and from new members) or shows it again
+// ---------------------------------------------------------------
+const communityService = require('../services/community-service');
+
+router.get('/communities', async (req, res, next) => {
+  try {
+    res.json({ communities: await communityService.staffList() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/admin/communities/:id/hide { hidden } */
+router.post('/communities/:id/hide', async (req, res, next) => {
+  try {
+    const hidden = Boolean((req.body || {}).hidden);
+    const result = await communityService.staffHide(req.params.id, hidden);
+    const c = (await communityService.staffList()).find(x => x.id === req.params.id);
+    await supportService.logAction(req.staff.userId, c && c.owner ? c.owner.id : null, hidden ? 'community_hide' : 'community_show', { communityId: req.params.id, name: c && c.name });
+    res.json(result);
+  } catch (err) {
+    if (err instanceof communityService.CommunityError) return res.status(err.status).json({ error: err.code, message: err.message });
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------
 // The team (owner only)
 // ---------------------------------------------------------------
 router.get('/staff', requireStaff('owner'), async (req, res, next) => {

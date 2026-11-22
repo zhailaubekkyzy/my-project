@@ -111,6 +111,7 @@
         ${tile({ icon: 'book-open', title: 'Как чинить', sub: 'пошаговая инструкция', onclick: "SF.push('admin-help')" })}
         ${tile({ icon: 'mic', title: 'Проверка микрофона', sub: 'перед голосовыми', onclick: "SF.push('admin-mic')" })}
         ${tile({ icon: 'award', title: 'Партнёры', sub: 'кто приводит людей', onclick: "SF.push('admin-partners')" })}
+        ${tile({ icon: 'users', title: 'Сообщества', sub: 'скрыть по жалобе', onclick: "SF.push('admin-communities')" })}
         ${tile({ icon: 'layers', title: 'Воронки', sub: o.funnelsToReview ? `${o.funnelsToReview} на проверке` : 'на проверке нет', onclick: "SF.push('admin-funnels')", alert: o.funnelsToReview > 0 })}
       </div>
 
@@ -801,6 +802,31 @@
         </button>`).join('') : card('<div class="text-xs text-muted">Здесь пусто.</div>')}`;
   }
 
+  // Communities: the team hides one from the catalog and from new members (after a complaint), or shows it again
+  function renderCommunities() {
+    const list = cache.communities;
+    if (!list) return loading('communities');
+    return `
+      <div class="text-[11px] text-muted px-1 leading-snug">Скрытое командой сообщество пропадает из каталога, новые люди не могут вступить. Участники внутри остаются. Автор сам его не вернёт.</div>
+      ${list.length ? list.map(c => `
+        <div class="glass-card-3d p-3 space-y-1.5">
+          <div class="flex justify-between gap-2"><span class="text-xs font-bold text-ink">${esc(c.name)}</span><span class="text-[10px] ${c.hiddenByStaff ? 'text-si' : 'text-brand'}">${c.hiddenByStaff ? 'скрыто командой' : c.visibility === 'hidden' ? 'по ссылке' : 'в каталоге'}</span></div>
+          <div class="text-[10px] text-muted">${esc(c.owner ? c.owner.displayName : '')}${c.ownerCode ? ` · ${esc(c.ownerCode)}` : ''} · участников: ${c.memberCount} · постов: ${c.postCount}</div>
+          <button onclick="SF.admin.hideCommunity('${SF.js(c.id)}', ${c.hiddenByStaff ? 'false' : 'true'})" class="px-3 py-1.5 rounded-xl ${c.hiddenByStaff ? 'btn-3d-tiffany' : 'btn-3d-dark'} text-[11px]">${c.hiddenByStaff ? 'Вернуть' : 'Скрыть'}</button>
+        </div>`).join('') : card('<div class="text-xs text-muted">Сообществ пока нет.</div>')}`;
+  }
+
+  async function hideCommunity(id, hidden) {
+    if (hidden && !window.confirm('Скрыть сообщество из каталога и закрыть вход новым участникам?')) return;
+    try {
+      await api().admin.hideCommunity(id, hidden);
+      SF.showToast(hidden ? 'Скрыто' : 'Возвращено');
+      refresh('communities');
+    } catch (err) {
+      SF.showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  }
+
   function renderFunnelReview(route) {
     const key = `funnel:${route.id}`;
     const f = cache[key];
@@ -886,7 +912,8 @@
     'admin-mic': 'Проверка микрофона',
     'admin-partners': 'Партнёры',
     'admin-funnels': 'Воронки на проверке',
-    'admin-funnel': 'Проверка воронки'
+    'admin-funnel': 'Проверка воронки',
+    'admin-communities': 'Сообщества'
   };
 
   const RENDER = {
@@ -903,7 +930,8 @@
     'admin-mic': renderMic,
     'admin-partners': renderPartners,
     'admin-funnels': renderFunnels,
-    'admin-funnel': renderFunnelReview
+    'admin-funnel': renderFunnelReview,
+    'admin-communities': renderCommunities
   };
 
   function afterRender(route, state) {
@@ -928,6 +956,7 @@
         return load(`funnels:${status}`, async () => (await a.funnels(status)).funnels);
       }
       case 'admin-funnel': return load(`funnel:${route.id}`, async () => (await a.funnel(route.id)).funnel);
+      case 'admin-communities': return load('communities', async () => (await a.communities()).communities);
       default: return null;
     }
   }
@@ -957,6 +986,7 @@
     searchErrors,
     addStaff,
     removeStaff,
-    decideFunnel
+    decideFunnel,
+    hideCommunity
   };
 })(window);
