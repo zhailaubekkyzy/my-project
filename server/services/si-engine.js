@@ -78,6 +78,20 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
     if (prod.installment) lines.push(`Рассрочка: ${prod.installment}`);
     if (prod.guarantee) lines.push(`Гарантии и возврат: ${prod.guarantee}`);
   }
+  // «Обо мне» from the expert's Profile — only with the expert's permission («пазл»)
+  const me = project.inheritedProfile;
+  if (me) {
+    if (me.headline) lines.push(`Эксперт: ${me.headline}`);
+    if (me.bio) lines.push(`Об эксперте: ${String(me.bio).slice(0, 1200)}`);
+    if (me.regalia) lines.push(`Регалии и сертификаты: ${String(me.regalia).slice(0, 800)}`);
+    if (me.results) lines.push(`Результаты и кейсы: ${String(me.results).slice(0, 800)}`);
+  }
+  // The expert's additions «тема → как отвечать»: they win over the general details above
+  const notes = (project.sellerNotes || []).slice(0, 40);
+  if (notes.length) {
+    lines.push('Дополнения эксперта (на эти темы отвечай именно так; они важнее общих сведений):');
+    for (const n of notes) lines.push(`- ${n.topic}: ${String(n.text).slice(0, 1500)}`);
+  }
   // Only the price the expert typed on the card (old auto-filled tariffs are never used)
   if (project.price_mode === 'free') {
     lines.push('Цена: бесплатно.');

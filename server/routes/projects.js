@@ -57,6 +57,27 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------
+// «Пазл» of an SI-продавец («Бизнес-режим 2.0», шаг 3): permissions, «что дополнить», additions
+// ---------------------------------------------------------------
+const puzzleService = require('../services/puzzle-service');
+const puzzleRoute = (fn, status = 200) => async (req, res, next) => {
+  try {
+    res.status(status).json(await fn(req));
+  } catch (err) {
+    if (err instanceof puzzleService.PuzzleError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+};
+/** GET /api/projects/:id/puzzle */
+router.get('/:id/puzzle', puzzleRoute((req) => puzzleService.puzzle(req.user.userId, req.params.id)));
+/** PUT /api/projects/:id/puzzle/access  { knowsBusiness, knowsProfile } */
+router.put('/:id/puzzle/access', puzzleRoute((req) => puzzleService.setAccess(req.user.userId, req.params.id, req.body || {})));
+/** POST /api/projects/:id/notes  { topic, text, stepId, source } ; PUT / DELETE /api/projects/:id/notes/:noteId */
+router.post('/:id/notes', puzzleRoute((req) => puzzleService.addNote(req.user.userId, req.params.id, req.body || {}), 201));
+router.put('/:id/notes/:noteId', puzzleRoute((req) => puzzleService.updateNote(req.user.userId, req.params.id, req.params.noteId, req.body || {})));
+router.delete('/:id/notes/:noteId', puzzleRoute((req) => puzzleService.deleteNote(req.user.userId, req.params.id, req.params.noteId)));
+
 /**
  * POST /api/projects/quick-start  { goal, about, offer, priceMode, priceLabel, link }
  * «Быстрый старт»: a working SI-seller from one of four simple goals (server/services/quick-start.js).

@@ -284,6 +284,7 @@
     try {
       await api().attachProduct(projectId, productId);
       SF.data.invalidate('consultants');
+      SF.data.invalidate('puzzle:');
       await SF.data.myConsultants();
       showToast(productId ? 'Продукт привязан — SI знает о нём всё' : 'Продукт отвязан');
     } catch (err) {
@@ -769,7 +770,7 @@
   function renderConsultantBrain(c, state) {
     const materials = state.remote.brain && state.remote.brain.filter(m => inBusiness(m, c.businessId));
     return `
-      <div class="glass-card-3d p-4 space-y-3 text-xs">
+      <div id="seller-brain" class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('brain', 'SI-мозг: что знает этот SI')}
         ${!materials ? '<div class="text-muted">Загружаю…</div>' : ''}
         ${materials && !materials.length ? '<div class="text-muted leading-snug">Материалов пока нет. Загрузите программу, прайс или ответы на частые вопросы — SI будет отвечать по ним.</div>' : ''}
@@ -808,6 +809,7 @@
           <button onclick="SF.push('office-client', { id: '${SF.js(i.client_id)}', projectId: '${SF.js(i.consultant.id)}' })" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Открыть переписку и ответить
           </button>
+          ${i.consultant.assisting ? '' : `<button onclick="SF.actions.noteFromInquiry('${SF.js(i.consultant.id)}', ${SF.esc(JSON.stringify(i.reason || ''))})" class="w-full py-1.5 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Научить SI отвечать на это</button>`}
         </div>`).join('') : SF.emptyState('buddy', 'Пока никто не написал', 'Когда клиент нажмёт «Связаться с человеком», обращение появится здесь, а бот пришлёт вам сообщение в Telegram.')}
     `;
   }
@@ -970,7 +972,7 @@
     if (c.assisting) return renderAssistedConsultant(c, route, state);
     const tab = CONSULTANT_TABS.some(t => t.id === route.tab) ? route.tab : 'analytics';
     let body = '';
-    if (tab === 'methodology') body = renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
+    if (tab === 'methodology') body = renderPuzzle(c, route, state) + renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
     if (tab === 'analytics') body = renderSellerFunnel(c, route, state) + renderAnalytics(c, state);
     if (tab === 'income') body = renderSellerClients(c, route, state);
     if (tab === 'broadcasts') body = renderBroadcasts(c, state);
@@ -1091,12 +1093,150 @@
     `;
   }
 
+  // ---------------- «Пазл» («Бизнес-режим 2.0», шаг 3) ----------------
+  // What this SI-продавец knows, what it still lacks, and the expert's own additions «тема → как отвечать».
+  let noteForm = null; // { projectId, id?, topic?, text?, stepId? }
+  function renderPuzzle(c, route, state) {
+    const pz = state.remote.puzzle[c.id];
+    if (!pz) return '<div class="glass-card-3d p-4 text-xs text-muted">Загружаю пазл…</div>';
+    // From «Мне написали»: the form opens with the client's question as the topic
+    if (route.noteTopic && (!noteForm || noteForm.projectId !== c.id)) noteForm = { projectId: c.id, topic: route.noteTopic, source: 'inquiry' };
+    const form = noteForm && noteForm.projectId === c.id ? noteForm : null;
+    const steps = c.steps || [];
+    const stepTitle = (id) => (steps.find(st => st.id === id) || {}).title || '';
+    const pct = Math.round(pz.done / Math.max(1, pz.total) * 100);
+    const toggle = (key, label, hint, on) => `
+      <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
+        <span><span class="block font-semibold text-ink">${label}</span><span class="block text-[10px] text-faint leading-snug">${hint}</span></span>
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="SF.actions.setPuzzleAccess('${SF.js(c.id)}', '${key}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
+      </label>`;
+    const field2 = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          ${SF.sectionTitle('puzzle', 'Пазл: что знает этот SI')}
+          <span class="text-[11px] font-bold ${pz.missingRequired.length ? 'text-amber-500' : 'text-brand'}">${pz.done} из ${pz.total}</span>
+        </div>
+        ${SF.progressBar(pct)}
+        <div class="space-y-1.5">
+          ${pz.items.map(it => `
+            <div class="flex items-center gap-2 p-2 rounded-xl ${it.done ? 'bg-card' : 'bg-sunken'} border border-line">
+              <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] flex-shrink-0 ${it.done ? 'bg-[#81D8D0] text-[#08302c]' : it.required ? 'bg-amber-500/20 text-amber-500' : 'bg-card text-faint border border-line'}">${it.done ? '✓' : it.required ? '!' : '·'}</span>
+              <span class="flex-1 min-w-0">
+                <span class="block font-semibold text-ink">${it.label}${it.required && !it.done ? ' <span class="text-[10px] text-amber-500 font-normal">нужно</span>' : ''}</span>
+                ${it.done ? '' : `<span class="block text-[10px] text-faint leading-snug">${it.hint}</span>`}
+              </span>
+              ${it.done ? '' : `<button onclick="SF.actions.puzzleGo('${SF.js(c.id)}', '${it.place}')" class="px-2 py-1 rounded-lg btn-3d-tiffany text-[10px] flex-shrink-0">Дополнить</button>`}
+            </div>`).join('')}
+        </div>
+        <div class="space-y-1.5">
+          <div class="text-[11px] font-bold text-muted uppercase tracking-wider">Что брать из Мозга</div>
+          ${toggle('knowsBusiness', 'Знает о бизнесе', 'Что вы делаете и для кого — из Офиса → «Мозг».', pz.access.knowsBusiness)}
+          ${toggle('knowsProfile', 'Знает обо мне', 'О себе, регалии и результаты из вашего Профиля.', pz.access.knowsProfile)}
+          <div class="text-[10px] text-faint leading-snug">Продукт и материалы этого SI выбираются ниже.</div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold text-muted uppercase tracking-wider">Дополнения</span>
+            ${!form ? `<button onclick="SF.actions.openNoteForm('${SF.js(c.id)}')" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>Добавить</button>` : ''}
+          </div>
+          <div class="text-[10px] text-faint leading-snug">О чём спрашивают клиенты и как отвечать. SI отвечает на эти темы именно так — даже с подключённой готовой воронкой.</div>
+          ${pz.notes.map(n => `
+            <div class="p-2.5 rounded-xl bg-card border border-line space-y-0.5">
+              <div class="flex items-start justify-between gap-2">
+                <span class="font-bold text-ink">${SF.esc(n.topic)}${n.stepId && stepTitle(n.stepId) ? ` <span class="text-[10px] font-normal text-faint">· шаг «${SF.esc(stepTitle(n.stepId))}»</span>` : ''}</span>
+                <span class="flex gap-1 flex-shrink-0">
+                  <button onclick="SF.actions.editNote('${SF.js(c.id)}', '${SF.js(n.id)}')" class="p-1 text-faint" aria-label="Изменить"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                  <button onclick="SF.actions.deleteNote('${SF.js(c.id)}', '${SF.js(n.id)}')" class="p-1 text-faint" aria-label="Удалить"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </span>
+              </div>
+              <div class="text-ink-2 whitespace-pre-line">${SF.esc(n.text)}</div>
+            </div>`).join('')}
+          ${!pz.notes.length && !form ? '<div class="text-[11px] text-muted">Пока нет. Добавляйте, когда видите в «Мне написали», что SI чего-то не знал.</div>' : ''}
+          ${form ? `
+            <form onsubmit="SF.actions.saveNote(event, '${SF.js(c.id)}')" class="p-2.5 rounded-xl bg-sunken border border-[#81D8D0] space-y-1.5">
+              <input name="topic" required maxlength="120" value="${SF.esc(form.topic || '')}" placeholder="Тема: например «Рассрочка»" class="${field2}" />
+              <textarea name="text" required rows="3" maxlength="1500" placeholder="Как отвечать: например «Только Kaspi Red на 3 месяца»" class="${field2}">${SF.esc(form.text || '')}</textarea>
+              ${steps.length ? `
+                <select name="stepId" class="${field2}">
+                  <option value="">Ко всему разговору</option>
+                  ${steps.map(st => `<option value="${SF.esc(st.id)}" ${form.stepId === st.id ? 'selected' : ''}>Шаг «${SF.esc(st.title)}»</option>`).join('')}
+                </select>` : ''}
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="SF.actions.closeNoteForm()" class="py-2 rounded-xl bg-card border border-line text-ink-2">Отмена</button>
+                <button type="submit" class="py-2 rounded-xl btn-3d-tiffany">${form.id ? 'Сохранить' : 'Добавить'}</button>
+              </div>
+            </form>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // «Дополнить»: to the place where this piece is filled in
+  SF.actions.puzzleGo = (projectId, place) => {
+    if (place === 'business') return SF.openIn('marketplace', 'office', { section: 'brain' });
+    if (place === 'profile') return SF.openIn('profile', 'edit');
+    const target = { product: 'seller-product', card: 'seller-card', materials: 'seller-brain', methodology: 'seller-methodology' }[place];
+    const el = target && document.getElementById(target);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  SF.actions.setPuzzleAccess = async (projectId, key, on) => {
+    try {
+      store().setRemote(`puzzle.${projectId}`, await api().setPuzzleAccess(projectId, { [key]: on }));
+      showToast(on ? 'SI теперь знает это' : 'SI больше не берёт это из Мозга');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.openNoteForm = (projectId) => { noteForm = { projectId }; store().notify(); };
+  SF.actions.closeNoteForm = () => {
+    noteForm = null;
+    const route = store().currentRoute();
+    if (route.noteTopic) SF.patch({ noteTopic: null });
+    else store().notify();
+  };
+  SF.actions.editNote = (projectId, noteId) => {
+    const n = ((store().data.remote.puzzle[projectId] || {}).notes || []).find(x => x.id === noteId);
+    if (n) { noteForm = { projectId, id: n.id, topic: n.topic, text: n.text, stepId: n.stepId }; store().notify(); }
+  };
+  SF.actions.saveNote = async (e, projectId) => {
+    e.preventDefault();
+    const f = e.target;
+    const note = { topic: f.topic.value.trim(), text: f.text.value.trim(), stepId: f.stepId ? f.stepId.value : '', source: (noteForm && noteForm.source) || 'manual' };
+    try {
+      const res = noteForm && noteForm.id
+        ? await api().updateSellerNote(projectId, noteForm.id, note)
+        : await api().addSellerNote(projectId, note);
+      store().setRemote(`puzzle.${projectId}`, res);
+      noteForm = null;
+      if (store().currentRoute().noteTopic) SF.patch({ noteTopic: null });
+      showToast('Сохранено — SI уже отвечает так');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+  SF.actions.deleteNote = async (projectId, noteId) => {
+    if (!window.confirm('Удалить дополнение?')) return;
+    try {
+      store().setRemote(`puzzle.${projectId}`, await api().deleteSellerNote(projectId, noteId));
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  // From «Мне написали»: the client asked something the SI did not know — teach it right here
+  SF.actions.noteFromInquiry = (projectId, reason) => {
+    noteForm = null;
+    SF.openIn('marketplace', 'office-consultant', { id: projectId, tab: 'methodology', noteTopic: String(reason || '').slice(0, 120) });
+  };
+
   // Which product of the business this SI-продавец sells: what is not in its card, it takes from the product
   function renderProductPicker(c, state) {
     const products = c.businessId ? state.remote.products[c.businessId] : [];
     if (!products) return '';
     return `
-      <div class="glass-card-3d p-3.5 space-y-2 text-xs">
+      <div id="seller-product" class="glass-card-3d p-3.5 space-y-2 text-xs">
         ${SF.sectionTitle('shopping-bag', 'Продукт')}
         ${products.length ? `
           <select onchange="SF.actions.attachProduct('${SF.js(c.id)}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs">
@@ -1173,7 +1313,7 @@
   function renderMethodology(c, route = {}) {
     return `${readyFunnelNote(c)}
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
-        <div class="glass-card-3d p-4 space-y-3">
+        <div id="seller-card" class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('store', 'Карточка в Маркетплейсе')}
           ${field('slug', 'Адрес ссылки — латиницей', c.slug, { placeholder: 'Например: aliya-nutri', max: 32, hint: 'Короткий и понятный адрес для Instagram и рассылок. Старая ссылка продолжит работать.' })}
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
@@ -1290,7 +1430,7 @@
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     };
     return `
-      <div class="glass-card-3d p-4 space-y-3 text-xs">
+      <div id="seller-methodology" class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
         <form onsubmit="SF.actions.saveMethodology(event, '${SF.js(c.id)}')" class="space-y-2">
           ${field('methodology', 'Общее описание', c.methodology || '', { rows: 6, max: 3000, placeholder: 'Опишите своими словами, как SI ведёт клиента к покупке: с чего начинает, какие вопросы задаёт, когда предлагает оффер, каким тоном говорит.', hint: 'SI следует этому описанию в каждом разговоре. Ниже — отдельные сценарии для особых случаев.' })}
@@ -1775,6 +1915,7 @@
       });
       SF.data.invalidate('consultants');
       SF.data.invalidate('marketplace');
+      SF.data.invalidate('puzzle:'); // what the SI knows changed
       await SF.data.myConsultants();
       showToast(f.isListed.checked ? 'Сохранено. SI-продавец виден в Маркетплейсе' : 'Сохранено');
     } catch (err) {
@@ -2471,6 +2612,9 @@
         if (tab === 'methodology') {
           SF.data.brain();
           if (c && c.businessId) SF.data.products(c.businessId);
+          if (c && !c.assisting) SF.data.puzzle(route.id);
+          // «Научить SI»: straight to the form
+          if (route.noteTopic) setTimeout(() => document.querySelector('[name=topic]')?.scrollIntoView({ block: 'center' }), 80);
         }
         if (tab === 'analytics') {
           const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';

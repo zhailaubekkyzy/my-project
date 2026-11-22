@@ -77,6 +77,7 @@ const defaultData = {
     businesses: null,        // { businesses: [...], max } — my businesses (up to 3), the main one first
     products: {},            // { [businessId]: [...] } — products of a business
     sellerFunnel: {},        // { ['projectId|days']: { counts } } — the funnel of one AI-продавец
+    puzzle: {},              // { [projectId]: { access, items, done, total, notes } } — «пазл» of an SI-продавец
     sellerFunnelLists: {},   // { ['projectId|days|status']: { clients, done } }
     groups: null,            // my group conversations and invitations (Chats tab)
     groupThreads: {},        // { [groupId]: { group, members, messages, pinned, invitedBy } }

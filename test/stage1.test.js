@@ -2687,6 +2687,54 @@ async function runAllTests() {
     assert.strictEqual((await api('DELETE', `/api/business/assistants/${(await api('GET', '/api/me/profile', helper)).body.user.id}?businessId=${second.id}`, owner)).status, 200);
   });
 
+  await test('78. Пазл: разрешения «о бизнесе / обо мне», что дополнить, дополнения эксперта работают и с воронкой', async () => {
+    const inheritance = require('../server/services/inheritance');
+    const siEngine = require('../server/services/si-engine');
+    const owner = await tokenFor({ id: 780001, first_name: 'Дана', last_name: 'Пазл' });
+    const other = await tokenFor({ id: 780002, first_name: 'Чужой', last_name: 'Пазл' });
+    const prof = (await api('GET', '/api/me/profile', owner)).body.user.profile;
+    await api('PUT', '/api/me/profile', owner, { ...prof, headline: 'Нутрициолог', bio: '10 лет помогаю мамам', regalia: 'Диплом нутрициолога', results: '300 клиентов', businessAgreedAt: new Date().toISOString() });
+    const biz = (await api('POST', '/api/business/businesses', owner, { name: 'Питание', about: 'Питание для всей семьи без диет' })).body.business;
+    const seller = (await api('POST', '/api/projects', owner, { name: 'puzzle', businessId: biz.id })).body;
+
+    assert.strictEqual((await api('GET', `/api/projects/${seller.id}/puzzle`, other)).status, 404, 'Only the owner');
+    let pz = (await api('GET', `/api/projects/${seller.id}/puzzle`, owner)).body;
+    assert.deepStrictEqual(pz.access, { knowsBusiness: true, knowsProfile: false }, 'About the business — yes, about me — no by default');
+    assert.deepStrictEqual(pz.missingRequired.sort(), ['offer', 'payment', 'price'].sort());
+    assert.strictEqual(pz.items.find(i => i.id === 'business').done, true);
+
+    // The product fills the gaps
+    const product = (await api('POST', `/api/business/businesses/${biz.id}/products`, owner, { name: 'Консультация', priceLabel: '10 000 ₸', paymentUrl: 'https://pay.example.com/c' })).body.product;
+    await api('PUT', `/api/business/sellers/${seller.id}/product`, owner, { productId: product.id });
+    pz = (await api('GET', `/api/projects/${seller.id}/puzzle`, owner)).body;
+    assert.deepStrictEqual(pz.missingRequired, [], 'Nothing required is missing');
+
+    // Permissions decide what the SI knows
+    let prompt = siEngine.buildSystemPrompt(await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id])), 'Дана');
+    assert(prompt.includes('Питание для всей семьи без диет'));
+    assert(!prompt.includes('10 лет помогаю мамам'), 'Not about me without permission');
+    await api('PUT', `/api/projects/${seller.id}/puzzle/access`, owner, { knowsBusiness: false, knowsProfile: true });
+    prompt = siEngine.buildSystemPrompt(await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id])), 'Дана');
+    assert(!prompt.includes('Питание для всей семьи без диет'), 'Not about the business when switched off');
+    for (const piece of ['10 лет помогаю мамам', 'Диплом нутрициолога', '300 клиентов']) assert(prompt.includes(piece), piece);
+
+    // Additions: only the owner, with a topic and a text; they reach the SI even with a ready-made funnel connected
+    assert.strictEqual((await api('POST', `/api/projects/${seller.id}/notes`, other, { topic: 'x', text: 'y' })).status, 404);
+    assert.strictEqual((await api('POST', `/api/projects/${seller.id}/notes`, owner, { topic: '', text: 'y' })).status, 400);
+    pz = (await api('POST', `/api/projects/${seller.id}/notes`, owner, { topic: 'Рассрочка', text: 'Только Kaspi Red на 3 месяца', source: 'inquiry' })).body;
+    assert.strictEqual(pz.notes.length, 1);
+    assert.strictEqual(pz.notes[0].source, 'inquiry');
+    await db.run(`UPDATE projects SET funnel_settings = ?, funnel_until = NULL WHERE id = ?`, [JSON.stringify({ goal: 'Воронка маркетолога', methodology: 'Скелет', steps: [], scenarios: [] }), seller.id]);
+    prompt = siEngine.buildSystemPrompt(await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id])), 'Дана');
+    assert(prompt.includes('Скелет'), 'The funnel is followed');
+    assert(prompt.includes('Рассрочка: Только Kaspi Red на 3 месяца'), 'The expert’s addition is there too');
+    const noteId = pz.notes[0].id;
+    pz = (await api('PUT', `/api/projects/${seller.id}/notes/${noteId}`, owner, { topic: 'Рассрочка', text: 'Kaspi Red на 6 месяцев' })).body;
+    assert.strictEqual(pz.notes[0].text, 'Kaspi Red на 6 месяцев');
+    pz = (await api('DELETE', `/api/projects/${seller.id}/notes/${noteId}`, owner)).body;
+    assert.strictEqual(pz.notes.length, 0);
+  });
+
   await test('76. Миграция 030: бизнесы, SI-продавцы и SI-мозг остаются на месте, бизнес становится главным', async () => {
     const Database = require('better-sqlite3');
     const file = path.join(__dirname, '../data/test_migration_030.db');

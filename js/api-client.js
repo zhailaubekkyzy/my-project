@@ -272,6 +272,22 @@
     async archiveProduct(productId) {
       return await apiFetch(`/api/business/products/${encodeURIComponent(productId)}`, { method: 'DELETE' });
     },
+    // «Пазл» of an SI-продавец: permissions, what to add, the expert's additions
+    async getPuzzle(projectId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle`);
+    },
+    async setPuzzleAccess(projectId, access) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle/access`, { method: 'PUT', body: JSON.stringify(access) });
+    },
+    async addSellerNote(projectId, note) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes`, { method: 'POST', body: JSON.stringify(note) });
+    },
+    async updateSellerNote(projectId, noteId, note) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`, { method: 'PUT', body: JSON.stringify(note) });
+    },
+    async deleteSellerNote(projectId, noteId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' });
+    },
     async attachProduct(projectId, productId) {
       return await apiFetch(`/api/business/sellers/${encodeURIComponent(projectId)}/product`, { method: 'PUT', body: JSON.stringify({ productId: productId || null }) });
     },
