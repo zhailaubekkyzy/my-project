@@ -30,6 +30,38 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------
+// Several businesses (up to 3) and their products («Бизнес-режим 2.0», шаг 1)
+// ---------------------------------------------------------------
+const productService = require('../services/product-service');
+
+const handle = (fn, status = 200) => async (req, res, next) => {
+  try {
+    res.status(status).json(await fn(req));
+  } catch (err) {
+    if (err instanceof productService.ProductError) {
+      return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    }
+    sendBusinessError(res, err, next);
+  }
+};
+const me = (req) => req.user.userId;
+
+/** GET /api/business/businesses — my businesses (main first) and the limit; POST — a new one */
+router.get('/businesses', handle((req) => businessService.listBusinesses(me(req))));
+router.post('/businesses', handle(async (req) => ({ business: await businessService.createBusiness(me(req), req.body || {}) }), 201));
+/** PUT /api/business/businesses/:id  { name, about, niche } */
+router.put('/businesses/:id', handle(async (req) => ({ business: await businessService.updateBusiness(me(req), req.params.id, req.body || {}) })));
+
+/** GET /api/business/businesses/:id/products?archived=1 ; POST — a new product */
+router.get('/businesses/:id/products', handle(async (req) => ({ products: await productService.list(me(req), req.params.id, { archived: req.query.archived === '1' }) })));
+router.post('/businesses/:id/products', handle(async (req) => ({ product: await productService.create(me(req), req.params.id, req.body || {}) }), 201));
+/** PUT /api/business/products/:productId ; DELETE — to the archive */
+router.put('/products/:productId', handle(async (req) => ({ product: await productService.update(me(req), req.params.productId, req.body || {}) })));
+router.delete('/products/:productId', handle((req) => productService.archive(me(req), req.params.productId)));
+/** PUT /api/business/sellers/:projectId/product  { productId | null } — tie an AI-продавец to a product */
+router.put('/sellers/:projectId/product', handle((req) => productService.attachToSeller(me(req), req.params.projectId, (req.body || {}).productId || null)));
+
 /**
  * POST /api/business/assistants  { supportCode: "SF-48213" }
  * The owner invites an assistant by the number from the assistant's Profile

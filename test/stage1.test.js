@@ -2657,6 +2657,43 @@ async function runAllTests() {
     for (const extra of ['-wal', '-shm']) if (fs.existsSync(file + extra)) fs.unlinkSync(file + extra);
   });
 
+  await test('76. Миграция 030: бизнесы, SI-продавцы и SI-мозг остаются на месте, бизнес становится главным', async () => {
+    const Database = require('better-sqlite3');
+    const file = path.join(__dirname, '../data/test_migration_030.db');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    const mdb = new Database(file);
+    mdb.pragma('foreign_keys = ON');
+    const dir = path.join(__dirname, '../server/db/migrations');
+    const files = fs.readdirSync(dir).filter(f => /^\d+_.+\.sql$/.test(f)).sort();
+    mdb.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+    for (const f of files.filter(f => parseInt(f, 10) < 30)) mdb.exec(migrator.sqlForDriver(fs.readFileSync(path.join(dir, f), 'utf8'), 'sqlite'));
+    // Before: an expert with a business, an SI-seller, a client, SI-мозг; a person with SI-мозг but no business yet
+    mdb.exec(`
+      INSERT INTO users (id, display_name) VALUES ('usr_e', 'Expert'), ('usr_n', 'NoBiz');
+      INSERT INTO businesses (id, owner_id, name) VALUES ('biz_e', 'usr_e', 'Старое имя');
+      INSERT INTO business_members (id, business_id, user_id, role, status) VALUES ('bm_e', 'biz_e', 'usr_e', 'owner', 'active');
+      INSERT INTO projects (id, owner_id, name, slug, business_id) VALUES ('proj_e', 'usr_e', 'SI', 'si-e', 'biz_e');
+      INSERT INTO brain_materials (id, owner_id, title, source_type, char_count, chunk_count) VALUES ('mat_e', 'usr_e', 'FAQ', 'txt', 10, 1), ('mat_n', 'usr_n', 'Notes', 'txt', 10, 1);
+    `);
+    mdb.exec(migrator.sqlForDriver(fs.readFileSync(path.join(dir, files.find(f => parseInt(f, 10) === 30)), 'utf8'), 'sqlite'));
+    const one = (sql) => mdb.prepare(sql).get();
+    const b = one(`SELECT * FROM businesses WHERE id = 'biz_e'`);
+    assert.strictEqual(b.owner_id, 'usr_e');
+    assert.strictEqual(b.name, 'Старое имя');
+    assert.strictEqual(b.is_primary, 1, 'The existing business is the main one');
+    assert.strictEqual(one(`SELECT business_id FROM projects WHERE id = 'proj_e'`).business_id, 'biz_e', 'The SI-seller stays in it');
+    assert.strictEqual(one(`SELECT business_id FROM brain_materials WHERE id = 'mat_e'`).business_id, 'biz_e', 'SI-мозг goes to the business');
+    assert.strictEqual(one(`SELECT business_id FROM brain_materials WHERE id = 'mat_n'`).business_id, null, 'No business yet — waits for it');
+    assert.strictEqual(mdb.pragma('foreign_key_check').length, 0, 'All links between tables are whole');
+    // A second business of the same person is possible now; a second main one is not
+    mdb.exec(`INSERT INTO businesses (id, owner_id, is_primary) VALUES ('biz_e2', 'usr_e', 0)`);
+    assert.throws(() => mdb.exec(`INSERT INTO businesses (id, owner_id, is_primary) VALUES ('biz_e3', 'usr_e', 1)`), /UNIQUE/);
+    mdb.close();
+    fs.unlinkSync(file);
+    for (const extra of ['-wal', '-shm']) if (fs.existsSync(file + extra)) fs.unlinkSync(file + extra);
+  });
+
   await test('63. Тестовая копия и включение «сначала одному человеку»', async () => {
     const appInfo = require('../server/services/app-info');
     const saved = { appEnv: config.appEnv, isStaging: config.isStaging, features: config.features, betaUsers: config.betaUsers, bot: config.telegramBotUsername };
@@ -3525,6 +3562,93 @@ async function runAllTests() {
       notifyService.CHANNELS.splice(notifyService.CHANNELS.indexOf(recorder), 1);
       Object.assign(config, saved);
     }
+  });
+
+  await test('75. Бизнес-режим 2.0, шаг 1: до 3 бизнесов, главный бизнес не меняется, продукты, SI-мозг по бизнесам, данные идут вниз', async () => {
+    const businessService = require('../server/services/business-service');
+    const inheritance = require('../server/services/inheritance');
+    const siEngine = require('../server/services/si-engine');
+    const owner = await tokenFor({ id: 750001, first_name: 'Мадина', last_name: 'Бизнес' });
+    const other = await tokenFor({ id: 750002, first_name: 'Чужой', last_name: 'Бизнес' });
+    const ownerId = (await api('GET', '/api/me/profile', owner)).body.user.id;
+
+    // Only with the business profile on
+    assert.strictEqual((await api('POST', '/api/business/businesses', owner, { name: 'Нутрициология' })).status, 403);
+    const prof = (await api('GET', '/api/me/profile', owner)).body.user.profile;
+    await api('PUT', '/api/me/profile', owner, { ...prof, businessAgreedAt: new Date().toISOString() });
+
+    // An SI-seller made the old way: the main business appears as before
+    const first = (await api('POST', '/api/projects', owner, { name: 'nutri' })).body;
+    const main = await businessService.businessOfOwner(ownerId);
+    assert.strictEqual(first.business_id, main.id);
+    assert.strictEqual(Number(main.is_primary), 1);
+
+    // Up to 3 businesses; the first one stays the main one
+    assert.strictEqual((await api('POST', '/api/business/businesses', owner, { name: '' })).status, 400);
+    const yoga = (await api('POST', '/api/business/businesses', owner, { name: 'Йога-студия', about: 'Утренняя йога онлайн для занятых мам', niche: 'Йога' })).body.business;
+    assert.strictEqual(yoga.isPrimary, false);
+    const third = (await api('POST', '/api/business/businesses', owner, { name: 'Третий' })).body.business;
+    assert.strictEqual((await api('POST', '/api/business/businesses', owner, { name: 'Четвёртый' })).status, 409, 'Not more than 3');
+    const list = (await api('GET', '/api/business/businesses', owner)).body;
+    assert.strictEqual(list.businesses.length, 3);
+    assert.strictEqual(list.businesses[0].id, main.id, 'The main one first');
+    assert.strictEqual((await businessService.businessOfOwner(ownerId)).id, main.id, 'The main business is still the main one');
+    assert.strictEqual((await api('PUT', `/api/business/businesses/${third.id}`, owner, { name: 'Курсы' })).body.business.name, 'Курсы');
+    assert.strictEqual((await api('PUT', `/api/business/businesses/${third.id}`, other, { name: 'Взлом' })).status, 404, 'Not mine');
+    assert.strictEqual((await api('GET', '/api/business', owner)).body.businesses.length, 3);
+
+    // Products: only in my business, safe links, archive
+    assert.strictEqual((await api('POST', `/api/business/businesses/${yoga.id}/products`, other, { name: 'x' })).status, 404);
+    assert.strictEqual((await api('POST', `/api/business/businesses/${yoga.id}/products`, owner, { name: 'Курс', paymentUrl: 'javascript:alert(1)' })).status, 400);
+    const product = (await api('POST', `/api/business/businesses/${yoga.id}/products`, owner, {
+      name: 'Курс «Йога за 15 минут»', description: '21 день коротких практик', result: 'Спина без боли за 3 недели',
+      format: 'Видео + чат', duration: '21 день', priceLabel: '15 000 ₸', installment: 'Kaspi Red на 3 месяца',
+      paymentUrl: 'https://pay.example.com/yoga', accessUrl: 'https://course.example.com/yoga'
+    })).body.product;
+    assert.strictEqual(product.priceLabel, '15 000 ₸');
+
+    // An AI-продавец in the second business, tied to the product; another person's product cannot be tied
+    assert.strictEqual((await api('POST', '/api/projects', other, { name: 'x', businessId: yoga.id })).status, 404, 'Not my business');
+    assert.strictEqual((await api('POST', '/api/projects', owner, { name: 'y', businessId: main.id, productId: product.id })).status, 404, 'A product of another business');
+    const seller = (await api('POST', '/api/projects', owner, { name: 'yoga', businessId: yoga.id, productId: product.id })).body;
+    assert.strictEqual(seller.business_id, yoga.id);
+    assert.strictEqual(seller.product_id, product.id);
+    assert.strictEqual((await api('PUT', `/api/business/sellers/${first.id}/product`, owner, { productId: product.id })).status, 409, 'Another business');
+
+    // Data goes down: the seller has nothing — it takes from the product and the business; its own wins
+    let effective = await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]));
+    assert.strictEqual(effective.offer, 'Курс «Йога за 15 минут»');
+    assert.strictEqual(effective.price_label, '15 000 ₸');
+    assert.strictEqual(effective.access_url, 'https://course.example.com/yoga');
+    const prompt = siEngine.buildSystemPrompt(effective, 'Мадина');
+    for (const piece of ['Утренняя йога онлайн для занятых мам', 'Спина без боли за 3 недели', 'Kaspi Red на 3 месяца', 'Цена: 15 000 ₸']) {
+      assert(prompt.includes(piece), `The SI knows: ${piece}`);
+    }
+    await api('PUT', `/api/projects/${seller.id}`, owner, { price_label: '12 000 ₸ до пятницы', price_mode: 'fixed' });
+    effective = await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]));
+    assert.strictEqual(effective.price_label, '12 000 ₸ до пятницы', 'The seller’s own price wins');
+    // The chat with clients sees the same
+    const viaChat = await require('../server/services/chat-service').activeProjectBySlug(seller.slug);
+    assert.strictEqual(viaChat.offer, 'Курс «Йога за 15 минут»');
+    // An archived product is not used any more
+    await api('DELETE', `/api/business/products/${product.id}`, owner);
+    effective = await inheritance.withInherited(await db.get('SELECT * FROM projects WHERE id = ?', [seller.id]));
+    assert.strictEqual(effective.offer || null, null);
+    assert.strictEqual((await api('GET', `/api/business/businesses/${yoga.id}/products`, owner)).body.products.length, 0);
+
+    // SI-мозг: a material goes to the named business (or the main one) and is listed per business
+    const up = (token, body, query) => fetch(`${baseUrl}/api/brain/materials?${new URLSearchParams(query)}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body
+    }).then(async r => ({ status: r.status, body: await r.json().catch(() => null) }));
+    const text = 'Частые вопросы о йоге: занятия по 15 минут, подходят новичкам, коврик нужен любой. Повторить можно в любое время. '.repeat(3);
+    assert.strictEqual((await up(owner, text, { name: 'faq.txt', businessId: 'biz_nope' })).status, 404);
+    const inYoga = (await up(owner, text, { name: 'faq.txt', businessId: yoga.id })).body.material;
+    const inMain = (await up(owner, text, { name: 'main.txt' })).body.material;
+    assert.strictEqual(inYoga.businessId, yoga.id);
+    assert.strictEqual(inMain.businessId, main.id, 'Without a business — the main one');
+    const yogaList = (await api('GET', `/api/brain/materials?businessId=${yoga.id}`, owner)).body.materials;
+    assert.deepStrictEqual(yogaList.map(m => m.id), [inYoga.id]);
+    assert.strictEqual((await api('GET', '/api/brain/materials', owner)).body.materials.length, 2, 'Without a filter — all mine, as before');
   });
 
   await new Promise(resolve => httpServer.close(resolve));

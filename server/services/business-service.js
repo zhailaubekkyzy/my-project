@@ -1,5 +1,7 @@
 // server/services/business-service.js - Business: the expert's company above their SI-sellers.
 // SI-sellers (projects), clients, conversations and "Мне написали" requests belong to it.
+// Up to MAX_BUSINESSES per person (owner's decision 22 Nov., «Бизнес-режим 2.0»): the first one is the main one
+// (is_primary) — everything that existed before works with it; the others are added in Профиль.
 // Members are rows in business_members (owner / assistant). Rights are checked here, on the
 // server: the app talks only to the server, RLS in Supabase stays a closed lock.
 const crypto = require('crypto');
@@ -9,6 +11,8 @@ const supportService = require('./support-service');
 
 // How many assistants one business may have. Raise this number to allow more.
 const MAX_ASSISTANTS = 1;
+// How many businesses one person may open (owner's decision 22 Nov.)
+const MAX_BUSINESSES = 3;
 
 const ROLES = { OWNER: 'owner', ASSISTANT: 'assistant' };
 
@@ -34,8 +38,20 @@ function displayNameOf(user) {
   return custom || user.display_name;
 }
 
+// The person's main business (the one everything worked with before several businesses existed)
 async function businessOfOwner(ownerId) {
-  return db.get('SELECT * FROM businesses WHERE owner_id = ?', [ownerId]);
+  return db.get('SELECT * FROM businesses WHERE owner_id = ? AND is_primary = 1', [ownerId]);
+}
+
+// All my businesses, the main one first
+async function businessesOfOwner(ownerId) {
+  return db.all('SELECT * FROM businesses WHERE owner_id = ? ORDER BY is_primary DESC, created_at, id', [ownerId]);
+}
+
+// One of my businesses (null if it is not mine)
+async function ownBusiness(ownerId, businessId) {
+  if (!businessId) return null;
+  return db.get('SELECT * FROM businesses WHERE id = ? AND owner_id = ?', [String(businessId), ownerId]);
 }
 
 /**
@@ -49,18 +65,20 @@ async function attachOwnerData(business) {
   await db.run(`UPDATE conversations SET business_id = ? WHERE ${inOwnerProjects}`, [business.id, business.id]);
   await db.run(`UPDATE direct_inquiries SET business_id = ? WHERE ${inOwnerProjects}`, [business.id, business.id]);
   await db.run(`UPDATE client_events SET business_id = ? WHERE ${inOwnerProjects}`, [business.id, business.id]);
+  // SI-мозг uploaded before the business existed joins it
+  await db.run('UPDATE brain_materials SET business_id = ? WHERE owner_id = ? AND business_id IS NULL', [business.id, business.owner_id]);
   return moved.changes || 0;
 }
 
 /**
- * The expert's business; created on first need (the expert turned an SI-seller on).
- * Safe to call twice at the same time: one business per owner (UNIQUE owner_id).
+ * The expert's main business; created on first need (the expert turned an SI-seller on).
+ * Safe to call twice at the same time: one main business per owner (unique index on owner_id where is_primary = 1).
  */
 async function ensureBusiness(ownerId) {
   let business = await businessOfOwner(ownerId);
   if (!business) {
     await db.run(
-      'INSERT INTO businesses (id, owner_id) VALUES (?, ?) ON CONFLICT (owner_id) DO NOTHING',
+      'INSERT INTO businesses (id, owner_id, is_primary) VALUES (?, ?, 1) ON CONFLICT (owner_id) WHERE is_primary = 1 DO NOTHING',
       [newId('biz'), ownerId]
     );
     business = await businessOfOwner(ownerId);
@@ -124,6 +142,104 @@ async function listMembers(businessId) {
   }));
 }
 
+// ---------- Several businesses ----------
+const cleanText = (v, max) => String(v === undefined || v === null ? '' : v).replace(/\r/g, '').trim().slice(0, max);
+
+function businessView(b, counts = {}) {
+  return {
+    id: b.id,
+    name: b.name || '',
+    about: b.about || '',
+    niche: b.niche || '',
+    isPrimary: Boolean(b.is_primary),
+    createdAt: b.created_at,
+    sellers: counts.sellers || 0,
+    products: counts.products || 0,
+    materials: counts.materials || 0
+  };
+}
+
+async function countsOf(businessId) {
+  const row = await db.get(
+    `SELECT
+       (SELECT COUNT(*) FROM projects WHERE business_id = ?) AS sellers,
+       (SELECT COUNT(*) FROM products WHERE business_id = ? AND status = 'active') AS products,
+       (SELECT COUNT(*) FROM brain_materials WHERE business_id = ?) AS materials`,
+    [businessId, businessId, businessId]
+  );
+  return { sellers: Number(row.sellers) || 0, products: Number(row.products) || 0, materials: Number(row.materials) || 0 };
+}
+
+/** My businesses with what is inside each (AI-продавцы, products, SI-мозг materials). */
+async function listBusinesses(ownerId) {
+  const rows = await businessesOfOwner(ownerId);
+  const out = [];
+  for (const b of rows) out.push(businessView(b, await countsOf(b.id)));
+  return { businesses: out, max: MAX_BUSINESSES };
+}
+
+async function hasBusinessProfile(userId) {
+  const user = await db.get('SELECT profile FROM users WHERE id = ?', [userId]);
+  try { return Boolean(JSON.parse((user && user.profile) || '{}').businessAgreedAt); } catch (e) { return false; }
+}
+
+/**
+ * A new business: only with the business profile on (Office terms), up to MAX_BUSINESSES.
+ * The first one becomes the main one.
+ */
+async function createBusiness(ownerId, input = {}) {
+  if (!await hasBusinessProfile(ownerId)) throw new BusinessError('Бизнесы открываются в бизнес-профиле: включите его в Профиле.', 403, 'NOT_BUSINESS');
+  const name = cleanText(input.name, 80);
+  if (!name) throw new BusinessError('Напишите название бизнеса', 400, 'NO_NAME');
+  const existing = await businessesOfOwner(ownerId);
+  if (existing.length >= MAX_BUSINESSES) throw new BusinessError(`Можно открыть до ${MAX_BUSINESSES} бизнесов.`, 409, 'BUSINESS_LIMIT');
+  let business;
+  if (!existing.length) {
+    business = await ensureBusiness(ownerId);
+  } else {
+    const id = newId('biz');
+    await db.run('INSERT INTO businesses (id, owner_id, is_primary) VALUES (?, ?, 0)', [id, ownerId]);
+    await db.run(
+      `INSERT INTO business_members (id, business_id, user_id, role, status) VALUES (?, ?, ?, 'owner', 'active')`,
+      [newId('bm'), id, ownerId]
+    );
+    business = await db.get('SELECT * FROM businesses WHERE id = ?', [id]);
+  }
+  return updateBusiness(ownerId, business.id, { name, about: input.about, niche: input.niche });
+}
+
+/** Name, «о бизнесе», niche — only the owner. */
+async function updateBusiness(ownerId, businessId, input = {}) {
+  const b = await ownBusiness(ownerId, businessId);
+  if (!b) throw new BusinessError('Бизнес не найден', 404, 'NOT_FOUND');
+  const fields = [];
+  const values = [];
+  if (input.name !== undefined) {
+    const name = cleanText(input.name, 80);
+    if (!name) throw new BusinessError('Напишите название бизнеса', 400, 'NO_NAME');
+    fields.push('name = ?'); values.push(name);
+  }
+  if (input.about !== undefined) { fields.push('about = ?'); values.push(cleanText(input.about, 2000)); }
+  if (input.niche !== undefined) { fields.push('niche = ?'); values.push(cleanText(input.niche, 120) || null); }
+  if (fields.length) {
+    await db.run(`UPDATE businesses SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, b.id]);
+  }
+  const fresh = await db.get('SELECT * FROM businesses WHERE id = ?', [b.id]);
+  return businessView(fresh, await countsOf(b.id));
+}
+
+/**
+ * Where a new AI-продавец / SI-мозг material goes: the business I named (must be mine), otherwise the main one.
+ */
+async function targetBusiness(ownerId, businessId) {
+  if (businessId) {
+    const b = await ownBusiness(ownerId, businessId);
+    if (!b) throw new BusinessError('Бизнес не найден', 404, 'NOT_FOUND');
+    return b;
+  }
+  return ensureBusiness(ownerId);
+}
+
 /**
  * What the signed-in person sees about businesses: their own (with members) and the ones they assist.
  */
@@ -140,6 +256,9 @@ async function overview(userId) {
   const ownProjects = own ? null : await db.get('SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?', [userId]);
   return {
     business: own ? { id: own.id, members: await listMembers(own.id) } : null,
+    // All my businesses (up to MAX_BUSINESSES), the main one first
+    businesses: (await listBusinesses(userId)).businesses,
+    maxBusinesses: MAX_BUSINESSES,
     // No business yet: it appears when the expert turns an SI-seller on (Office terms or a new SI-seller)
     canCreate: !own && Boolean(ownProjects && ownProjects.count),
     maxAssistants: MAX_ASSISTANTS,
@@ -215,6 +334,13 @@ async function removeAssistant(ownerId, assistantUserId) {
 
 module.exports = {
   MAX_ASSISTANTS,
+  MAX_BUSINESSES,
+  businessesOfOwner,
+  ownBusiness,
+  listBusinesses,
+  createBusiness,
+  updateBusiness,
+  targetBusiness,
   ROLES,
   ASSISTANT_PERMISSIONS,
   BusinessError,

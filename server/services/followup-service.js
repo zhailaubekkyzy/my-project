@@ -185,7 +185,9 @@ async function runSilentScenarios(now = new Date()) {
   );
   let checked = 0;
   let fired = 0;
-  for (const project of projects) {
+  for (const row of projects) {
+    // What the seller has not filled in comes from its product and business
+    const project = await require('./inheritance').withInherited(row);
     const settings = settingsOf(project);
     const all = funnelService.normalizeScenarios(settings.scenarios);
     const scenarios = all.filter(s => s.when === 'silent').sort((a, b) => a.minutes - b.minutes);

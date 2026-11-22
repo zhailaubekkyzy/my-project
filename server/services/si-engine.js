@@ -66,6 +66,18 @@ function buildSystemPrompt(project, expertName, knowledge = []) {
   if (project.offer) lines.push(`Оффер: ${project.offer}`);
   if (project.description) lines.push(`Описание: ${project.description}`);
   if (project.niche) lines.push(`Ниша: ${project.niche}`);
+  // From the business and the product (server/services/inheritance.js): the expert explained it once
+  const biz = project.inheritedBusiness;
+  if (biz && biz.about) lines.push(`О бизнесе${biz.name ? ` «${biz.name}»` : ''}: ${String(biz.about).slice(0, 1500)}`);
+  const prod = project.inheritedProduct;
+  if (prod) {
+    lines.push(`Продукт: ${prod.name}`);
+    if (prod.result) lines.push(`Результат для клиента: ${prod.result}`);
+    if (prod.format) lines.push(`Формат: ${prod.format}`);
+    if (prod.duration) lines.push(`Длительность: ${prod.duration}`);
+    if (prod.installment) lines.push(`Рассрочка: ${prod.installment}`);
+    if (prod.guarantee) lines.push(`Гарантии и возврат: ${prod.guarantee}`);
+  }
   // Only the price the expert typed on the card (old auto-filled tariffs are never used)
   if (project.price_mode === 'free') {
     lines.push('Цена: бесплатно.');

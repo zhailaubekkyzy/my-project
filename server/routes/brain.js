@@ -36,7 +36,7 @@ const idList = (value) => String(value || '').split(',').map(s => s.trim()).filt
  */
 router.get('/materials', async (req, res, next) => {
   try {
-    res.json({ materials: await brainService.listMaterials(req.user.userId) });
+    res.json({ materials: await brainService.listMaterials(req.user.userId, req.query.businessId || null) });
   } catch (err) {
     next(err);
   }
@@ -52,7 +52,8 @@ router.post('/materials', readFileBody, async (req, res, next) => {
       buffer: Buffer.isBuffer(req.body) ? req.body : null,
       filename: String(req.query.name || '').slice(0, 200),
       title: String(req.query.title || '').slice(0, 200),
-      consultantIds: idList(req.query.consultants)
+      consultantIds: idList(req.query.consultants),
+      businessId: req.query.businessId ? String(req.query.businessId) : null
     });
     res.status(201).json({ material });
   } catch (err) {

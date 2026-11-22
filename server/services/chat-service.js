@@ -100,7 +100,8 @@ async function activeProjectBySlug(slug) {
   // An old address of the SI-seller (the expert changed the link) still opens it
   const current = await require('./slug-service').canonical(slug);
   if (!current) return null;
-  return db.get('SELECT * FROM projects WHERE slug = ? AND status = ?', [current, 'active']);
+  // What the seller has not filled in comes from its product and business (server/services/inheritance.js)
+  return require('./inheritance').withInherited(await db.get('SELECT * FROM projects WHERE slug = ? AND status = ?', [current, 'active']));
 }
 
 async function expertNameOf(project) {
