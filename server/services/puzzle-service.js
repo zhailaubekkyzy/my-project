@@ -202,10 +202,10 @@ async function writeToBrain(project, fpz, answers, values) {
     if (project.puzzle_material_id) await brain.deleteMaterial(project.owner_id, project.puzzle_material_id);
     let materialId = null;
     if (loose.length) {
-      const body = [`Ответы эксперта для воронки «${funnel.title || ''}» (SI-продавец «${project.name}»)`, '']
+      const body = [`Ответы эксперта для шаблона «${funnel.title || ''}» (SI-продавец «${project.name}»)`, '']
         .concat(loose.map(x => `${x.piece}. ${x.q}\n${x.a}\n`)).join('\n');
       const m = await brain.addMaterial(project.owner_id, {
-        buffer: Buffer.from(body, 'utf8'), filename: 'answers.txt', title: `Ответы для воронки «${String(funnel.title || project.name).slice(0, 80)}»`,
+        buffer: Buffer.from(body, 'utf8'), filename: 'answers.txt', title: `Ответы для шаблона «${String(funnel.title || project.name).slice(0, 80)}»`,
         consultantIds: [], businessId: project.business_id || null
       });
       materialId = m && m.id;
@@ -232,7 +232,7 @@ async function checkRelease(project, fpz, answers) {
 async function savePiece(ownerId, projectId, pieceId, input = {}) {
   const project = await ownProject(ownerId, projectId);
   const fpz = spec.funnelPuzzleOf(project);
-  if (!fpz) throw new PuzzleError('У этого SI-продавца нет пазла воронки', 404, 'NO_FUNNEL_PUZZLE');
+  if (!fpz) throw new PuzzleError('У этого SI-продавца нет пазла шаблона', 404, 'NO_FUNNEL_PUZZLE');
   const piece = fpz.pieces.find(p => p.id === String(pieceId || ''));
   if (!piece) throw new PuzzleError('Кусочек не найден — обновите экран', 404, 'NOT_FOUND');
   const given = input.answers && typeof input.answers === 'object' ? input.answers : {};

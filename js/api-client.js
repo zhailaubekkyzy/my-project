@@ -480,7 +480,15 @@
       decide: (pid, decision, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
       endPercent: (pid, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/end`, { method: 'POST', body: JSON.stringify({ reason }) }),
       apply: (pid, projectId, materials, brainAccess) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/apply`, { method: 'POST', body: JSON.stringify({ projectId, materials, brainAccess }) }),
-      detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' })
+      detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' }),
+      // Step 4: the bought template becomes a new SI-продавец; a complaint about a template
+      launch: (pid, data) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/launch`, { method: 'POST', body: JSON.stringify(data) }),
+      report: (id, reason) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/report`, { method: 'POST', body: JSON.stringify({ reason }) })
+    },
+
+    // Sections and niches of the Marketplace (no login needed)
+    async getNiches() {
+      return await apiFetch('/api/niches');
     },
 
     // Marketplace and public profiles (no login needed)
@@ -756,11 +764,14 @@
     // ---------- Support panel (team only) ----------
     admin: {
       overview: () => apiFetch('/api/admin/overview'),
-      funnels: (status) => apiFetch(`/api/admin/funnels?status=${encodeURIComponent(status || 'review')}`),
+      funnels: (status) => apiFetch(`/api/admin/funnels?status=${encodeURIComponent(status || 'published')}`),
       funnel: (id) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}`),
       decideFunnel: (id, decision, note) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }),
       partners: () => apiFetch('/api/admin/partners'),
       communities: () => apiFetch('/api/admin/communities'),
+      niches: () => apiFetch('/api/admin/niches'),
+      renameNiche: (id, name, section) => apiFetch(`/api/admin/niches/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name, section }) }),
+      mergeNiche: (id, intoId) => apiFetch(`/api/admin/niches/${encodeURIComponent(id)}/merge`, { method: 'POST', body: JSON.stringify({ intoId }) }),
       hideCommunity: (id, hidden) => apiFetch(`/api/admin/communities/${encodeURIComponent(id)}/hide`, { method: 'POST', body: JSON.stringify({ hidden }) }),
       feedbackList: (status) => apiFetch(`/api/admin/feedback${status ? `?status=${encodeURIComponent(status)}` : ''}`),
       feedback: (id) => apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`),

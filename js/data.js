@@ -300,6 +300,11 @@
       store().setRemote(`projectLinks.${projectId}`, await api().getProjectLinks(projectId));
     }, 30000),
 
+    // Sections and niches of the Marketplace (public): filters and suggestions while typing a niche
+    niches: (maxAge = 120000) => ensure('niches', async () => {
+      store().setRemote('niches', await api().getNiches());
+    }, maxAge),
+
     // Who has the «SMARTFLOW PARTNER» badge (public; a few people)
     partners: () => ensure('partners', async () => {
       store().setRemote('partners', (await api().getPartners()).partners || []);

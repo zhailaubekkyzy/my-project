@@ -28,9 +28,11 @@ const CARD_SQL = `
          (SELECT COUNT(*) FROM clients c WHERE c.project_id = p.id) AS dialogs,
          (SELECT COUNT(*) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_count,
          (SELECT AVG(r.rating) FROM reviews r WHERE r.project_id = p.id AND r.hidden_at IS NULL) AS review_average,
-         ${BROUGHT_SQL} AS owner_brought
+         ${BROUGHT_SQL} AS owner_brought,
+         n.name AS niche_name, n.section AS niche_section
   FROM projects p
-  JOIN users u ON u.id = p.owner_id`;
+  JOIN users u ON u.id = p.owner_id
+  LEFT JOIN niches n ON n.id = p.niche_id`;
 
 function toCard(row) {
   const authorUser = {
@@ -47,6 +49,10 @@ function toCard(row) {
     roleTitle: row.role_title || 'SI-консультант',
     photoUrl: mediaUrl(row.photo_media_id),
     category: row.category || 'sales',
+    // The niche of the card (migration 034): for the filters «раздел → ниша»
+    niche: row.niche_id && row.niche_name ? { id: row.niche_id, name: row.niche_name, section: row.niche_section } : null,
+    // «Вопросы и ответы» — seen by everyone
+    faq: require('./faq').normalizeFaq(row.faq),
     offer: row.offer || '',
     description: row.description || '',
     priceLabel: row.price_label || '',
