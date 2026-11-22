@@ -272,6 +272,32 @@
     async archiveProduct(productId) {
       return await apiFetch(`/api/business/products/${encodeURIComponent(productId)}`, { method: 'DELETE' });
     },
+    // «Пазл» of an SI-продавец: permissions, what to add, the expert's additions
+    async getPuzzle(projectId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle`);
+    },
+    async setPuzzleAccess(projectId, access) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle/access`, { method: 'PUT', body: JSON.stringify(access) });
+    },
+    // The funnel author's puzzle: «Сохранить» of a piece, answers found in the Brain, the Brain access
+    async savePuzzlePiece(projectId, pieceId, answers) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle/pieces/${encodeURIComponent(pieceId)}`, { method: 'PUT', body: JSON.stringify({ answers }) });
+    },
+    async suggestPuzzlePiece(projectId, pieceId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle/pieces/${encodeURIComponent(pieceId)}/suggest`, { method: 'POST', body: '{}' });
+    },
+    async setPuzzleBrain(projectId, on) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/puzzle/brain`, { method: 'PUT', body: JSON.stringify({ on }) });
+    },
+    async addSellerNote(projectId, note) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes`, { method: 'POST', body: JSON.stringify(note) });
+    },
+    async updateSellerNote(projectId, noteId, note) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`, { method: 'PUT', body: JSON.stringify(note) });
+    },
+    async deleteSellerNote(projectId, noteId) {
+      return await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' });
+    },
     async attachProduct(projectId, productId) {
       return await apiFetch(`/api/business/sellers/${encodeURIComponent(projectId)}/product`, { method: 'PUT', body: JSON.stringify({ productId: productId || null }) });
     },
@@ -453,7 +479,7 @@
       buy: (id, note) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/buy`, { method: 'POST', body: JSON.stringify({ note }) }),
       decide: (pid, decision, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
       endPercent: (pid, reason) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/end`, { method: 'POST', body: JSON.stringify({ reason }) }),
-      apply: (pid, projectId, materials) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/apply`, { method: 'POST', body: JSON.stringify({ projectId, materials }) }),
+      apply: (pid, projectId, materials, brainAccess) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/apply`, { method: 'POST', body: JSON.stringify({ projectId, materials, brainAccess }) }),
       detach: (pid) => apiFetch(`/api/ready-funnels/purchases/${encodeURIComponent(pid)}/detach`, { method: 'POST' })
     },
 

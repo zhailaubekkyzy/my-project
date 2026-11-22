@@ -8,6 +8,7 @@
 // The funnel is frozen at submission: the team approves exactly what experts will get.
 const crypto = require('crypto');
 const db = require('../db');
+const puzzleSpec = require('./puzzle-spec');
 const funnelService = require('./funnel-service');
 const { mediaUrl } = require('./media-service');
 const { cleanText, cleanUrl } = require('./profile-service');
@@ -50,7 +51,8 @@ function snapshotOf(project) {
     instructions: String(s.instructions || '').slice(0, 4000),
     methodology: String(s.methodology || '').slice(0, 3000),
     steps,
-    scenarios: funnelService.normalizeScenarios(s.scenarios, steps)
+    scenarios: funnelService.normalizeScenarios(s.scenarios, steps),
+    puzzle: puzzleSpec.normalizePuzzle(s.puzzle)
   };
 }
 
@@ -83,6 +85,11 @@ function toFunnel(row, view = 'public') {
     priceLabel: row.price_label || '',
     steps: publicSteps(snapshot),
     scenarioCount: (snapshot.scenarios || []).length,
+    // What the expert will fill in after buying: only the pieces' names (the questions come after buying)
+    puzzle: (() => {
+      const pz = puzzleSpec.normalizePuzzle(snapshot.puzzle);
+      return pz.pieces.length ? { pieces: pz.pieces.map(p => ({ title: p.title, required: p.required })), release: puzzleSpec.releaseText(pz) } : null;
+    })(),
     author: {
       id: row.author_id,
       name: authorName(row),

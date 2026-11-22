@@ -139,6 +139,12 @@
       store().setRemote(`products.${businessId}`, (await api().listProducts(businessId)).products || []);
     }, maxAge),
 
+    // «Пазл» of one SI-продавец (only its owner)
+    puzzle: (projectId, maxAge = 15000) => ensure(`puzzle:${projectId}`, async () => {
+      if (!signedIn()) return false;
+      store().setRemote(`puzzle.${projectId}`, await api().getPuzzle(projectId));
+    }, maxAge),
+
     // The funnel of one AI-продавец: counts per status and a portion of clients of one status
     sellerFunnel: (projectId, businessId, days) => ensure(`sfunnel:${projectId}|${days}`, async () => {
       if (!signedIn()) return false;

@@ -130,6 +130,8 @@ function decorateProject(p) {
     ready_funnel: funnelPurchaseId ? {
       purchaseId: funnelPurchaseId,
       active: funnelActive,
+      // Bought with the author's puzzle: waits until the author's condition is met (migration 032)
+      waitingPuzzle: Number(p.funnel_released) === 0,
       until: funnelUntil || null,
       title: safeJsonParse(funnelSettings).title || '',
       steps: (safeJsonParse(funnelSettings).steps || []).map(st => ({ id: st.id, title: st.title }))

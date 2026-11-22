@@ -77,6 +77,7 @@ const defaultData = {
     businesses: null,        // { businesses: [...], max } — my businesses (up to 3), the main one first
     products: {},            // { [businessId]: [...] } — products of a business
     sellerFunnel: {},        // { ['projectId|days']: { counts } } — the funnel of one AI-продавец
+    puzzle: {},              // { [projectId]: { access, items, done, total, notes } } — «пазл» of an SI-продавец
     sellerFunnelLists: {},   // { ['projectId|days|status']: { clients, done } }
     groups: null,            // my group conversations and invitations (Chats tab)
     groupThreads: {},        // { [groupId]: { group, members, messages, pinned, invitedBy } }
@@ -330,6 +331,8 @@ class Store {
         clientLimit: settings.clientLimit || 40,
         scenarios: Array.isArray(settings.scenarios) ? settings.scenarios : [],
         steps: Array.isArray(settings.steps) ? settings.steps : [],
+        // The puzzle the buyers of this seller's funnel fill in (the author decides it)
+        puzzle: settings.puzzle && Array.isArray(settings.puzzle.pieces) ? settings.puzzle : { pieces: [], release: { mode: 'required' } },
         category: p.category || settings.category || 'sales',
         offer: p.offer || '',
         description: p.description || '',

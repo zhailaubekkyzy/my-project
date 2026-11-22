@@ -284,6 +284,7 @@
     try {
       await api().attachProduct(projectId, productId);
       SF.data.invalidate('consultants');
+      SF.data.invalidate('puzzle:');
       await SF.data.myConsultants();
       showToast(productId ? 'Продукт привязан — SI знает о нём всё' : 'Продукт отвязан');
     } catch (err) {
@@ -342,6 +343,12 @@
               <span class="block text-sm font-bold text-ink truncate">${SF.esc(c.name)}</span>
               <span class="block text-[11px]">${SF.siLabel(c.roleTitle)}</span>
               <span class="block text-[10px] mt-0.5 ${c.isListed ? 'text-brand' : 'text-faint'}">${c.isListed ? 'В Маркетплейсе' : 'Не в Маркетплейсе'}${c.paymentUrl ? ' · ссылка на оплату есть' : ' · нет ссылки на оплату'}</span>
+              ${state.remote.puzzle[c.id] ? `
+                <span class="flex items-center gap-1.5 mt-1">
+                  <i data-lucide="puzzle" class="w-3 h-3 ${state.remote.puzzle[c.id].missingRequired.length ? 'text-amber-500' : 'text-brand'}"></i>
+                  <span class="flex-1 h-1.5 rounded-full bg-sunken overflow-hidden"><span class="block h-full rounded-full ${state.remote.puzzle[c.id].missingRequired.length ? 'bg-amber-500' : 'bg-[#81D8D0]'}" style="width:${Math.round(state.remote.puzzle[c.id].done / Math.max(1, state.remote.puzzle[c.id].total) * 100)}%"></span></span>
+                  <span class="text-[10px] font-semibold text-muted">${state.remote.puzzle[c.id].done}/${state.remote.puzzle[c.id].total}</span>
+                </span>` : ''}
             </span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
           </button>`).join('')}
@@ -769,7 +776,7 @@
   function renderConsultantBrain(c, state) {
     const materials = state.remote.brain && state.remote.brain.filter(m => inBusiness(m, c.businessId));
     return `
-      <div class="glass-card-3d p-4 space-y-3 text-xs">
+      <div id="seller-brain" class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('brain', 'SI-мозг: что знает этот SI')}
         ${!materials ? '<div class="text-muted">Загружаю…</div>' : ''}
         ${materials && !materials.length ? '<div class="text-muted leading-snug">Материалов пока нет. Загрузите программу, прайс или ответы на частые вопросы — SI будет отвечать по ним.</div>' : ''}
@@ -808,6 +815,7 @@
           <button onclick="SF.push('office-client', { id: '${SF.js(i.client_id)}', projectId: '${SF.js(i.consultant.id)}' })" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Открыть переписку и ответить
           </button>
+          ${i.consultant.assisting ? '' : `<button onclick="SF.actions.noteFromInquiry('${SF.js(i.consultant.id)}', ${SF.esc(JSON.stringify(i.reason || ''))})" class="w-full py-1.5 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Научить SI отвечать на это</button>`}
         </div>`).join('') : SF.emptyState('buddy', 'Пока никто не написал', 'Когда клиент нажмёт «Связаться с человеком», обращение появится здесь, а бот пришлёт вам сообщение в Telegram.')}
     `;
   }
@@ -970,7 +978,7 @@
     if (c.assisting) return renderAssistedConsultant(c, route, state);
     const tab = CONSULTANT_TABS.some(t => t.id === route.tab) ? route.tab : 'analytics';
     let body = '';
-    if (tab === 'methodology') body = renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
+    if (tab === 'methodology') body = renderPuzzle(c, route, state) + renderProductPicker(c, state) + renderMethodology(c, route) + renderConsultantBrain(c, state) + renderAuthorPuzzle(c) + (SF.funnels ? SF.funnels.consultantBlock(c) : '');
     if (tab === 'analytics') body = renderSellerFunnel(c, route, state) + renderAnalytics(c, state);
     if (tab === 'income') body = renderSellerClients(c, route, state);
     if (tab === 'broadcasts') body = renderBroadcasts(c, state);
@@ -1091,12 +1099,485 @@
     `;
   }
 
+  // ---------------- «Пазл» («Бизнес-режим 2.0», шаг 3) ----------------
+  // What this SI-продавец knows, what it still lacks, and the expert's own additions «тема → как отвечать».
+  let noteForm = null; // { projectId, id?, topic?, text?, stepId? }
+  // The open piece of the funnel author's puzzle: one question at a time (owner's decision 22 Nov., «интервью»)
+  let pieceForm = null; // { projectId, pieceId, index, draft: { questionId: text }, found: { questionId: true }, saving }
+  function renderPuzzle(c, route, state) {
+    const pz = state.remote.puzzle[c.id];
+    if (!pz) return '<div class="glass-card-3d p-4 text-xs text-muted">Загружаю пазл…</div>';
+    // From «Мне написали»: the form opens with the client's question as the topic
+    if (route.noteTopic && (!noteForm || noteForm.projectId !== c.id)) noteForm = { projectId: c.id, topic: route.noteTopic, source: 'inquiry' };
+    const form = noteForm && noteForm.projectId === c.id ? noteForm : null;
+    const steps = c.steps || [];
+    const stepTitle = (id) => (steps.find(st => st.id === id) || {}).title || '';
+    const toggle = (key, label, hint, on) => `
+      <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
+        <span><span class="block font-semibold text-ink">${label}</span><span class="block text-[10px] text-faint leading-snug">${hint}</span></span>
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="SF.actions.setPuzzleAccess('${SF.js(c.id)}', '${key}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
+      </label>`;
+    const field2 = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
+    const funnel = pz.mode === 'funnel';
+    return `
+      <div class="glass-card-3d p-4 space-y-3 text-xs">
+        ${renderPuzzleGame(c, pz)}
+        ${funnel ? renderPieceInterview(c, pz) : ''}
+        <div class="space-y-1.5">
+          <div class="text-[11px] font-bold text-muted uppercase tracking-wider">Что брать из Мозга</div>
+          ${funnel ? `
+            <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
+              <span><span class="block font-semibold text-ink">Доступ воронки к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть в Мозге, подставится в ответы само. Ваши ответы тоже сохранятся в Мозг.</span></span>
+              <input type="checkbox" ${pz.access.brain ? 'checked' : ''} onchange="SF.actions.setPuzzleBrain('${SF.js(c.id)}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
+            </label>` : ''}
+          ${toggle('knowsBusiness', 'Знает о бизнесе', 'Что вы делаете и для кого — из Офиса → «Мозг».', pz.access.knowsBusiness)}
+          ${toggle('knowsProfile', 'Знает обо мне', 'О себе, регалии и результаты из вашего Профиля.', pz.access.knowsProfile)}
+          <div class="text-[10px] text-faint leading-snug">Продукт и материалы этого SI выбираются ниже.</div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold text-muted uppercase tracking-wider">Дополнения</span>
+            ${!form ? `<button onclick="SF.actions.openNoteForm('${SF.js(c.id)}')" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>Добавить</button>` : ''}
+          </div>
+          <div class="text-[10px] text-faint leading-snug">О чём спрашивают клиенты и как отвечать. SI отвечает на эти темы именно так — даже с подключённой готовой воронкой.</div>
+          ${pz.notes.map(n => `
+            <div class="p-2.5 rounded-xl bg-card border border-line space-y-0.5">
+              <div class="flex items-start justify-between gap-2">
+                <span class="font-bold text-ink">${SF.esc(n.topic)}${n.stepId && stepTitle(n.stepId) ? ` <span class="text-[10px] font-normal text-faint">· шаг «${SF.esc(stepTitle(n.stepId))}»</span>` : ''}</span>
+                <span class="flex gap-1 flex-shrink-0">
+                  <button onclick="SF.actions.editNote('${SF.js(c.id)}', '${SF.js(n.id)}')" class="p-1 text-faint" aria-label="Изменить"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                  <button onclick="SF.actions.deleteNote('${SF.js(c.id)}', '${SF.js(n.id)}')" class="p-1 text-faint" aria-label="Удалить"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </span>
+              </div>
+              <div class="text-ink-2 whitespace-pre-line">${SF.esc(n.text)}</div>
+            </div>`).join('')}
+          ${!pz.notes.length && !form ? '<div class="text-[11px] text-muted">Пока нет. Добавляйте, когда видите в «Мне написали», что SI чего-то не знал.</div>' : ''}
+          ${form ? `
+            <form onsubmit="SF.actions.saveNote(event, '${SF.js(c.id)}')" class="p-2.5 rounded-xl bg-sunken border border-[#81D8D0] space-y-1.5">
+              <input name="topic" required maxlength="120" value="${SF.esc(form.topic || '')}" placeholder="Тема: например «Рассрочка»" class="${field2}" />
+              <textarea name="text" required rows="3" maxlength="1500" placeholder="Как отвечать: например «Только Kaspi Red на 3 месяца»" class="${field2}">${SF.esc(form.text || '')}</textarea>
+              ${steps.length ? `
+                <select name="stepId" class="${field2}">
+                  <option value="">Ко всему разговору</option>
+                  ${steps.map(st => `<option value="${SF.esc(st.id)}" ${form.stepId === st.id ? 'selected' : ''}>Шаг «${SF.esc(st.title)}»</option>`).join('')}
+                </select>` : ''}
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="SF.actions.closeNoteForm()" class="py-2 rounded-xl bg-card border border-line text-ink-2">Отмена</button>
+                <button type="submit" class="py-2 rounded-xl btn-3d-tiffany">${form.id ? 'Сохранить' : 'Добавить'}</button>
+              </div>
+            </form>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // ---------------- The puzzle as a game (owner's request 22 Nov.: «геймифицируй пазл») ----------------
+  // 8 pieces around the SI in the middle — like the logo: SI in the centre, the pieces of knowledge around it.
+  // A piece lights up when it is really filled (the server checks the real data — nothing is made up).
+  // Levels of the SI; «Следующий кусочек» — the most important missing one; confetti when a piece or a level is new.
+  const PIECE_SHORT = { offer: 'Продукт', price: 'Цена', payment: 'Оплата', business: 'О бизнесе', profile: 'Обо мне', materials: 'Материалы', path: 'Путь клиента', access: 'Доступ' };
+  const PIECE_ICON = { offer: 'shopping-bag', price: 'wallet', payment: 'receipt', business: 'briefcase', profile: 'user', materials: 'file-text', path: 'route', access: 'gift' };
+  // Grid 3×3: the SI in the middle cell (index 4), the pieces around it clockwise from the top left
+  const PIECE_CELLS = [0, 1, 2, 5, 8, 7, 6, 3];
+  const PUZZLE_LEVELS = [
+    { name: 'Собирается', hint: 'Соберите оранжевые кусочки — и SI сможет продавать.' },
+    { name: 'Готов продавать', hint: 'Главное есть. Ещё кусочки — и SI ответит на больше вопросов.' },
+    { name: 'Хорошо подготовлен', hint: 'Почти всё на месте. Осталось чуть-чуть.' },
+    { name: 'Пазл собран', hint: 'SI знает всё основное. Учите его дальше: «Научить SI» в «Мне написали».' },
+    { name: 'Собран и учится у вас', hint: 'Каждое дополнение делает SI точнее.' }
+  ];
+  function puzzleLevel(pz) {
+    if (pz.missingRequired.length) return 0;
+    if (pz.done === pz.total) return pz.notes.length >= 3 ? 4 : 3;
+    return pz.done >= Math.ceil(pz.total * 0.75) ? 2 : 1;
+  }
+
+  function renderPuzzleGame(c, pz) {
+    const level = puzzleLevel(pz);
+    const funnel = pz.mode === 'funnel';
+    // A piece of the funnel author opens its questions right here; the standard ones lead to their place
+    const go = (it) => funnel ? `SF.actions.openPiece('${SF.js(c.id)}', '${SF.js(it.id)}')` : `SF.actions.puzzleGo('${SF.js(c.id)}', '${it.place}')`;
+    const short = (it) => funnel ? SF.esc(it.label) : (PIECE_SHORT[it.id] || it.label);
+    const icon = (it) => (it.done ? (funnel ? 'check' : PIECE_ICON[it.id] || 'puzzle') : 'puzzle');
+    const order = { true: 0, false: 1 };
+    // The next piece: a required one first, then in the list order
+    const next = pz.items.filter(i => !i.done).sort((x, y) => order[x.required] - order[y.required])[0] || null;
+    const cells = Array(9).fill(null);
+    pz.items.slice(0, 8).forEach((it, i) => { cells[PIECE_CELLS[i]] = it; });
+    // Fewer pieces than 8 (the author decides): empty places around the SI stay quiet
+    const empty = '<div class="aspect-square rounded-2xl border border-dashed border-line opacity-40"></div>';
+    const piece = (it) => `
+      <button onclick="${go(it)}" title="${SF.esc(it.label)}"
+        class="aspect-square rounded-2xl flex flex-col items-center justify-center gap-1 p-1 text-center transition
+          ${pieceForm && pieceForm.projectId === c.id && pieceForm.pieceId === it.id ? 'ring-2 ring-[#0d9488]' : ''}
+          ${it.done ? 'bg-[#81D8D0] text-[#08302c] shadow' : it.required ? 'border-2 border-dashed border-amber-500 bg-amber-500/10 text-amber-500' : 'border-2 border-dashed border-line-2 bg-sunken text-faint'}">
+        <i data-lucide="${icon(it)}" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold leading-tight line-clamp-2">${short(it)}</span>
+      </button>`;
+    return `
+      <div class="flex items-center justify-between gap-2">
+        ${SF.sectionTitle('puzzle', 'Пазл SI')}
+        <span class="text-[11px] font-bold ${pz.missingRequired.length ? 'text-amber-500' : 'text-brand'}">${pz.done} из ${pz.total}</span>
+      </div>
+      <div class="grid grid-cols-3 gap-1.5 max-w-[300px] mx-auto">
+        ${cells.map((it, i) => (i === 4 ? `
+          <div class="aspect-square rounded-2xl bg-[var(--si-bubble)] border border-[var(--si-bubble-line)] flex flex-col items-center justify-center gap-1">
+            ${SF.avatar(c.photoUrl, { size: 40, kind: 'si' })}
+            <span class="text-[9px] font-bold text-si">Ур. ${level + 1}</span>
+          </div>` : it ? piece(it) : empty)).join('')}
+      </div>
+      ${funnel ? `
+        <div class="p-2.5 rounded-xl text-[11px] leading-snug ${pz.release.released ? 'bg-[#81D8D0]/15 border border-[#81D8D0] text-ink' : 'bg-amber-500/10 border border-amber-500/50 text-ink'}">
+          ${pz.release.released
+            ? `<b class="text-brand">Воронка${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} работает</b> — SI продаёт по ней. Кусочки этой воронки выбрал её автор.`
+            : `<b class="text-amber-500">Воронка${pz.funnelTitle ? ` «${SF.esc(pz.funnelTitle)}»` : ''} включится</b>, ${SF.esc(pz.release.text)} — так решил её автор, чтобы SI не продавал без нужного. Пока SI работает по вашей методологии.`}
+        </div>` : ''}
+      <div class="p-3 rounded-2xl bg-sunken border border-line space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-extrabold text-ink">${PUZZLE_LEVELS[level].name}</span>
+          <span class="text-sm tracking-widest" aria-label="Уровень ${level + 1} из 5"><span class="text-amber-400">${'★'.repeat(level + 1)}</span><span class="text-faint">${'★'.repeat(4 - level)}</span></span>
+        </div>
+        <div class="text-[11px] text-muted leading-snug">${PUZZLE_LEVELS[level].hint}</div>
+        ${next ? `
+          <button onclick="${go(next)}" class="w-full py-2.5 rounded-xl ${next.required ? 'btn-3d-tiffany' : 'btn-3d-dark'} text-xs flex items-center justify-center gap-1.5">
+            <i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Следующий кусочек: ${SF.esc(next.label)}
+          </button>
+          <div class="text-[10px] text-faint text-center leading-snug">${SF.esc(next.hint)}</div>` : ''}
+        ${pz.notes.length ? `<div class="text-[10px] text-brand font-semibold text-center">Вы научили SI ${pz.notes.length} ${pz.notes.length % 10 === 1 && pz.notes.length % 100 !== 11 ? 'теме' : 'темам'}</div>` : ''}
+      </div>`;
+  }
+
+  // ---------------- The author's editor: the puzzle the buyers of this funnel fill in ----------------
+  // The author (marketer) decides which pieces this funnel needs, the questions of each piece, where the
+  // answer may already be in the buyer's Brain, and when the funnel may start selling. Frozen on publishing.
+  const PUZZLE_SOURCES = [
+    ['', 'Эксперт отвечает сам'],
+    ['brain', 'Материалы SI-мозга (SI найдёт сам)'],
+    ['business.about', 'Мозг → о бизнесе'],
+    ['business.niche', 'Мозг → ниша'],
+    ['product.name', 'Продукт → название'],
+    ['product.description', 'Продукт → описание'],
+    ['product.result', 'Продукт → результат клиента'],
+    ['product.format', 'Продукт → формат'],
+    ['product.duration', 'Продукт → длительность'],
+    ['product.price_label', 'Продукт → цена'],
+    ['product.installment', 'Продукт → рассрочка'],
+    ['product.guarantee', 'Продукт → гарантия'],
+    ['seller.payment_url', 'Ссылка на оплату'],
+    ['seller.access_url', 'Ссылка на доступ после оплаты'],
+    ['profile.headline', 'Профиль → чем занимаюсь'],
+    ['profile.bio', 'Профиль → о себе'],
+    ['profile.regalia', 'Профиль → регалии'],
+    ['profile.results', 'Профиль → результаты']
+  ];
+  const MAX_AUTHOR_PIECES = 8;
+  const MAX_AUTHOR_QUESTIONS = 6;
+  let authorPuzzle = null; // { projectId, open, pieces, release }
+
+  function authorDraft(c) {
+    if (!authorPuzzle || authorPuzzle.projectId !== c.id) {
+      const src = c.puzzle || { pieces: [], release: { mode: 'required' } };
+      authorPuzzle = { projectId: c.id, open: false, pieces: JSON.parse(JSON.stringify(src.pieces || [])), release: { mode: 'required', ...(src.release || {}) } };
+    }
+    return authorPuzzle;
+  }
+
+  function renderAuthorPuzzle(c) {
+    if (!SF.feature('funnels') || c.assisting) return '';
+    const d = authorDraft(c);
+    const f = 'w-full bg-card border border-line-2 rounded-xl px-2.5 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
+    const pid = SF.js(c.id);
+    if (!d.open) {
+      return `
+        <div class="glass-card-3d p-3.5 flex items-center gap-3 text-xs">
+          <i data-lucide="puzzle" class="w-5 h-5 text-brand flex-shrink-0"></i>
+          <span class="flex-1 text-ink-2 leading-snug"><b class="text-ink">Пазл для покупателей воронки</b><br>${d.pieces.length ? `Кусочков: ${d.pieces.length}. Эксперт ответит на ваши вопросы, и воронка включится по вашему условию.` : 'Какие сведения нужны вашей воронке от эксперта — решаете вы.'}</span>
+          <button onclick="SF.actions.authorPuzzleOpen(true)" class="px-3 py-2 rounded-xl btn-3d-dark text-[11px] flex-shrink-0">${d.pieces.length ? 'Изменить' : 'Создать'}</button>
+        </div>`;
+    }
+    const inp = (path, value, ph, max) => `<input value="${SF.esc(value || '')}" maxlength="${max}" placeholder="${ph}" oninput="SF.actions.authorPuzzleSet('${path}', this.value)" class="${f}" />`;
+    return `
+      <div id="author-puzzle" class="glass-card-3d p-4 space-y-3 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          ${SF.sectionTitle('puzzle', 'Пазл для покупателей воронки')}
+          <button onclick="SF.actions.authorPuzzleOpen(false)" class="p-1 text-faint" aria-label="Свернуть"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
+        </div>
+        <div class="text-[11px] text-muted leading-snug">Эксперт, купивший воронку, увидит эти кусочки вокруг своего SI и ответит на вопросы по одному. Что уже есть в его Мозге, подставится само. Без лишнего: только то, что нужно этой воронке. До ${MAX_AUTHOR_PIECES} кусочков, в каждом до ${MAX_AUTHOR_QUESTIONS} вопросов. Изменения дойдут до покупателей, когда вы снова опубликуете воронку.</div>
+        ${d.pieces.map((p, i) => `
+          <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-2">
+            <div class="flex items-center gap-1.5">
+              <span class="w-6 h-6 rounded-lg bg-[#81D8D0] text-[#08302c] text-[11px] font-extrabold flex items-center justify-center flex-shrink-0">${i + 1}</span>
+              ${inp(`${i}.title`, p.title, 'Название кусочка: например «Ваш клиент»', 40)}
+              <button onclick="SF.actions.authorPuzzleRemove(${i})" class="p-1.5 rounded-lg btn-3d-dark flex-shrink-0" aria-label="Удалить кусочек"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+            <label class="flex items-center gap-2 text-[11px] text-ink-2"><input type="checkbox" ${p.required !== false ? 'checked' : ''} onchange="SF.actions.authorPuzzleSet('${i}.required', this.checked)" class="w-4 h-4 accent-[#0d9488]" />Обязательный</label>
+            ${(p.questions || []).map((q, j) => `
+              <div class="p-2 rounded-xl bg-card border border-line space-y-1.5">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[10px] font-bold text-faint w-5 flex-shrink-0">${j + 1}.</span>
+                  ${inp(`${i}.q.${j}.text`, q.text, 'Вопрос эксперту', 200)}
+                  <button onclick="SF.actions.authorPuzzleRemove(${i}, ${j})" class="p-1 text-faint flex-shrink-0" aria-label="Удалить вопрос"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                </div>
+                ${inp(`${i}.q.${j}.hint`, q.hint, 'Подсказка (необязательно): например «возраст, ситуация, боль»', 200)}
+                <select onchange="SF.actions.authorPuzzleSet('${i}.q.${j}.source', this.value)" class="${f}">
+                  ${PUZZLE_SOURCES.map(([v, label]) => `<option value="${v}" ${String(q.source || '') === v ? 'selected' : ''}>${v ? 'Ответ может быть: ' : ''}${label}</option>`).join('')}
+                </select>
+              </div>`).join('')}
+            ${(p.questions || []).length < MAX_AUTHOR_QUESTIONS ? `<button onclick="SF.actions.authorPuzzleAdd(${i})" class="w-full py-1.5 rounded-xl bg-card border border-dashed border-line-2 text-ink-2 text-[11px]">+ Вопрос</button>` : ''}
+          </div>`).join('')}
+        ${d.pieces.length < MAX_AUTHOR_PIECES ? `<button onclick="SF.actions.authorPuzzleAdd()" class="w-full py-2 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Кусочек</button>` : ''}
+        <div class="space-y-1.5 pt-2 border-t border-line">
+          <div class="font-semibold text-ink-2">Когда воронка начинает продавать у эксперта</div>
+          <select onchange="SF.actions.authorPuzzleSet('release.mode', this.value)" class="${f}">
+            <option value="required" ${d.release.mode === 'required' ? 'selected' : ''}>Когда собраны все обязательные кусочки</option>
+            <option value="all" ${d.release.mode === 'all' ? 'selected' : ''}>Когда собраны все кусочки</option>
+            <option value="count" ${d.release.mode === 'count' ? 'selected' : ''}>Когда собрано столько кусочков:</option>
+          </select>
+          ${d.release.mode === 'count' ? `<input type="number" min="1" max="${Math.max(1, d.pieces.length)}" value="${SF.esc(d.release.count || d.pieces.length || 1)}" oninput="SF.actions.authorPuzzleSet('release.count', this.value)" class="${f}" />` : ''}
+          <div class="text-[10px] text-faint leading-snug">Пока условие не выполнено, SI эксперта работает по его методологии — неполный SI не испортит ваши цифры и имя.</div>
+        </div>
+        <button onclick="SF.actions.authorPuzzleSave('${pid}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Сохранить пазл</button>
+      </div>`;
+  }
+
+  SF.actions.authorPuzzleOpen = (open) => { if (authorPuzzle) { authorPuzzle.open = open; store().notify(); } };
+  // Typing keeps the draft without re-drawing; a checkbox or a select re-draws only when it changes the form
+  SF.actions.authorPuzzleSet = (path, value) => {
+    if (!authorPuzzle) return;
+    const parts = path.split('.');
+    if (parts[0] === 'release') {
+      authorPuzzle.release[parts[1]] = parts[1] === 'count' ? parseInt(value, 10) || 1 : value;
+      if (parts[1] === 'mode') store().notify();
+      return;
+    }
+    const piece = authorPuzzle.pieces[Number(parts[0])];
+    if (!piece) return;
+    if (parts[1] === 'q') {
+      const q = (piece.questions || [])[Number(parts[2])];
+      if (q) q[parts[3]] = value;
+    } else piece[parts[1]] = value;
+  };
+  SF.actions.authorPuzzleAdd = (pieceIndex) => {
+    if (!authorPuzzle) return;
+    if (pieceIndex === undefined) authorPuzzle.pieces.push({ title: '', required: true, questions: [{ text: '', hint: '', source: '' }] });
+    else authorPuzzle.pieces[pieceIndex].questions.push({ text: '', hint: '', source: '' });
+    store().notify();
+  };
+  SF.actions.authorPuzzleRemove = (pieceIndex, questionIndex) => {
+    if (!authorPuzzle) return;
+    if (questionIndex === undefined) authorPuzzle.pieces.splice(pieceIndex, 1);
+    else authorPuzzle.pieces[pieceIndex].questions.splice(questionIndex, 1);
+    store().notify();
+  };
+  SF.actions.authorPuzzleSave = async (id) => {
+    if (!authorPuzzle || needServer()) return;
+    try {
+      const project = await api().getProject(id);
+      const res = await api().updateProject(id, { custom_ai_settings: { ...(project.custom_ai_settings || {}), puzzle: { pieces: authorPuzzle.pieces, release: authorPuzzle.release } } });
+      const puzzle = (res.custom_ai_settings || {}).puzzle || { pieces: [], release: { mode: 'required' } };
+      store().updateOfficeConsultant(id, { puzzle });
+      authorPuzzle = { projectId: id, open: false, pieces: JSON.parse(JSON.stringify(puzzle.pieces)), release: { ...puzzle.release } };
+      store().notify();
+      showToast(puzzle.pieces.length ? `Пазл сохранён: кусочков ${puzzle.pieces.length}. Опубликуйте воронку снова, чтобы он дошёл до покупателей` : 'Пазл пуст: кусочек без названия или без вопросов не сохраняется');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+
+  // ---------------- A piece of the funnel author's puzzle: questions one by one ----------------
+  // What the Brain has is already in the answer (the expert may change it); «Сохранить» at the bottom → confetti.
+  function renderPieceInterview(c, pz) {
+    const form = pieceForm && pieceForm.projectId === c.id ? pieceForm : null;
+    const piece = form && pz.items.find(i => i.id === form.pieceId);
+    if (!piece) return '';
+    const qs = piece.questions;
+    const i = Math.min(form.index, qs.length - 1);
+    const q = qs[i];
+    const value = form.draft[q.id] !== undefined ? form.draft[q.id] : (q.answer || q.prefill || '');
+    const fromBrain = !q.answer && ((q.prefill && form.draft[q.id] === undefined) || form.found[q.id]);
+    const last = i === qs.length - 1;
+    return `
+      <div id="puzzle-piece" class="p-3 rounded-2xl bg-card border-2 border-[#81D8D0] space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-extrabold text-ink flex items-center gap-1.5"><i data-lucide="puzzle" class="w-4 h-4 text-brand"></i>${SF.esc(piece.label)}</span>
+          <button onclick="SF.actions.closePiece()" class="p-1 text-faint" aria-label="Закрыть"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="flex gap-1" aria-label="Вопрос ${i + 1} из ${qs.length}">
+          ${qs.map((x, j) => `<span class="flex-1 h-1.5 rounded-full ${j < i ? 'bg-[#81D8D0]' : j === i ? 'bg-[#0d9488]' : 'bg-sunken'}"></span>`).join('')}
+        </div>
+        <div class="text-[10px] text-faint">Вопрос ${i + 1} из ${qs.length}</div>
+        <div class="text-[13px] font-bold text-ink leading-snug">${SF.esc(q.text)}</div>
+        ${q.hint ? `<div class="text-[11px] text-muted leading-snug">${SF.esc(q.hint)}</div>` : ''}
+        ${fromBrain ? `<div class="text-[10px] font-semibold text-brand flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i>${form.found[q.id] ? 'SI нашёл в ваших материалах' : `Взято из Мозга${q.sourceLabel ? ` (${SF.esc(q.sourceLabel)})` : ''}`} — проверьте и поправьте, если нужно</div>` : ''}
+        ${form.searching && q.source === 'brain' && !value ? '<div class="text-[10px] text-faint">SI ищет ответ в ваших материалах…</div>' : ''}
+        <textarea id="piece-answer" rows="4" maxlength="2000" oninput="SF.actions.pieceInput('${SF.js(q.id)}', this.value)"
+          placeholder="Ваш ответ своими словами" class="w-full bg-sunken border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]">${SF.esc(value)}</textarea>
+        <div class="grid ${i > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5">
+          ${i > 0 ? '<button onclick="SF.actions.pieceStep(-1)" class="py-2 rounded-xl bg-sunken border border-line text-ink-2">Назад</button>' : ''}
+          ${last ? '' : '<button onclick="SF.actions.pieceStep(1)" class="py-2 rounded-xl btn-3d-dark">Дальше</button>'}
+          ${last && i > 0 ? '<span></span>' : ''}
+        </div>
+        ${last ? `<button onclick="SF.actions.savePiece()" ${form.saving ? 'disabled' : ''} class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>${form.saving ? 'Сохраняю…' : 'Сохранить'}</button>` : ''}
+      </div>`;
+  }
+
+  // Remember what this phone has seen, so the next look does not throw the confetti again
+  function rememberPuzzle(projectId, pz) {
+    try { localStorage.setItem(`sf_puzzle_${projectId}`, JSON.stringify({ done: pz.done, level: puzzleLevel(pz) })); } catch (e) { /* private mode */ }
+  }
+
+  SF.actions.openPiece = async (projectId, pieceId) => {
+    const pz = store().data.remote.puzzle[projectId];
+    const piece = pz && pz.items.find(i => i.id === pieceId);
+    if (!piece) return;
+    // The first question without an answer (all answered — from the start, to look and change)
+    const first = piece.questions.findIndex(q => !q.answer);
+    pieceForm = { projectId, pieceId, index: first < 0 ? 0 : first, draft: {}, found: {}, saving: false, searching: false };
+    store().notify();
+    setTimeout(() => { const el = document.getElementById('puzzle-piece'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+    // «SI найдёт сам»: questions the author pointed to the Brain's materials
+    if (pz.access.brain && piece.questions.some(q => q.source === 'brain' && !q.answer)) {
+      pieceForm.searching = true;
+      try {
+        const res = await api().suggestPuzzlePiece(projectId, pieceId);
+        if (pieceForm && pieceForm.pieceId === pieceId) {
+          for (const [qid, text] of Object.entries(res.suggestions || {})) {
+            if (pieceForm.draft[qid] === undefined) { pieceForm.draft[qid] = text; pieceForm.found[qid] = true; }
+          }
+        }
+      } catch (err) { /* nothing found — the expert writes it */ }
+      if (pieceForm) { pieceForm.searching = false; store().notify(); }
+    }
+  };
+  SF.actions.closePiece = () => { pieceForm = null; store().notify(); };
+  SF.actions.pieceInput = (qid, value) => { if (pieceForm) pieceForm.draft[qid] = value; };
+  SF.actions.pieceStep = (delta) => {
+    if (!pieceForm) return;
+    pieceForm.index = Math.max(0, pieceForm.index + delta);
+    store().notify();
+    setTimeout(() => { const el = document.getElementById('piece-answer'); if (el) el.focus(); }, 50);
+  };
+  SF.actions.savePiece = async () => {
+    const form = pieceForm;
+    if (!form || form.saving) return;
+    const pz = store().data.remote.puzzle[form.projectId];
+    const piece = pz && pz.items.find(i => i.id === form.pieceId);
+    if (!piece) return;
+    // Every question goes: what the expert typed, else what was there (the saved answer or the Brain's)
+    const answers = {};
+    for (const q of piece.questions) answers[q.id] = String(form.draft[q.id] !== undefined ? form.draft[q.id] : (q.answer || q.prefill || '')).trim();
+    form.saving = true;
+    store().notify();
+    try {
+      const res = await api().savePuzzlePiece(form.projectId, form.pieceId, answers);
+      const { saved, ...next } = res;
+      pieceForm = null;
+      rememberPuzzle(form.projectId, next);
+      store().setRemote(`puzzle.${form.projectId}`, next);
+      SF.data.invalidate('office'); // the funnel may have just started
+      // Dopamine on every «Сохранить» (owner's decision): the bigger the step, the bigger the word
+      SF.confetti();
+      if (saved.released) showToast('Пазл собран — воронка включена, SI продаёт по ней 🎉');
+      else if (saved.newlyDone) showToast(`Кусочек «${piece.label}» на месте 🧩 Собрано ${next.done} из ${next.total}`);
+      else if (saved.done) showToast('Сохранено — SI уже знает это ✨');
+      else showToast(`Сохранено. Осталось ответить: ${piece.questions.filter(q => !answers[q.id]).length}`);
+    } catch (err) {
+      form.saving = false;
+      store().notify();
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+  SF.actions.setPuzzleBrain = async (projectId, on) => {
+    try {
+      store().setRemote(`puzzle.${projectId}`, await api().setPuzzleBrain(projectId, on));
+      showToast(on ? 'Воронка берёт ответы из Мозга' : 'Воронка не берёт ответы из Мозга');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  // A piece or a level is new since this phone last saw this SI-продавец: confetti and a short word
+  function celebratePuzzle(projectId, pz) {
+    const key = `sf_puzzle_${projectId}`;
+    const level = puzzleLevel(pz);
+    let seen = null;
+    try { seen = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { seen = null; }
+    try { localStorage.setItem(key, JSON.stringify({ done: pz.done, level })); } catch (e) { /* private mode */ }
+    if (!seen) return; // the first look is the starting point
+    if (level > seen.level) {
+      SF.confetti();
+      showToast(`Новый уровень SI: «${PUZZLE_LEVELS[level].name}» 🎉`);
+    } else if (pz.done > seen.done) {
+      SF.confetti();
+      showToast('Новый кусочек пазла на месте 🧩');
+    }
+  }
+
+  // «Дополнить»: to the place where this piece is filled in
+  SF.actions.puzzleGo = (projectId, place) => {
+    if (place === 'business') return SF.openIn('marketplace', 'office', { section: 'brain' });
+    if (place === 'profile') return SF.openIn('profile', 'edit');
+    const target = { product: 'seller-product', card: 'seller-card', materials: 'seller-brain', methodology: 'seller-methodology' }[place];
+    const el = target && document.getElementById(target);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  SF.actions.setPuzzleAccess = async (projectId, key, on) => {
+    try {
+      store().setRemote(`puzzle.${projectId}`, await api().setPuzzleAccess(projectId, { [key]: on }));
+      showToast(on ? 'SI теперь знает это' : 'SI больше не берёт это из Мозга');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  SF.actions.openNoteForm = (projectId) => { noteForm = { projectId }; store().notify(); };
+  SF.actions.closeNoteForm = () => {
+    noteForm = null;
+    const route = store().currentRoute();
+    if (route.noteTopic) SF.patch({ noteTopic: null });
+    else store().notify();
+  };
+  SF.actions.editNote = (projectId, noteId) => {
+    const n = ((store().data.remote.puzzle[projectId] || {}).notes || []).find(x => x.id === noteId);
+    if (n) { noteForm = { projectId, id: n.id, topic: n.topic, text: n.text, stepId: n.stepId }; store().notify(); }
+  };
+  SF.actions.saveNote = async (e, projectId) => {
+    e.preventDefault();
+    const f = e.target;
+    const note = { topic: f.topic.value.trim(), text: f.text.value.trim(), stepId: f.stepId ? f.stepId.value : '', source: (noteForm && noteForm.source) || 'manual' };
+    try {
+      const res = noteForm && noteForm.id
+        ? await api().updateSellerNote(projectId, noteForm.id, note)
+        : await api().addSellerNote(projectId, note);
+      store().setRemote(`puzzle.${projectId}`, res);
+      noteForm = null;
+      if (store().currentRoute().noteTopic) SF.patch({ noteTopic: null });
+      showToast('Сохранено — SI уже отвечает так');
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не сохранилось', err));
+    }
+  };
+  SF.actions.deleteNote = async (projectId, noteId) => {
+    if (!window.confirm('Удалить дополнение?')) return;
+    try {
+      store().setRemote(`puzzle.${projectId}`, await api().deleteSellerNote(projectId, noteId));
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
+    }
+  };
+
+  // From «Мне написали»: the client asked something the SI did not know — teach it right here
+  SF.actions.noteFromInquiry = (projectId, reason) => {
+    noteForm = null;
+    SF.openIn('marketplace', 'office-consultant', { id: projectId, tab: 'methodology', noteTopic: String(reason || '').slice(0, 120) });
+  };
+
   // Which product of the business this SI-продавец sells: what is not in its card, it takes from the product
   function renderProductPicker(c, state) {
     const products = c.businessId ? state.remote.products[c.businessId] : [];
     if (!products) return '';
     return `
-      <div class="glass-card-3d p-3.5 space-y-2 text-xs">
+      <div id="seller-product" class="glass-card-3d p-3.5 space-y-2 text-xs">
         ${SF.sectionTitle('shopping-bag', 'Продукт')}
         ${products.length ? `
           <select onchange="SF.actions.attachProduct('${SF.js(c.id)}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs">
@@ -1162,8 +1643,10 @@
     if (!f) return '';
     return `
       <div class="glass-card-3d p-3.5 space-y-1.5 text-xs border border-[#81D8D0]">
-        <div class="font-bold text-ink flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4 text-brand"></i>${f.active ? 'Подключена готовая воронка' : 'Готовая воронка не продлена'} «${SF.esc(f.title)}»</div>
-        <div class="text-[11px] text-ink-2 leading-snug">${f.active
+        <div class="font-bold text-ink flex items-center gap-1.5"><i data-lucide="layers" class="w-4 h-4 text-brand"></i>${f.waitingPuzzle ? 'Готовая воронка ждёт пазл' : f.active ? 'Подключена готовая воронка' : 'Готовая воронка не продлена'} «${SF.esc(f.title)}»</div>
+        <div class="text-[11px] text-ink-2 leading-snug">${f.waitingPuzzle
+          ? 'Соберите пазл выше — и SI начнёт вести клиентов по её шагам. Пока он работает по вашей методологии ниже.'
+          : f.active
           ? `SI ведёт клиентов по её шагам: ${f.steps.map(st => SF.esc(st.title)).join(' → ')}. Ваши цель, инструкции, шаги и сценарии ниже сохранены и снова заработают, если отключить воронку${f.until ? ' или не продлить оплату' : ''}.`
           : 'Оплаченный месяц закончился — SI снова работает по вашей методологии ниже. Оплатите следующий месяц, чтобы вернуть воронку.'}</div>
         <button type="button" onclick="SF.push('office-funnels', { view: 'bought' })" class="text-[11px] text-brand font-semibold">Купленные воронки →</button>
@@ -1173,7 +1656,7 @@
   function renderMethodology(c, route = {}) {
     return `${readyFunnelNote(c)}
       <form onsubmit="SF.actions.saveConsultant(event, '${SF.js(c.id)}')" class="space-y-3 text-xs">
-        <div class="glass-card-3d p-4 space-y-3">
+        <div id="seller-card" class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('store', 'Карточка в Маркетплейсе')}
           ${field('slug', 'Адрес ссылки — латиницей', c.slug, { placeholder: 'Например: aliya-nutri', max: 32, hint: 'Короткий и понятный адрес для Instagram и рассылок. Старая ссылка продолжит работать.' })}
           ${field('offer', 'Оффер — что получит клиент', c.offer, { placeholder: 'Например: выйти из операционки за 8 недель', max: 200 })}
@@ -1290,7 +1773,7 @@
       return `${SCENARIO_WHEN[sc.when] || ''}${sc.when === 'objection' && sc.words ? ` («${SF.esc(sc.words)}»)` : ''}`;
     };
     return `
-      <div class="glass-card-3d p-4 space-y-3 text-xs">
+      <div id="seller-methodology" class="glass-card-3d p-4 space-y-3 text-xs">
         ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
         <form onsubmit="SF.actions.saveMethodology(event, '${SF.js(c.id)}')" class="space-y-2">
           ${field('methodology', 'Общее описание', c.methodology || '', { rows: 6, max: 3000, placeholder: 'Опишите своими словами, как SI ведёт клиента к покупке: с чего начинает, какие вопросы задаёт, когда предлагает оффер, каким тоном говорит.', hint: 'SI следует этому описанию в каждом разговоре. Ниже — отдельные сценарии для особых случаев.' })}
@@ -1775,6 +2258,8 @@
       });
       SF.data.invalidate('consultants');
       SF.data.invalidate('marketplace');
+      SF.data.invalidate('puzzle:'); // what the SI knows changed
+      SF.data.puzzle(id, 0);
       await SF.data.myConsultants();
       showToast(f.isListed.checked ? 'Сохранено. SI-продавец виден в Маркетплейсе' : 'Сохранено');
     } catch (err) {
@@ -2461,6 +2946,8 @@
           if (bid) SF.data.products(bid);
         }
         if (route.section === 'team') SF.data.business(bid || '');
+        // The small puzzle bar on each SI-продавец of the open business
+        if (!route.section || route.section === 'consultants') store().consultantsOfCurrent().forEach(c => SF.data.puzzle(c.id, 60000));
       } else if (route.screen === 'office-consultant') {
         const c = store().findOfficeConsultant(route.id);
         const tab = c && c.assisting
@@ -2471,6 +2958,13 @@
         if (tab === 'methodology') {
           SF.data.brain();
           if (c && c.businessId) SF.data.products(c.businessId);
+          if (c && !c.assisting) {
+            SF.data.puzzle(route.id);
+            const pz = state.remote.puzzle[route.id];
+            if (pz) celebratePuzzle(route.id, pz);
+          }
+          // «Научить SI»: straight to the form
+          if (route.noteTopic) setTimeout(() => document.querySelector('[name=topic]')?.scrollIntoView({ block: 'center' }), 80);
         }
         if (tab === 'analytics') {
           const days = FUNNEL_DAYS.some(d => d.id === route.days) ? route.days : '30';
