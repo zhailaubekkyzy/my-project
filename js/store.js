@@ -52,7 +52,8 @@ const defaultData = {
   // My SI-consultants (server projects), shown in the Office; also the SI-sellers of businesses
   // where I am the assistant (assisting: true — only clients and "Мне написали")
   office: {
-    consultants: []
+    consultants: [],
+    currentBusinessId: null   // the business open in the Office (Профиль → «Мои бизнесы»), remembered on this phone
   },
 
   // Data loaded from the server (js/data.js). null = not loaded yet.
@@ -73,6 +74,10 @@ const defaultData = {
     funnel: {},              // { ["businessId|days"]: { counts, statuses } } Office → Воронка
     peopleChats: null,       // my conversations with people (Chats tab)
     personThreads: {},       // { [userId]: { thread, person, messages, canWrite } }
+    businesses: null,        // { businesses: [...], max } — my businesses (up to 3), the main one first
+    products: {},            // { [businessId]: [...] } — products of a business
+    sellerFunnel: {},        // { ['projectId|days']: { counts } } — the funnel of one AI-продавец
+    sellerFunnelLists: {},   // { ['projectId|days|status']: { clients, done } }
     groups: null,            // my group conversations and invitations (Chats tab)
     groupThreads: {},        // { [groupId]: { group, members, messages, pinned, invitedBy } }
     // Communities (tab «Комьюнити»): the catalog, mine, and per community / post
@@ -307,7 +312,8 @@ class Store {
       photoUrl: p.photo_url || null,
       link: appLink(p.slug),
       assisting: true,
-      ownerName: p.owner_name || ''
+      ownerName: p.owner_name || '',
+      businessId: p.business_id || null
     }));
     this.data.office.consultants = projects.map(p => {
       const settings = p.custom_ai_settings || {};
@@ -336,9 +342,40 @@ class Store {
         trialDays: Number(p.trial_days) || 0,
         isListed: Boolean(p.is_listed),
         // A ready-made funnel connected to this SI-seller: its name and steps only
-        readyFunnel: p.ready_funnel || null
+        readyFunnel: p.ready_funnel || null,
+        // Which of my businesses it belongs to and which product it sells («Бизнес-режим 2.0»)
+        businessId: p.business_id || null,
+        productId: p.product_id || null
       };
     }).concat(assisted);
+  }
+
+  // The business open in the Office (chosen in Профиль, up to 3): the one remembered on this phone if it is
+  // still mine, otherwise the main one. null — no business yet.
+  currentBusinessId() {
+    const list = (this.data.remote.businesses && this.data.remote.businesses.businesses) || [];
+    const saved = this.data.office.currentBusinessId;
+    if (saved && list.some(b => b.id === saved)) return saved;
+    return list.length ? list[0].id : null;
+  }
+
+  currentBusiness() {
+    const id = this.currentBusinessId();
+    const list = (this.data.remote.businesses && this.data.remote.businesses.businesses) || [];
+    return list.find(b => b.id === id) || null;
+  }
+
+  setCurrentBusiness(businessId) {
+    this.data.office.currentBusinessId = businessId;
+    this.saveData();
+  }
+
+  // My own SI-sellers of the business open in the Office (one without a business — in the main one)
+  consultantsOfCurrent() {
+    const id = this.currentBusinessId();
+    const list = (this.data.remote.businesses && this.data.remote.businesses.businesses) || [];
+    const mainId = list.length ? list[0].id : null;
+    return this.ownConsultants().filter(c => (c.businessId || mainId) === id || !id);
   }
 
   // Only my own SI-sellers (without the ones I assist in someone else's business)

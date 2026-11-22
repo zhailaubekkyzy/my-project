@@ -240,7 +240,8 @@ SF.openStartParam = (param) => {
   } else if (param.startsWith('P_')) {
     SF.openIn('marketplace', 'person', { id: param.slice(2) });
   } else if (param.startsWith('I_')) {
-    SF.openIn('marketplace', 'office', { section: 'inbox' });
+    // «Мне написали» lives inside the SI-продавец now («Бизнес-режим 2.0»)
+    SF.openIn('marketplace', 'office-consultant', { id: param.slice(2), tab: 'income', ctab: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
   } else if (param.startsWith('KP_')) {
@@ -254,7 +255,10 @@ SF.openStartParam = (param) => {
   } else if (param.startsWith('U_')) {
     SF.openIn('chats', 'person', { id: param.slice(2) });
   } else if (param === 'CAL') {
-    SF.openIn('marketplace', 'office', { section: 'calendar' });
+    // The calendar of the business: inside an SI-продавец of the open business, «Клиенты» → «Календарь»
+    const seller = window.funnelStore.consultantsOfCurrent()[0] || window.funnelStore.data.office.consultants[0];
+    if (seller) SF.openIn('marketplace', 'office-consultant', { id: seller.id, tab: 'income', ctab: 'calendar' });
+    else SF.openIn('marketplace', 'office');
   } else if (param === 'ADMIN') {
     SF.openIn('profile', 'admin');
   } else if (param === 'FSALES') {

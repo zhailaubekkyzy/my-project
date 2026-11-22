@@ -2657,6 +2657,36 @@ async function runAllTests() {
     for (const extra of ['-wal', '-shm']) if (fs.existsSync(file + extra)) fs.unlinkSync(file + extra);
   });
 
+  await test('77. Бизнес-режим 2.0, шаг 2: помощник, быстрый старт и сведения — у выбранного бизнеса', async () => {
+    const owner = await tokenFor({ id: 770001, first_name: 'Асель', last_name: 'Два бизнеса' });
+    const helper = await tokenFor({ id: 770002, first_name: 'Помощник', last_name: 'Второго' });
+    const prof = (await api('GET', '/api/me/profile', owner)).body.user.profile;
+    await api('PUT', '/api/me/profile', owner, { ...prof, businessAgreedAt: new Date().toISOString() });
+    const main = (await api('POST', '/api/business/businesses', owner, { name: 'Нутрициология' })).body.business;
+    assert.strictEqual(main.isPrimary, true, 'The first business opened in Профиль is the main one');
+    const second = (await api('POST', '/api/business/businesses', owner, { name: 'Йога' })).body.business;
+
+    // Быстрый старт in the second business
+    const quick = await api('POST', '/api/projects/quick-start', owner, { businessId: second.id, goal: 'consult', about: 'йога', offer: 'Пробное занятие' });
+    assert.strictEqual(quick.status, 201);
+    assert.strictEqual(quick.body.business_id, second.id);
+
+    // The assistant of the second business only
+    const helperCode = (await api('GET', '/api/auth/me', helper)).body.user.supportCode;
+    assert.strictEqual((await api('POST', '/api/business/assistants', owner, { supportCode: helperCode, businessId: second.id })).status, 201);
+    const secondView = (await api('GET', `/api/business?businessId=${second.id}`, owner)).body;
+    assert.strictEqual(secondView.business.id, second.id);
+    assert(secondView.business.members.some(m => m.role === 'assistant'), 'The helper is in the second business');
+    const mainView = (await api('GET', '/api/business', owner)).body;
+    assert.strictEqual(mainView.business.id, main.id, 'Without businessId — the main one');
+    assert(!mainView.business.members.some(m => m.role === 'assistant'), 'Not in the main one');
+    // The helper sees the SI-продавец of the second business, with its business
+    const helperProjects = (await api('GET', '/api/projects', helper)).body;
+    const assisted = (helperProjects.assisting || []).find(p => p.id === quick.body.id);
+    assert(assisted && assisted.business_id === second.id);
+    assert.strictEqual((await api('DELETE', `/api/business/assistants/${(await api('GET', '/api/me/profile', helper)).body.user.id}?businessId=${second.id}`, owner)).status, 200);
+  });
+
   await test('76. Миграция 030: бизнесы, SI-продавцы и SI-мозг остаются на месте, бизнес становится главным', async () => {
     const Database = require('better-sqlite3');
     const file = path.join(__dirname, '../data/test_migration_030.db');

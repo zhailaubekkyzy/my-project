@@ -234,25 +234,53 @@
     },
 
     // Business: members (owner + assistant) and the businesses where I am the assistant
-    async getBusiness() {
-      return await apiFetch('/api/business');
+    // businessId: one of my businesses (the one open in the Office); without it — the main one
+    async getBusiness(businessId = '') {
+      return await apiFetch(`/api/business${businessId ? `?businessId=${encodeURIComponent(businessId)}` : ''}`);
     },
 
-    async addAssistant(supportCode) {
+    async addAssistant(supportCode, businessId = '') {
       return await apiFetch('/api/business/assistants', {
         method: 'POST',
-        body: JSON.stringify({ supportCode })
+        body: JSON.stringify({ supportCode, businessId: businessId || undefined })
       });
     },
 
-    async removeAssistant(userId) {
-      return await apiFetch(`/api/business/assistants/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    async removeAssistant(userId, businessId = '') {
+      return await apiFetch(`/api/business/assistants/${encodeURIComponent(userId)}${businessId ? `?businessId=${encodeURIComponent(businessId)}` : ''}`, { method: 'DELETE' });
+    },
+
+    // My businesses (up to 3) and their products («Бизнес-режим 2.0»)
+    async listBusinesses() {
+      return await apiFetch('/api/business/businesses');
+    },
+    async createBusiness(data) {
+      return await apiFetch('/api/business/businesses', { method: 'POST', body: JSON.stringify(data) });
+    },
+    async updateBusiness(businessId, data) {
+      return await apiFetch(`/api/business/businesses/${encodeURIComponent(businessId)}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    async listProducts(businessId) {
+      return await apiFetch(`/api/business/businesses/${encodeURIComponent(businessId)}/products`);
+    },
+    async createProduct(businessId, data) {
+      return await apiFetch(`/api/business/businesses/${encodeURIComponent(businessId)}/products`, { method: 'POST', body: JSON.stringify(data) });
+    },
+    async updateProduct(productId, data) {
+      return await apiFetch(`/api/business/products/${encodeURIComponent(productId)}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    async archiveProduct(productId) {
+      return await apiFetch(`/api/business/products/${encodeURIComponent(productId)}`, { method: 'DELETE' });
+    },
+    async attachProduct(projectId, productId) {
+      return await apiFetch(`/api/business/sellers/${encodeURIComponent(projectId)}/product`, { method: 'PUT', body: JSON.stringify({ productId: productId || null }) });
     },
 
     // Funnel of a business: counts per status; with status — a portion of 30 clients
-    async getFunnel({ businessId = '', status = '', days = '', offset = 0 } = {}) {
+    async getFunnel({ businessId = '', status = '', days = '', offset = 0, projectId = '' } = {}) {
       const q = new URLSearchParams();
       if (businessId) q.set('businessId', businessId);
+      if (projectId) q.set('projectId', projectId);
       if (status) q.set('status', status);
       if (days) q.set('days', String(days));
       if (offset) q.set('offset', String(offset));
@@ -811,8 +839,9 @@
     },
 
     // file: a File/Blob (PDF, .docx, .txt). Pasted text is uploaded as a .txt Blob.
-    async uploadBrainMaterial(file, { name, title = '', consultantIds = [] } = {}) {
+    async uploadBrainMaterial(file, { name, title = '', consultantIds = [], businessId = '' } = {}) {
       const query = new URLSearchParams({ name: name || file.name || 'material.txt', title, consultants: consultantIds.join(',') });
+      if (businessId) query.set('businessId', businessId);
       return await apiFetch(`/api/brain/materials?${query}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
