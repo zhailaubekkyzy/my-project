@@ -85,8 +85,8 @@ router.post('/purchases/:pid/decision', handle(async (req, res) => {
     text = renewal
       ? `✅ ${marketer} подтвердил(а) оплату следующего месяца шаблона ${title}. Шаблон работает дальше.`
       : row.price_type === 'percent'
-        ? `✅ ${marketer} согласен(на) подключить шаблон ${title} на условиях «${row.price_label}». Запустите SI-продавца: Маркетплейс → «Шаблоны» → «Купленные».`
-        : `✅ ${marketer} подтвердил(а) оплату шаблона ${title}. Запустите SI-продавца: Маркетплейс → «Шаблоны» → «Купленные».`;
+        ? `✅ ${marketer} согласен(на) подключить шаблон ${title} на условиях «${row.price_label}». Запустите SI-продавца: Маркетплейс → «Шаблоны ИИ-продавцов» → «Купленные».`
+        : `✅ ${marketer} подтвердил(а) оплату шаблона ${title}. Запустите SI-продавца: Маркетплейс → «Шаблоны ИИ-продавцов» → «Купленные».`;
   } else {
     text = `${marketer} пока не подтвердил(а) ${renewal ? 'оплату следующего месяца' : 'оплату'} шаблона ${title}.\n\nПричина: ${row.reason}\n\nНапишите автору в SmartFlow, чтобы разобраться.`;
   }
@@ -145,7 +145,7 @@ router.post('/:id/buy', handle(async (req, res) => {
     ? `хочет подключить ваш шаблон «${row.funnel_title}» на условиях «${row.price_label}»`
     : `оплатил(а) ${renewal ? 'следующий месяц шаблона' : 'шаблон'} «${row.funnel_title}» (${row.price_label})`;
   const note = renewal ? row.renewal_note : row.note;
-  notify(row.marketer_id, `💳 ${expert} ${what}.${note ? `\n\nКомментарий: ${note}` : ''}\n\n${row.price_type === 'percent' ? 'Согласитесь или откажите' : 'Проверьте поступление и подтвердите'}: Маркетплейс → «Шаблоны» → «Мои шаблоны».`, 'FSALES');
+  notify(row.marketer_id, `💳 ${expert} ${what}.${note ? `\n\nКомментарий: ${note}` : ''}\n\n${row.price_type === 'percent' ? 'Согласитесь или откажите' : 'Проверьте поступление и подтвердите'}: Маркетплейс → «Шаблоны ИИ-продавцов» → «Мои шаблоны».`, 'FSALES');
   res.status(201).json({ purchase: await purchases.toPurchase(row, 'expert') });
 }));
 

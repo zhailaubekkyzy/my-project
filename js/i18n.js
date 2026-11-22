@@ -131,7 +131,7 @@
     // Marketplace
     'Все': 'All', 'Продажи': 'Sales', 'Прогрев и заявки': 'Warm-up & leads',
     // Niches of the Marketplace and «Вопросы и ответы» (22 Nov.)
-    'Эксперты': 'Experts', 'Шаблоны': 'Templates', 'Все ниши': 'All niches', 'Вопросы и ответы': 'Questions & answers',
+    'Эксперты': 'Experts', 'Шаблоны': 'Templates', 'Шаблоны ИИ-продавцов': 'AI seller templates', 'Шаблоны ИИ‑продавцов': 'AI seller templates', 'Все ниши': 'All niches', 'Вопросы и ответы': 'Questions & answers',
     'В этой нише пока никого. Посмотрите другие разделы.': 'No one in this niche yet. Look at other sections.',
     'Нет вашего вопроса? Спросите SI-продавца в чате — если он не знает, ответит эксперт.': 'Your question is not here? Ask the SI seller in the chat — if it does not know, the expert will answer.',
     'Здоровье и питание': 'Health & nutrition', 'Спорт и фитнес': 'Sport & fitness', 'Психология и отношения': 'Psychology & relationships',

@@ -127,7 +127,7 @@
     const q = inline ? (route.tq || '') : (route.q || '');
     const key = catalogKey({ q, niche: '' });
     const data = cache[key];
-    const intro = `<div class="text-[11px] text-muted px-1 leading-snug">Шаблоны AI-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.</div>`;
+    const intro = `<div class="text-[11px] text-muted px-1 leading-snug">Шаблоны ИИ-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.</div>`;
     const search = `
       <form onsubmit="SF.funnels.${inline ? 'searchInline' : 'search'}(event)" class="flex gap-2">
         <input name="q" value="${esc(q)}" autocomplete="off" placeholder="Задача или слово: запись, вебинар, курс…" class="flex-1 p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
@@ -154,7 +154,7 @@
         <div class="text-xs font-bold text-ink">Как это работает</div>
         <div>1. Соберите воронку в своём SI-продавце: шаги, сценарии «если…, то…», общее описание и пазл для покупателей.</div>
         <div>2. Опубликуйте: название, ниша, что внутри, результат, как вам платят и кто продаёт шаблон.</div>
-        <div>3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны» и в вашем Мозге как продукт. Команда снимает только по жалобе.</div>
+        <div>3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны ИИ-продавцов» и в вашем Мозге как продукт. Команда снимает только по жалобе.</div>
         <div>4. Эксперты увидят описание, шаги и результат и смогут переписаться с вашим SI-продавцом. Ваши инструкции и тексты сценариев они не видят.</div>
       </div>`;
     if (!data) return publish + how + waiting('mine');
@@ -511,7 +511,7 @@
       delete draft[id || 'new'];
       refresh();
       SF.data.invalidate('niches');
-      showToast(id ? 'Сохранено' : 'Шаблон опубликован — он уже в Маркетплейсе → «Шаблоны» 🎉');
+      showToast(id ? 'Сохранено' : 'Шаблон опубликован — он уже в Маркетплейсе → «Шаблоны ИИ-продавцов» 🎉');
       if (!id) SF.confetti();
       store().popRoute();
       if (!id) SF.push('office-funnel', { id: res.funnel.id });
@@ -729,14 +729,14 @@
         <span class="w-10 h-10 rounded-2xl bg-sunken border border-line flex items-center justify-center flex-shrink-0"><i data-lucide="layers" class="w-5 h-5 text-brand"></i></span>
         <span class="flex-1 min-w-0">
           <span class="block text-sm font-bold text-ink">Шаблоны</span>
-          <span class="block text-[11px] text-muted leading-snug">Купленные и мои. Каталог — в Маркетплейсе → «Шаблоны»</span>
+          <span class="block text-[11px] text-muted leading-snug">Купленные и мои. Каталог — в Маркетплейсе → «Шаблоны ИИ-продавцов»</span>
         </span>
         <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
       </button>`;
   }
 
   const TITLES = {
-    'office-funnels': 'Шаблоны',
+    'office-funnels': 'Шаблоны ИИ-продавцов',
     'office-funnel': 'Шаблон',
     'office-funnel-publish': 'Опубликовать шаблон'
   };

@@ -70,8 +70,8 @@
     const tab = route.mtab === 'biz' ? 'biz' : 'experts';
     return `
       <div class="grid grid-cols-2 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
-        ${[['experts', 'Эксперты', 'store'], ['biz', 'Шаблоны', 'layers']].map(([id, label, icon]) => `
-          <button onclick="SF.patch({ mtab: '${id}' })" class="py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 ${tab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
+        ${[['experts', 'Эксперты', 'store'], ['biz', 'Шаблоны ИИ‑продавцов', 'layers']].map(([id, label, icon]) => `
+          <button onclick="SF.patch({ mtab: '${id}' })" class="py-2 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 leading-tight text-center ${tab === id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
             <i data-lucide="${icon}" class="w-4 h-4"></i>${label}</button>`).join('')}
       </div>`;
   }
