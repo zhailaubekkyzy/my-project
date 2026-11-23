@@ -237,10 +237,7 @@
             </div>`).join('')}
         </div>` : ''}
 
-      <div class="grid grid-cols-2 gap-2">
-        <button onclick="SF.push('edit')" class="py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Редактировать</button>
-        <button onclick="SF.showToast('SI-брендолог проведёт короткое интервью и соберёт профиль сам — на следующем шаге')" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><span class="si-dot"></span>SI-брендолог ${SF.soonBadge()}</button>
-      </div>
+      <button onclick="SF.push('edit')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Редактировать</button>
 
       ${me.id ? `
         <button onclick="SF.copyText(SF.appLink('P_${SF.js(me.id)}'), 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
