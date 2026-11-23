@@ -56,6 +56,26 @@
 - SI в сообществе пока не участвует. Упоминание через «@» в постах и комментариях сервер принимает (`mentionIds`),
   подсказки в приложении — во второй части.
 
+## Вход через браузер и приложение на экране (решения владелицы 23 нояб.)
+
+По частям, каждая — свой PR. Telegram-версия работает как раньше; аккаунты Telegram не привязываем (там пока никого).
+
+- **Часть 1 — сделано** (миграция 036). На `app.techsmartflow.com` вне Telegram (`js/app.js`, `initTelegramAuth`):
+  сохранённая сессия → `/api/auth/me`; иначе экран **«Вход по почте»**: почта → `POST /api/auth/email/start` → письмо
+  с 6 цифрами (Resend, `server/services/mail-service.js`; без ключа на сервере — честное «скоро заработает», на
+  компьютере разработчика код пишется в лог) → `POST /api/auth/email/verify` → тот же ответ, что у Telegram, сессия
+  на 90 дней. `server/services/email-login.js`: таблица `email_codes` (только отпечаток кода, 10 минут, 5 попыток,
+  раз в минуту и 5 в час на почту, 20 в час с адреса; работает только последний код). Новый человек — новый аккаунт:
+  `auth_identities.provider = 'email'`, `users.email`, имя до «@».
+  **Приложение на экране:** `manifest.webmanifest` и `sw.js` в корне (сервер отдаёт только эти два файла из корня;
+  сборка Cloudflare кладёт их в `dist/` без хэша), иконки `images/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`,
+  `apple-touch-icon.png`. Настройки вне Telegram: «Установить на экран» (Chrome/Android — системное окно
+  `beforeinstallprompt`, iPhone — инструкция «Safari → Поделиться → На экран „Домой“») и «Выйти».
+  Владелице: Resend → домен `techsmartflow.com` (записи DNS в Cloudflare) → `RESEND_API_KEY` и `MAIL_FROM` в Railway.
+- **Часть 2 — веб-уведомления** (Web Push как новый канал в `notify-service.CHANNELS`, ключи VAPID в Railway) и
+  **важное на почту**, если пуши не разрешены. На iPhone пуши приходят только в установленное приложение (iOS 16.4+).
+- **Часть 3 — вход через Google.**
+
 ## Бизнес-режим 2.0: AI-продавцы, шаблоны, «пазл» (решения владелицы 21–22 нояб., ещё не сделано)
 
 Карта, по которой строим бизнес-режим. Код — по шагам ниже, каждый шаг — своя сессия и PR (рискованные — через
@@ -660,7 +680,8 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
 
   | Событие | Когда | Свойства | Где в коде |
   |---|---|---|---|
-  | `app_opened` | вход через Telegram | — | `server/routes/auth.js` |
+  | `app_opened` | вход через Telegram; с 23 нояб. и по почте из браузера | — (Telegram); по почте: `method: 'email'`, `signed_up` (новый аккаунт) | `server/routes/auth.js` |
+  | `email_code_requested` | запрошен код для входа по почте (с 23 нояб.; без человека и без почты — анонимно) | — | `server/routes/auth.js` |
   | `link_opened` | вход по ссылке с меткой источника или приглашению | `kind`, `link_id`, `project_id`, `new_user` | `server/services/partner-service.js` |
   | `template_built` | автор собрал шаблон конструктором (с 22 нояб.) | `project_id`, `source` (`openai` / `brief` — без ИИ), `steps`, `scenarios`, `pieces` | `server/routes/projects.js` |
   | `template_demo_tested` | автор начал проверку шаблона на примере бизнеса или на своих данных (с 22 нояб.) | `project_id`, `demo` (`nutri` / `psy` / `fitness` / `coach` / `smm` / `english` / `own`) | `server/routes/projects.js` |

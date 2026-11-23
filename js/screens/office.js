@@ -314,7 +314,7 @@
           <i data-lucide="plus" class="w-4 h-4"></i> Создать
         </button>
         ${SF.feature('funnels') ? `<button onclick="SF.openIn('marketplace', 'list', { mtab: 'biz' })" class="py-3 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5">
-          <i data-lucide="search" class="w-4 h-4"></i> Найти
+          <i data-lucide="search" class="w-4 h-4"></i> Найти готовый
         </button>` : ''}
       </div>
       <div class="glass-card-3d divide-y divide-line overflow-hidden">

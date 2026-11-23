@@ -215,6 +215,13 @@ class Store {
     this.saveData();
   }
 
+  // Outside Telegram and not signed in yet: the e-mail sign-in screen (js/app.js)
+  setNeedLogin() {
+    this.data.auth = { status: 'login', internalUserId: null, error: null };
+    this.saveData();
+    this.notify();
+  }
+
   setAuthOffline(msg = 'Нет связи с сервером') {
     this.data.auth.status = 'offline';
     this.data.auth.error = msg;

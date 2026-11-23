@@ -49,15 +49,168 @@ async function initTelegramAuth() {
       }
     }
   } else {
-    // Browser preview outside Telegram (works only on a local/dev server)
-    try {
-      store.setAuth(await api.loginDev('expert'));
-    } catch (err) {
-      api.clearToken();
-      store.setAuthOffline('Откройте приложение в Telegram');
+    // A browser or the app installed on the home screen (owner's decisions 23 Nov.): signed in by e-mail before —
+    // the saved session; otherwise the sign-in screen. On a developer's computer — the demo sign-in.
+    if (api.getToken()) {
+      try {
+        store.setAuth(await api.getMe());
+        return;
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) api.clearToken();
+        else { store.setAuthOffline(SF.withErrorCode ? SF.withErrorCode('Нет связи с сервером', err) : 'Нет связи с сервером'); return; }
+      }
     }
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+      try {
+        store.setAuth(await api.loginDev('expert'));
+        return;
+      } catch (err) {
+        api.clearToken();
+      }
+    }
+    store.setNeedLogin();
   }
 }
+
+// -------------------------------------------------------------
+// Sign-in outside Telegram: e-mail → a 6-digit code from the letter (owner's decisions 23 Nov.)
+// -------------------------------------------------------------
+const login = { step: 'email', email: '', busy: false, error: '', resendAt: 0 };
+
+function renderLogin() {
+  const field = 'w-full p-3.5 rounded-2xl bg-sunken border border-line-2 text-ink text-base';
+  const codeStep = login.step === 'code';
+  return `
+    <main class="w-full min-h-full flex items-center justify-center p-5">
+      <div class="w-full max-w-sm space-y-5">
+        <div class="text-center space-y-2">
+          <img src="images/logo-mark.webp" alt="SmartFlow" width="64" height="64" class="w-16 h-16 mx-auto" />
+          <div class="text-2xl font-extrabold text-ink">SmartFlow</div>
+          <div class="text-sm text-muted">${codeStep ? `Код отправлен на ${SF.esc(login.email)}` : 'Вход по почте'}</div>
+        </div>
+        <form onsubmit="SF.actions.loginSubmit(event)" class="glass-card-3d p-5 space-y-3">
+          ${codeStep ? `
+            <input id="login-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="6 цифр из письма"
+              class="${field} text-center tracking-[0.4em] placeholder:tracking-normal font-bold" />
+          ` : `
+            <input id="login-email" name="email" type="email" autocomplete="email" inputmode="email" value="${SF.esc(login.email)}" placeholder="Ваша почта"
+              class="${field}" />
+          `}
+          ${login.error ? `<div class="text-xs text-si">${SF.esc(login.error)}</div>` : ''}
+          <button type="submit" ${login.busy ? 'disabled' : ''} class="w-full py-3.5 rounded-2xl btn-3d-tiffany text-sm font-bold">
+            ${login.busy ? 'Минутку…' : codeStep ? 'Войти' : 'Получить код'}
+          </button>
+          ${codeStep ? `
+            <div class="flex items-center justify-between text-xs">
+              <button type="button" onclick="SF.actions.loginBack()" class="text-muted underline">Другая почта</button>
+              <button type="button" onclick="SF.actions.loginResend()" class="text-brand font-semibold">Отправить ещё раз</button>
+            </div>` : ''}
+        </form>
+        <div class="text-center text-[11px] text-faint">Письмо не пришло? Проверьте «Спам».</div>
+      </div>
+    </main>`;
+}
+
+function drawLogin() {
+  const container = document.getElementById('app-root');
+  if (!container) return;
+  container.innerHTML = renderLogin();
+  if (window.lucide) window.lucide.createIcons();
+  if (SF.translateDom) SF.translateDom(container);
+  const input = document.getElementById(login.step === 'code' ? 'login-code' : 'login-email');
+  if (input) setTimeout(() => input.focus(), 50);
+}
+
+SF.actions = SF.actions || {};
+SF.actions.loginSubmit = async (e) => {
+  e.preventDefault();
+  if (login.busy) return;
+  const api = window.smartFlowApi;
+  login.error = '';
+  login.busy = true;
+  try {
+    if (login.step === 'email') {
+      login.email = String(e.target.email.value || '').trim();
+      await api.emailLoginStart(login.email);
+      login.step = 'code';
+    } else {
+      const res = await api.emailLoginVerify(login.email, String(e.target.code.value || '').trim());
+      login.busy = false;
+      login.step = 'email';
+      window.funnelStore.setAuth(res);
+      SF.go('buddy');
+      return;
+    }
+  } catch (err) {
+    login.error = err.message || 'Не получилось';
+  }
+  login.busy = false;
+  drawLogin();
+};
+SF.actions.loginBack = () => { login.step = 'email'; login.error = ''; drawLogin(); };
+SF.actions.loginResend = async () => {
+  try {
+    await window.smartFlowApi.emailLoginStart(login.email);
+    login.error = '';
+    SF.showToast('Новый код отправлен');
+  } catch (err) {
+    login.error = err.message || 'Не получилось';
+  }
+  drawLogin();
+};
+
+// -------------------------------------------------------------
+// The app on the home screen (PWA): the service worker, «Установить на экран»
+// -------------------------------------------------------------
+SF.inTelegram = () => Boolean(window.Telegram?.WebApp?.initData);
+SF.isInstalled = () => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+SF.isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (window.funnelStore) window.funnelStore.notify();
+});
+window.addEventListener('appinstalled', () => { installPrompt = null; SF.showToast('SmartFlow на экране телефона 🎉'); });
+if ('serviceWorker' in navigator && !SF.inTelegram()) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+SF.canInstall = () => !SF.inTelegram() && !SF.isInstalled();
+SF.actions = SF.actions || {};
+SF.actions.installApp = async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch (e) {}
+    installPrompt = null;
+    return;
+  }
+  // iPhone / iPad (Safari) and browsers without the button: how to do it by hand
+  SF.openModal(`
+    <div class="flex items-start justify-between gap-3">
+      <div class="text-base font-bold text-ink">Установить SmartFlow на экран</div>
+      <button onclick="SF.closeModal()" class="text-muted text-lg leading-none" aria-label="Закрыть">&times;</button>
+    </div>
+    ${SF.isIOS() ? `
+      <ol class="space-y-2 text-sm text-ink-2 list-decimal pl-5">
+        <li>Откройте эту страницу в <b>Safari</b>.</li>
+        <li>Нажмите <b>«Поделиться»</b> (квадрат со стрелкой вверх).</li>
+        <li>Выберите <b>«На экран „Домой“»</b> → <b>«Добавить»</b>.</li>
+      </ol>
+      <div class="text-xs text-muted">На iPhone уведомления приходят только в установленное приложение.</div>` : `
+      <ol class="space-y-2 text-sm text-ink-2 list-decimal pl-5">
+        <li>Откройте меню браузера (⋮ вверху справа).</li>
+        <li>Нажмите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>.</li>
+      </ol>`}
+  `);
+};
+
+// «Выйти» (browser / installed app only: inside Telegram the account is Telegram's)
+SF.actions.logout = () => {
+  if (!window.confirm('Выйти из SmartFlow на этом устройстве?')) return;
+  window.smartFlowApi.clearToken();
+  window.funnelStore.resetToDefault();
+  window.funnelStore.setNeedLogin();
+};
 
 window.reconnectTelegramAuth = () => {
   initTelegramAuth();
@@ -292,6 +445,11 @@ let lastRouteKey = null;
 function renderApp(state) {
   const container = document.getElementById('app-root');
   if (!container) return;
+  // Outside Telegram and not signed in: only the sign-in screen
+  if (state.auth?.status === 'login') {
+    if (!container.querySelector('#login-email, #login-code')) drawLogin();
+    return;
+  }
 
   const tab = state.ui.tab;
   const stack = state.ui.routes[tab];

@@ -130,6 +130,8 @@
 
     // Marketplace
     'Все': 'All', 'Продажи': 'Sales', 'Прогрев и заявки': 'Warm-up & leads',
+    // Sign-in from a browser and the app on the home screen (23 Nov.)
+    'Установить на экран': 'Install on the home screen', 'Вход по почте': 'Sign in by e-mail', 'Ваша почта': 'Your e-mail', 'Получить код': 'Get a code', 'Войти': 'Sign in', '6 цифр из письма': '6 digits from the letter', 'Другая почта': 'Another e-mail', 'Отправить ещё раз': 'Send again', 'Письмо не пришло? Проверьте «Спам».': 'No letter? Check «Spam».', 'Минутку…': 'One moment…', 'Установить SmartFlow на экран': 'Install SmartFlow on the home screen',
     // Settings (23 Nov.: «Профиль» became «Настройки»)
     'Настройки': 'Settings', 'Мой профиль': 'My profile', 'Режим': 'Mode', 'Мои бизнесы': 'My businesses', 'Язык': 'Language', 'Пригласить друзей': 'Invite friends', 'Включить бизнес-профиль': 'Turn on the business profile', 'Что это?': 'What is this?', 'Открыть ещё бизнес': 'Open another business', 'Открыть бизнес': 'Open a business',
     // Niches of the Marketplace and «Вопросы и ответы» (22 Nov.)

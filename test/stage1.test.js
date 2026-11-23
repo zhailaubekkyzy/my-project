@@ -4060,6 +4060,48 @@ async function runAllTests() {
     }
   });
 
+  await test('83. Вход через браузер: почта + код из письма, новый аккаунт, защита от перебора, длинная сессия', async () => {
+    const send = (body) => api('POST', '/api/auth/email/start', null, body);
+    const verify = (body) => api('POST', '/api/auth/email/verify', null, body);
+    assert.strictEqual((await send({ email: 'не почта' })).status, 400);
+    const first = await send({ email: '  Aigerim.Test@Example.com ' });
+    assert.strictEqual(first.status, 200);
+    assert(/^\d{6}$/.test(first.body.devCode), 'On a developer computer the code comes back (no Resend)');
+    assert.strictEqual((await send({ email: 'aigerim.test@example.com' })).status, 429, 'Not more often than once a minute');
+    const row = await db.get(`SELECT * FROM email_codes WHERE email = 'aigerim.test@example.com'`);
+    assert(row && !String(row.code_hash).includes(first.body.devCode), 'Only a fingerprint of the code is kept');
+    // Wrong codes: up to 5 tries
+    for (let i = 0; i < 5; i++) assert.strictEqual((await verify({ email: 'aigerim.test@example.com', code: first.body.devCode === '000000' ? '111111' : '000000' })).status, 400);
+    assert.strictEqual((await verify({ email: 'aigerim.test@example.com', code: first.body.devCode })).status, 429, 'After 5 wrong tries — a new code');
+    // A new code (a minute later)
+    await db.run(`UPDATE email_codes SET created_at = ? WHERE email = 'aigerim.test@example.com'`, ['2020-01-01 00:00:00']);
+    const second = await send({ email: 'aigerim.test@example.com' });
+    const ok = await verify({ email: 'AIGERIM.test@example.com', code: second.body.devCode });
+    assert.strictEqual(ok.status, 200);
+    assert(ok.body.token && ok.body.user && ok.body.user.id);
+    assert.strictEqual((await verify({ email: 'aigerim.test@example.com', code: second.body.devCode })).status, 400, 'A code works once');
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [ok.body.user.id]);
+    assert.strictEqual(user.email, 'aigerim.test@example.com');
+    assert.strictEqual(user.display_name, 'aigerim.test');
+    // The session works and lasts long (the installed app does not sign in again every week)
+    const me = await api('GET', '/api/auth/me', ok.body.token);
+    assert.strictEqual(me.body.user.id, ok.body.user.id);
+    const payload = JSON.parse(Buffer.from(ok.body.token.split('.')[1], 'base64url').toString());
+    assert(payload.exp - payload.iat >= 80 * 86400, 'About 90 days');
+    // The same e-mail again — the same account
+    await db.run(`UPDATE email_codes SET created_at = ? WHERE email = 'aigerim.test@example.com'`, ['2020-01-01 00:00:00']);
+    const third = await send({ email: 'aigerim.test@example.com' });
+    assert.strictEqual((await verify({ email: 'aigerim.test@example.com', code: third.body.devCode })).body.user.id, ok.body.user.id);
+    // Without Resend on a server, the sign-in honestly says it is not ready
+    const saved = config.devLoginAllowed;
+    config.devLoginAllowed = false;
+    await db.run(`UPDATE email_codes SET created_at = ? WHERE email = 'aigerim.test@example.com'`, ['2020-01-01 00:00:00']);
+    const notReady = await send({ email: 'aigerim.test@example.com' });
+    config.devLoginAllowed = saved;
+    assert.strictEqual(notReady.status, 503);
+    assert.strictEqual(notReady.body.code, 'MAIL_NOT_CONFIGURED');
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

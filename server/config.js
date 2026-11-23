@@ -50,6 +50,13 @@ const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   jwtSecret: resolveJwtSecret(),
   jwtExpiresIn: '7d',
+  // Signed in from a browser or the installed app (by e-mail): no Telegram to sign in again on every open
+  webJwtExpiresIn: '90d',
+
+  // Letters (the sign-in code; later — important notifications): Resend (resend.com). RESEND_API_KEY in Railway;
+  // MAIL_FROM — the sender on the domain confirmed in Resend
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  mailFrom: process.env.MAIL_FROM || 'SmartFlow <no-reply@techsmartflow.com>',
   telegramMaxAgeSeconds: 86400, // 24 hours max age for initData
 
   // Telegram bot that sends notifications and opens the Mini App (t.me/<bot>/<app>)

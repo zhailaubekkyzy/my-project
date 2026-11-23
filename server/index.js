@@ -107,6 +107,8 @@ app.get('/api/health', async (req, res) => {
       posthog: { configured: analytics.isConfigured(), host: config.posthogHost },
       // true = the same numbers also go to Amplitude (AMPLITUDE_API_KEY is set); region eu / us
       amplitude: { configured: analytics.isAmplitudeConfigured(), region: config.amplitudeRegion },
+      // true = letters with the login code go out through Resend (RESEND_API_KEY is set); the key is never shown
+      mail: { configured: require('./services/mail-service').isConfigured() },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
@@ -166,6 +168,18 @@ const staticOptions = {
 for (const dir of PUBLIC_DIRS) {
   app.use(`/${dir}`, express.static(path.join(ROOT_DIR, dir), staticOptions));
 }
+
+// The app on the home screen (вход через браузер, часть 1): its description and the service worker — two files
+// from the root, nothing else from there
+app.get('/manifest.webmanifest', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('application/manifest+json').sendFile(path.join(ROOT_DIR, 'manifest.webmanifest'));
+});
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.type('application/javascript').sendFile(path.join(ROOT_DIR, 'sw.js'));
+});
 
 // In production the stamped index.html is built once; in development it is rebuilt on
 // every request so edits to css/js show up without a restart.
