@@ -140,7 +140,7 @@
     const list = filtered.length
       ? filtered.map(f => funnelCard(f)).join('')
       : SF.emptyState('consultant', any ? 'Ничего не нашлось' : 'Шаблонов пока нет',
-        any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов. Опубликовать свой можно из своего SI-продавца.');
+        any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов.');
     return `${intro}${search}${SF.niches.filter('templates', route, keys)}<div class="space-y-2.5">${list}</div>`;
   }
 
@@ -243,7 +243,8 @@
     if (!f) return waiting(key);
     const mine = f.status !== undefined;
     const status = mine && STATUS[f.status];
-    const ownerBlock = mine ? `
+    const inMarketplace = store().data.ui.tab === 'marketplace';
+    const ownerBlock = mine && !inMarketplace ? `
       <div class="glass-card-3d p-3.5 space-y-2 text-xs">
         <div class="font-bold ${status ? status.cls : 'text-ink'}">${status ? status.label : ''}</div>
         ${f.reviewNote ? `<div class="p-2.5 rounded-xl bg-sunken border border-line text-ink-2 leading-snug"><span class="text-muted">Команда:</span> ${esc(f.reviewNote)}</div>` : ''}
@@ -679,26 +680,15 @@
     SF.push('office-funnel-publish');
   }
 
-  // An entry in the Office (list of SI-sellers)
-  // «Для бизнеса» in the Marketplace: the catalogue right there (everyone sees it); the business profile
-  // also gets «Купленные» and «Мои шаблоны»
+  // The Marketplace tab «Шаблоны ИИ-продавцов» (owner's decision 23 Nov.): only look and buy — creating, my
+  // templates and the bought ones are in Настройки → «Мои бизнесы» → Офис
   function catalogInline(route) {
-    const business = store().isBusinessView();
-    const waitingSales = (cache.purchases && cache.purchases.waiting) || 0;
-    return `
-      ${business ? `
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="SF.push('office-funnels', { view: 'bought' })" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="shopping-bag" class="w-4 h-4"></i>Купленные</button>
-          <button onclick="SF.push('office-funnels', { view: 'mine' })" class="relative py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="pen-line" class="w-4 h-4"></i>Мои шаблоны
-            ${waitingSales ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingSales}</span>` : ''}</button>
-        </div>` : ''}
-      ${renderCatalog(route, { inline: true })}`;
+    return renderCatalog(route, { inline: true });
   }
 
   function loadInline(route) {
     if (!SF.feature('funnels')) return;
     load(catalogKey({ q: route.tq || '', niche: '' }), () => api().readyFunnels.catalogue(route.tq || '', ''));
-    if (store().isBusinessView()) load('purchases', () => api().readyFunnels.purchases());
   }
 
   function searchInline(event) {
