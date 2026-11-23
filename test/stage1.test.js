@@ -2084,6 +2084,13 @@ async function runAllTests() {
       assert.strictEqual(res.body.calendarChanged, true);
       assert(prompt.includes('Встречи с экспертами') && prompt.includes(`Встреча: «${project.name}»`), 'Buddy knows the meetings');
 
+      // «Напомни через 2 минуты» — the answer forgot remind_before: it is still a reminder
+      answer = { reply: 'Напомню!', plans: [{ text: 'Проверить уведомления', at: `${day} 21:30`, remind_before: null }], cancel: [], open: 'none' };
+      await api('POST', '/api/buddy/messages', token, { text: 'напомни проверить уведомления', tzOffset: 300 });
+      const forgot = await db.get(`SELECT notify FROM buddy_reminders WHERE user_id = ? AND text = 'Проверить уведомления'`, [user.id]);
+      assert.strictEqual(Number(forgot.notify), 1, '«напомни» always means a reminder');
+      await db.run(`DELETE FROM buddy_reminders WHERE user_id = ? AND text = 'Проверить уведомления'`, [user.id]);
+
       // Voice: transcribed and answered like text; the recording is not kept
       answer = { reply: 'Записал ужин.', plans: [{ text: 'Ужин с Айнур', at: `${day} 18:00`, remind_before: null }], cancel: [], open: 'none' };
       const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(2000, 7)]);
@@ -4142,6 +4149,12 @@ async function runAllTests() {
       assert.strictEqual(notifyService.emailOutbox.length, 0, 'Push delivered — no e-mail');
       // Still saved for Buddy first
       assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND start_param = 'CAL'`, [me.user.id]));
+
+      // «Проверить уведомление»: to my own devices
+      pushService.testOutbox.length = 0;
+      const t = await api('POST', '/api/push/test', me.token);
+      assert.deepStrictEqual(t.body, { delivered: true, devices: 1 });
+      assert.deepStrictEqual((await api('POST', '/api/push/test', other.token)).body, { delivered: false, devices: 0 });
 
       // Someone else cannot remove my device
       assert.strictEqual((await api('POST', '/api/push/unsubscribe', other.token, { endpoint: sub.endpoint })).body.removed, 0);

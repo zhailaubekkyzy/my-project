@@ -125,6 +125,7 @@
         ${row('Письма (вход по почте)', sys.mail ? 'работают ✓' : '<span class="text-si">нет ключа Resend</span>')}
         ${row('Уведомления в браузере', sys.push ? 'работают ✓' : '<span class="text-si">нет ключей</span>')}
         ${!sys.push && o.me.role === 'owner' ? pushKeysBlock() : ''}
+        ${sys.push ? `<button onclick="SF.admin.testPush()" class="w-full py-2 rounded-xl btn-3d-dark text-xs font-semibold">Проверить уведомление на моих устройствах</button>` : ''}
         ${sys.scheduler ? row('«Будильник» (раз в минуту)', sys.scheduler.running ? `работает ✓${sys.scheduler.lastTickAt ? ` · ${esc(new Date(sys.scheduler.lastTickAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))}` : ''}` : '<span class="text-si">не запущен</span>') : ''}
         ${row('Ваша роль', esc(o.me.roleLabel || o.me.role))}
       `)}
@@ -772,6 +773,17 @@
     store().notify();
   }
 
+  // Sends «Уведомления работают!» to my own devices (where I turned notifications on outside Telegram)
+  async function testPush() {
+    try {
+      const res = await window.smartFlowApi.push.test();
+      if (!res.devices) showToast('На ваших устройствах уведомления не включены: откройте SmartFlow с экрана «Домой» и включите их у Бадди');
+      else showToast(res.delivered ? `Отправлено (устройств: ${res.devices}) — проверьте уведомление` : 'Не дошло — передайте разработчику');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+  }
+
   function copyKey(value) {
     SF.copyText(value, 'Скопировано');
   }
@@ -1087,6 +1099,7 @@
     searchErrors,
     addStaff,
     makePushKeys,
+    testPush,
     copyKey,
     removeStaff,
     decideFunnel,

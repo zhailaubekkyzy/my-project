@@ -250,6 +250,7 @@ function systemPrompt(user, offset, now, reminders, meetings = [], lang = 'ru') 
     '- plans: дела, встречи, планы и напоминания, о которых человек ясно говорит («завтра в 13:00 созвон с коучем», «напомни в 9 позвонить маме»).',
     '  text — коротко, как запись в календаре («Созвон с коучем по нутрициологии»). at — когда это будет, по его часам.',
     '  remind_before: если просит напомнить — за сколько минут (0 = в это время, «за час» = 60); если не просил — null.',
+    '  «Напомни через 10 минут …» / «напомни в 9 …» — at: это время, remind_before: 0.',
     '  Если время неясно — спроси в reply и оставь []. Чтобы перенести — отмени старое (cancel) и добавь новое.',
     '- cancel: номера из календаря, которые человек просит отменить или перенести.',
     '- На вопросы «что у меня сегодня / завтра / на неделе» отвечай по календарю и встречам выше.',
@@ -311,6 +312,11 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
   const asked = [];
   if (parsed && Array.isArray(parsed.plans)) asked.push(...parsed.plans);
   if (parsed && Array.isArray(parsed.reminders)) asked.push(...parsed.reminders.map(r => ({ ...r, remind_before: 0, reminder: true })));
+  // «Напомни …» — and the answer forgot to ask for a reminder anywhere: remind at that very time
+  // (seen 23 Nov.: «напомни через 2 минуты» was saved as a plain plan, nothing came)
+  if (asked.length && /напомн|remind/i.test(text) && asked.every(r => !r || r.remind_before === null || r.remind_before === undefined || r.remind_before === '')) {
+    asked.forEach(r => { if (r) r.remind_before = 0; });
+  }
   if (asked.length) {
     analytics.capture('buddy_plans_added', user.id, { count: asked.length, with_reminder: asked.some(r => r && r.remind_before !== null && r.remind_before !== undefined) });
     let active = (await upcomingPlans(user.id, now)).length;
