@@ -86,12 +86,15 @@ async function sendPush(userId, { text, startParam } = {}) {
     const subs = await db.all('SELECT * FROM push_subscriptions WHERE user_id = ? AND failures < ?', [userId, MAX_FAILURES]);
     if (!subs.length) return false;
     const body = String(text || '');
+    // The red number on the app icon (installed SmartFlow): how much is unread now
+    const badge = await require('./badge-service').count(userId).catch(() => null);
     const payload = JSON.stringify({
       title: 'SmartFlow',
       body: body.length > 240 ? `${body.slice(0, 239)}…` : body,
       // Relative: the device opens it on the address it was installed from (app.… or the reserve one)
       url: `/${startParam ? `?startapp=${encodeURIComponent(startParam)}` : ''}`,
-      tag: startParam || 'smartflow'
+      tag: startParam || 'smartflow',
+      badge
     });
     if (config.isTest) {
       for (const s of subs) testOutbox.push({ userId, endpoint: s.endpoint, payload: JSON.parse(payload) });

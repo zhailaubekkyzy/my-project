@@ -264,6 +264,7 @@ SF.actions.installApp = async () => {
 SF.actions.logout = async () => {
   if (!window.confirm('Выйти из SmartFlow на этом устройстве?')) return;
   await SF.webPush.forgetDevice(); // notifications for this account stop coming to this device
+  SF.setAppBadge(0);
   window.smartFlowApi.clearToken();
   window.funnelStore.resetToDefault();
   window.funnelStore.setNeedLogin();
@@ -737,6 +738,16 @@ function renderApp(state) {
   if (SF.clientScreen && SF.translateDom) SF.translateDom(container);
 }
 
+// The number on the app icon (iPhone / iPad 16.4+ in the installed app, some browsers); not inside Telegram.
+// Changed only when the number changes.
+let shownBadge = null;
+SF.setAppBadge = (n) => {
+  const value = Math.max(0, Math.min(99, Number(n) || 0));
+  if (value === shownBadge || SF.inTelegram() || !('setAppBadge' in navigator)) return;
+  shownBadge = value;
+  (value ? navigator.setAppBadge(value) : navigator.clearAppBadge()).catch(() => {});
+};
+
 function renderBottomNav(state) {
   const badges = {
     chats: (state.remote.chats || []).filter(c => SF.data.isUnread(state, c)).length +
@@ -747,6 +758,8 @@ function renderBottomNav(state) {
   };
   // Red dot on Buddy: there are unread notifications
   const buddyUnread = Boolean(state.remote.notifications && state.remote.notifications.unread);
+  // The red number on the icon of the installed app: the same marks as on the tabs (owner's decision 24 Nov.)
+  SF.setAppBadge(((state.remote.notifications && Number(state.remote.notifications.unread)) || 0) + badges.chats + badges.community);
   return `
     <nav class="tg-nav-bar grid grid-cols-5 items-end">
       ${TABS.map(t => {

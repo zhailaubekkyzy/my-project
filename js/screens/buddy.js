@@ -14,13 +14,7 @@
   function nextStep(state) {
     const me = state.me;
     const business = store().isBusinessView();
-    const chats = state.remote.chats || [];
-    if (!business && !chats.length) {
-      return {
-        text: 'Найдите SI-продавца под свою задачу в Маркетплейсе — он ответит за пару секунд.',
-        primary: { label: 'Открыть Маркетплейс', action: "SF.go('marketplace')" }
-      };
-    }
+    // No «Найдите SI-продавца в Маркетплейсе» at the bottom of the chat (owner's decision 24 Nov.: annoying)
     // No "create your own SI-seller" offer from Buddy (owner's decision 16 Oct.: for clients it is spam);
     // experts turn on the business profile in Профиль themselves
     if (!business) return null;
