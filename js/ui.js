@@ -77,11 +77,12 @@
     return `<span class="inline-flex items-center gap-1 text-si font-semibold"><span class="si-dot"></span>${esc(text)}</span>`;
   }
 
-  function sectionTitle(icon, text, extra = '') {
+  // infoText: an «i» with a short explanation next to the title (only for what is new for people)
+  function sectionTitle(icon, text, extra = '', infoText = '') {
     return `
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
-          ${icon ? `<i data-lucide="${icon}" class="w-4 h-4 text-brand"></i>` : ''}${text}
+          ${icon ? `<i data-lucide="${icon}" class="w-4 h-4 text-brand"></i>` : ''}${text}${infoText ? info(infoText) : ''}
         </h2>
         ${extra}
       </div>`;
@@ -173,6 +174,21 @@
   function stars(rating, cls = 'text-[11px]') {
     const n = Math.max(0, Math.min(5, Math.round(Number(rating) || 0)));
     return `<span class="${cls} text-brand tracking-tight" aria-label="${n} из 5">${'★'.repeat(n)}<span class="text-faint">${'★'.repeat(5 - n)}</span></span>`;
+  }
+
+  // «i» next to something new for people (owner's decision 23 Nov.: no grey descriptions under buttons —
+  // a short explanation only where it is really needed, by a tap)
+  function info(text) {
+    return `<button type="button" onclick="event.stopPropagation(); event.preventDefault(); SF.showInfo(this)" data-info="${esc(text)}"
+      class="inline-flex items-center justify-center w-5 h-5 rounded-full text-faint align-middle flex-shrink-0" aria-label="Что это?"><i data-lucide="info" class="w-4 h-4"></i></button>`;
+  }
+  function showInfo(el) {
+    openModal(`
+      <div class="flex items-start gap-3">
+        <i data-lucide="info" class="w-5 h-5 text-brand flex-shrink-0 mt-0.5"></i>
+        <div class="flex-1 text-sm text-ink-2 leading-relaxed whitespace-pre-line">${esc(el.getAttribute('data-info') || '')}</div>
+        <button onclick="SF.closeModal()" class="text-muted text-lg leading-none" aria-label="Закрыть">&times;</button>
+      </div>`);
   }
 
   function openModal(innerHtml) {
@@ -283,6 +299,8 @@
     progressBar,
     showToast,
     openModal,
+    info,
+    showInfo,
     stars,
     partnerMedal,
     partnerBadge,

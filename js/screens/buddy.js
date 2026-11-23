@@ -30,8 +30,8 @@
       return {
         text: 'Заполните карточку SI-продавца: оффер, цену и свою ссылку на оплату. Потом отправьте его ссылку клиентам.',
         primary: unfinished
-          ? { label: 'Заполнить', action: `SF.openIn('marketplace', 'office-consultant', { id: '${SF.js(unfinished.id)}', tab: 'methodology' })` }
-          : { label: 'Создать', action: "SF.openIn('marketplace', 'office-create')" }
+          ? { label: 'Заполнить', action: `SF.openIn('profile', 'office-consultant', { id: '${SF.js(unfinished.id)}', tab: 'methodology' })` }
+          : { label: 'Создать', action: "SF.openIn('profile', 'office-create')" }
       };
     }
     if (SF.trustScore(me).score < 60) {

@@ -13,7 +13,7 @@ const TABS = [
   { id: 'marketplace', label: 'Маркетплейс', icon: 'store', enabled: true },
   { id: 'buddy', label: 'Бадди', icon: 'sparkles', enabled: true, center: true },
   { id: 'chats', label: 'Чаты', icon: 'messages-square', enabled: true },
-  { id: 'profile', label: 'Профиль', icon: 'circle-user-round', enabled: true }
+  { id: 'profile', label: 'Настройки', icon: 'settings', enabled: true }
 ];
 
 // -------------------------------------------------------------
@@ -241,7 +241,7 @@ SF.openStartParam = (param) => {
     SF.openIn('marketplace', 'person', { id: param.slice(2) });
   } else if (param.startsWith('I_')) {
     // «Мне написали» lives inside the SI-продавец now («Бизнес-режим 2.0»)
-    SF.openIn('marketplace', 'office-consultant', { id: param.slice(2), tab: 'income', ctab: 'inbox' });
+    SF.openIn('profile', 'office-consultant', { id: param.slice(2), tab: 'income', ctab: 'inbox' });
   } else if (param.startsWith('A_')) {
     SF.openIn('profile', 'admin-feedback', { id: param.slice(2) });
   } else if (param.startsWith('KP_')) {
@@ -257,12 +257,12 @@ SF.openStartParam = (param) => {
   } else if (param === 'CAL') {
     // The calendar of the business: inside an SI-продавец of the open business, «Клиенты» → «Календарь»
     const seller = window.funnelStore.consultantsOfCurrent()[0] || window.funnelStore.data.office.consultants[0];
-    if (seller) SF.openIn('marketplace', 'office-consultant', { id: seller.id, tab: 'income', ctab: 'calendar' });
-    else SF.openIn('marketplace', 'office');
+    if (seller) SF.openIn('profile', 'office-consultant', { id: seller.id, tab: 'income', ctab: 'calendar' });
+    else SF.openIn('profile', 'office');
   } else if (param === 'ADMIN') {
     SF.openIn('profile', 'admin');
   } else if (param === 'FSALES') {
-    SF.openIn('marketplace', 'office-funnels', { view: 'mine' });
+    SF.openIn('profile', 'office-funnels', { view: 'mine' });
   } else if (param === 'FREVIEW') {
     SF.openIn('profile', 'admin-funnels');
   } else if (param.startsWith('F_')) {
@@ -270,7 +270,7 @@ SF.openStartParam = (param) => {
   } else if (param.startsWith('GO_')) {
     // A button under Buddy's message: a section of the app
     const tab = param.slice(3);
-    if (tab === 'office') SF.openIn('marketplace', 'office');
+    if (tab === 'office') SF.openIn('profile', 'office');
     else if (['marketplace', 'chats', 'profile'].includes(tab)) SF.go(tab);
   } else if (param.startsWith('S_')) {
     SF.openIn('chats', 'chat', { slug: 'assistant' });

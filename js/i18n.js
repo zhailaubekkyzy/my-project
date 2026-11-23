@@ -130,6 +130,8 @@
 
     // Marketplace
     'Все': 'All', 'Продажи': 'Sales', 'Прогрев и заявки': 'Warm-up & leads',
+    // Settings (23 Nov.: «Профиль» became «Настройки»)
+    'Настройки': 'Settings', 'Мой профиль': 'My profile', 'Режим': 'Mode', 'Мои бизнесы': 'My businesses', 'Язык': 'Language', 'Пригласить друзей': 'Invite friends', 'Включить бизнес-профиль': 'Turn on the business profile', 'Что это?': 'What is this?', 'Открыть ещё бизнес': 'Open another business', 'Открыть бизнес': 'Open a business',
     // Niches of the Marketplace and «Вопросы и ответы» (22 Nov.)
     'Эксперты': 'Experts', 'Специалисты': 'Specialists', 'Шаблоны': 'Templates', 'Шаблоны ИИ-продавцов': 'AI seller templates', 'Шаблоны ИИ‑продавцов': 'AI seller templates', 'Все ниши': 'All niches', 'Вопросы и ответы': 'Questions & answers',
     'В этой нише пока никого. Посмотрите другие разделы.': 'No one in this niche yet. Look at other sections.',

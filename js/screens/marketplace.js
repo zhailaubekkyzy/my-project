@@ -18,21 +18,7 @@
   }
 
   // ---------------- List ----------------
-  // Business profile only: the way into the Office. A personal profile sees just the experts'
-  // products; the business profile is turned on in Профиль (owner's decision 21 Nov., like Instagram).
-  function officeEntry(state) {
-    if (!store().isBusinessView()) return '';
-    const waiting = SF.data.waitingInquiries(state).length;
-    return `
-      <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
-        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
-        <span class="flex-1">
-          <span class="block text-sm font-bold text-ink">Мой Офис</span>
-          <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-      </button>`;
-  }
+  // The Office is not here any more (owner's decision 23 Nov.): Настройки → «Мои бизнесы».
 
   // The price as the expert set it: a sum, «Бесплатно» or «Цена по запросу»
   function priceText(c) {
@@ -78,7 +64,7 @@
 
   function renderList(state, route = {}) {
     if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) {
-      return `${officeEntry(state)}${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
+      return `${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
     }
     const all = state.remote.marketplace;
     const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
@@ -87,7 +73,6 @@
     // Filters by niche, like on marketplaces: a section, then a niche inside it
     const items = (all || []).filter(c => SF.niches.matches(c, route) && matches(c));
     return `
-      ${officeEntry(state)}
       ${marketTabs(route)}
 
       <div class="relative">

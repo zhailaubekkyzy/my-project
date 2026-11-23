@@ -23,50 +23,80 @@
       </div>`;
   }
 
-  // ---------------- Personal / business profile (like Instagram) ----------------
-  // Personal: Бадди, Чаты, Маркетплейс, Комьюнити. Business (free for everyone): plus the Office —
-  // SI-sellers, marketers' funnels, analytics, own communities. Switching back only hides them.
-  function renderBusinessSwitch(state) {
-    const s = store();
-    if (!state.me.id) return '';
-    if (!s.isBusinessActive() && !s.isAssistant()) {
-      return `
-        <button onclick="SF.openIn('marketplace', 'office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left">
-          <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand flex-shrink-0"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
-          <span class="flex-1">
-            <span class="block text-sm font-bold text-ink">Перейти на бизнес-профиль</span>
-            <span class="block text-[11px] text-muted leading-snug">Бесплатно. Свои SI-продавцы, воронки, аналитика и сообщества.</span>
-          </span>
-          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-        </button>`;
-    }
-    const business = s.isBusinessView();
+  // ---------------- Settings (owner's decision 23 Nov.: «Профиль» became «Настройки») ----------------
+  // One short list: me (→ my profile) · personal / business mode · my businesses (each opens its Office here) ·
+  // notifications · search · language · invite · support panel · clear the phone · my support number.
+  function row({ icon, label, right = '', onclick = '', tone = 'text-ink', info = '' }) {
+    // A div with role="button": an «i» inside must not be a button inside a button
     return `
-      <div class="glass-card-3d p-3 space-y-2 text-xs">
-        <div class="flex gap-1 p-1 rounded-xl bg-sunken">
-          <button onclick="SF.actions.setPersonalMode(true)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'text-muted' : 'bg-card text-ink shadow'}">Личный</button>
-          <button onclick="SF.actions.setPersonalMode(false)" class="flex-1 py-1.5 rounded-lg font-semibold ${business ? 'bg-card text-ink shadow' : 'text-muted'}">Бизнес</button>
-        </div>
-        ${business ? renderMyBusinesses(state) : '<div class="text-[11px] text-faint leading-snug">Офис спрятан. SI-продавцы продолжают работать, уведомления приходят как обычно.</div>'}
+      <div ${onclick ? `role="button" tabindex="0" onclick="${onclick}"` : ''} class="w-full px-3.5 py-3 flex items-center gap-3 text-left text-sm ${onclick ? 'cursor-pointer' : ''}">
+        ${icon ? `<i data-lucide="${icon}" class="w-5 h-5 text-brand flex-shrink-0"></i>` : ''}
+        <span class="flex-1 min-w-0 font-semibold ${tone} flex items-center gap-1">${label}${info ? SF.info(info) : ''}</span>
+        ${right}${onclick && !right ? '<i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>' : ''}
       </div>`;
   }
+  const group = (rows) => `<div class="glass-card-3d divide-y divide-line overflow-hidden">${rows.filter(Boolean).join('')}</div>`;
 
-  // «Мои бизнесы» (owner's decision 22 Nov.): up to 3; the chosen one opens in the Office. The first is the main one.
+  const BUSINESS_INFO = 'Бизнес-профиль бесплатный. В нём — Офис: ваши бизнесы (до 3), SI-продавцы, шаблоны и сообщества. Переключение на «Личный» только прячет Офис: SI-продавцы продолжают работать.';
+
+  function renderSettings(state) {
+    const s = store();
+    const me = state.me;
+    const businessOn = s.isBusinessActive() || s.isAssistant();
+    const business = s.isBusinessView();
+    const mode = businessOn ? row({
+      icon: 'briefcase', label: 'Режим', info: BUSINESS_INFO,
+      right: `<span class="flex gap-1 p-0.5 rounded-lg bg-sunken text-xs">
+        <button onclick="SF.actions.setPersonalMode(true)" class="px-2.5 py-1 rounded-md font-semibold ${business ? 'text-muted' : 'bg-card text-ink shadow'}">Личный</button>
+        <button onclick="SF.actions.setPersonalMode(false)" class="px-2.5 py-1 rounded-md font-semibold ${business ? 'bg-card text-ink shadow' : 'text-muted'}">Бизнес</button>
+      </span>`
+    }) : row({ icon: 'briefcase', label: 'Включить бизнес-профиль', info: BUSINESS_INFO, onclick: "SF.push('office')" });
+    return `
+      <button onclick="SF.push('me')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left">
+        ${SF.avatar(me.photoUrl, { size: 52, kind: 'human' })}
+        <span class="flex-1 min-w-0">
+          <span class="flex items-center gap-1 text-base font-extrabold text-ink truncate">${SF.esc(me.displayName || 'Мой профиль')}${SF.partnerBadge(me.id, 16)}</span>
+          <span class="block text-xs text-brand font-semibold">Мой профиль</span>
+        </span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+      </button>
+      ${group([mode])}
+      ${business ? renderMyBusinesses(state) : ''}
+      ${group([
+        SF.botCanWrite() !== null ? row({ icon: 'bell', label: 'Уведомления в Telegram', right: SF.botCanWrite()
+          ? '<span class="text-xs text-brand font-semibold">Включены ✓</span>'
+          : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>' }) : '',
+        me.id ? row({ icon: 'search', label: 'Показывать меня в поиске', right: `<input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />` }) : '',
+        row({ icon: 'languages', label: 'Язык', right: `<span class="flex gap-1" data-no-tr>${[['ru', 'RU'], ['en', 'EN']].map(([code, label]) => `
+          <button onclick="SF.actions.setLanguage('${code}')" class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${SF.lang() === code ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-sunken text-muted border-line'}">${label}</button>`).join('')}</span>` })
+      ])}
+      ${group([
+        SF.data.signedIn() ? row({ icon: 'gift', label: 'Пригласить друзей', onclick: "SF.push('invite')" }) : '',
+        row({ icon: 'life-buoy', label: 'Поддержка', onclick: 'SF.actions.openSupport()' }),
+        me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : ''
+      ])}
+      <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Очистить данные на этом устройстве</button>
+      ${me.supportCode ? `
+        <button onclick="SF.copyText('${SF.js(me.supportCode)}', 'Номер скопирован')" class="w-full text-center text-[10px] text-faint">
+          Ваш номер для поддержки: <span class="font-semibold text-muted">${SF.esc(me.supportCode)}</span>
+        </button>` : ''}`;
+  }
+
+  // «Мои бизнесы» (owner's decisions 22–23 Nov.): up to 3; a business opens its Office right here, in Settings
   let businessForm = null; // { id?: string } — the open form (new business or renaming one)
   function renderMyBusinesses(state) {
     const s = store();
     if (!s.isBusinessActive()) {
       // An assistant in someone else's business without one's own: just the way into the Office
-      return `<button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Мой Офис</button>`;
+      return group([row({ icon: 'briefcase', label: 'Офис', onclick: "SF.push('office')" })]);
     }
     const data = state.remote.businesses;
-    if (!data) return '<div class="text-[11px] text-muted">Загружаю бизнесы…</div>';
+    if (!data) return '<div class="text-[11px] text-muted px-1">Загружаю бизнесы…</div>';
     const list = data.businesses || [];
-    const current = s.currentBusinessId();
     const field = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
     const editing = businessForm && businessForm.id ? list.find(b => b.id === businessForm.id) : null;
     const form = businessForm ? `
-      <form onsubmit="SF.actions.saveBusiness(event)" class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
+      <form onsubmit="SF.actions.saveBusiness(event)" class="p-3 space-y-1.5">
         <input name="name" required maxlength="80" value="${SF.esc(editing ? editing.name : '')}" placeholder="Название бизнеса, например «Йога-студия»" class="${field}" />
         <input name="niche" maxlength="120" value="${SF.esc(editing ? editing.niche : '')}" placeholder="Ниша (необязательно)" class="${field}" />
         <textarea name="about" rows="2" maxlength="2000" placeholder="О бизнесе: что делаете и для кого (SI будет знать)" class="${field}">${SF.esc(editing ? editing.about : '')}</textarea>
@@ -77,18 +107,20 @@
       </form>` : '';
     return `
       <div class="space-y-1.5">
-        <div class="flex items-center justify-between text-[11px] font-bold text-muted uppercase tracking-wider"><span>Мои бизнесы</span><span class="normal-case font-normal">${list.length} из ${data.max || 3}</span></div>
-        ${list.map(b => `
-          <div class="p-2.5 rounded-xl border flex items-center gap-2 ${b.id === current ? 'border-[#81D8D0] bg-[#81D8D0]/10' : 'border-line bg-card'}">
-            <button onclick="SF.actions.openBusiness('${SF.js(b.id)}')" class="flex-1 min-w-0 text-left">
-              <span class="block text-xs font-bold text-ink truncate">${SF.esc(b.name || 'Мой бизнес')}${b.isPrimary ? ' <span class="text-[10px] font-normal text-faint">· главный</span>' : ''}</span>
-              <span class="block text-[10px] text-muted">SI-продавцов: ${b.sellers} · продуктов: ${b.products} · материалов: ${b.materials}</span>
-            </button>
-            <button onclick="SF.actions.editBusiness('${SF.js(b.id)}')" class="p-1.5 rounded-lg text-faint" aria-label="Изменить"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
-          </div>`).join('')}
-        ${form}
-        ${!businessForm && list.length < (data.max || 3) ? `<button onclick="SF.actions.newBusiness()" class="w-full py-2 rounded-xl bg-card border border-dashed border-line-2 text-xs text-ink-2 flex items-center justify-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>${list.length ? 'Открыть ещё бизнес' : 'Открыть бизнес'}</button>` : ''}
-        ${list.length ? `<button onclick="SF.openIn('marketplace', 'office')" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5"><i data-lucide="briefcase" class="w-3.5 h-3.5"></i>Офис: ${SF.esc((s.currentBusiness() || {}).name || 'мой бизнес')}</button>` : ''}
+        <div class="flex items-center justify-between px-1 text-[11px] font-bold text-muted uppercase tracking-wider"><span>Мои бизнесы</span><span class="normal-case font-normal">${list.length} из ${data.max || 3}</span></div>
+        <div class="glass-card-3d divide-y divide-line overflow-hidden">
+          ${list.map(b => `
+            <div class="flex items-center">
+              <button onclick="SF.actions.openBusiness('${SF.js(b.id)}')" class="flex-1 min-w-0 px-3.5 py-3 flex items-center gap-3 text-left">
+                <i data-lucide="building-2" class="w-5 h-5 text-brand flex-shrink-0"></i>
+                <span class="flex-1 min-w-0 text-sm font-semibold text-ink truncate">${SF.esc(b.name || 'Мой бизнес')}</span>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+              </button>
+              <button onclick="SF.actions.editBusiness('${SF.js(b.id)}')" class="px-3 py-3 text-faint" aria-label="Изменить"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+            </div>`).join('')}
+          ${form}
+          ${!businessForm && list.length < (data.max || 3) ? `<button onclick="SF.actions.newBusiness()" class="w-full px-3.5 py-3 flex items-center gap-3 text-sm text-ink-2"><i data-lucide="plus" class="w-5 h-5 text-brand"></i>${list.length ? 'Открыть ещё бизнес' : 'Открыть бизнес'}</button>` : ''}
+        </div>
       </div>`;
   }
 
@@ -96,11 +128,11 @@
   SF.actions.editBusiness = (id) => { businessForm = { id }; store().notify(); };
   SF.actions.closeBusinessForm = () => { businessForm = null; store().notify(); };
 
-  // Choose the business that opens in the Office
+  // A business opens its Office right here, in Settings
   SF.actions.openBusiness = (id) => {
     store().setCurrentBusiness(id);
     SF.data.invalidate('business:');
-    SF.openIn('marketplace', 'office', { section: 'consultants' });
+    SF.openIn('profile', 'office', { section: 'consultants' });
   };
 
   SF.actions.saveBusiness = async (e) => {
@@ -142,7 +174,7 @@
     }
   };
 
-  // ---------------- View: the landing as visitors see it ----------------
+  // ---------------- «Мой профиль»: the landing as visitors see it ----------------
   function renderView(state) {
     const me = state.me;
     const p = me.profile;
@@ -210,51 +242,11 @@
         <button onclick="SF.showToast('SI-брендолог проведёт короткое интервью и соберёт профиль сам — на следующем шаге')" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><span class="si-dot"></span>SI-брендолог ${SF.soonBadge()}</button>
       </div>
 
-      ${renderBusinessSwitch(state)}
-
-      ${SF.botCanWrite() !== null ? `
-        <div class="glass-card-3d p-3 flex items-center justify-between gap-2 text-xs">
-          <span class="text-muted">Уведомления в Telegram</span>
-          ${SF.botCanWrite()
-            ? '<span class="text-brand font-semibold">Включены ✓</span>'
-            : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>'}
-        </div>` : ''}
-
-      ${me.id ? `
-        <label class="glass-card-3d p-3 flex items-center justify-between gap-3 text-xs cursor-pointer">
-          <span>
-            <span class="block text-ink-2 font-semibold">Показывать меня в поиске</span>
-            <span class="block text-[10px] text-faint leading-snug">Люди в SmartFlow найдут вас по имени и смогут написать.</span>
-          </span>
-          <input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
-        </label>` : ''}
-
-      <div class="glass-card-3d p-3 flex items-center justify-between gap-2 text-xs">
-        <span class="text-muted">Язык интерфейса</span>
-        <span class="flex gap-1" data-no-tr>
-          ${[['ru', 'Русский'], ['en', 'English']].map(([code, label]) => `
-            <button onclick="SF.actions.setLanguage('${code}')" class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${SF.lang() === code ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-sunken text-muted border-line'}">${label}</button>`).join('')}
-        </span>
-      </div>
-
-      ${renderInvite(state)}
-
       ${me.id ? `
         <button onclick="SF.copyText(SF.appLink('P_${SF.js(me.id)}'), 'Ссылка на профиль скопирована')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
           <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Поделиться профилем
         </button>` : ''}
 
-      ${me.staffRole ? `
-        <button onclick="SF.push('admin')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5">
-          <i data-lucide="life-buoy" class="w-3.5 h-3.5"></i> Панель поддержки
-        </button>` : ''}
-
-      <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Очистить данные на этом устройстве</button>
-
-      ${me.supportCode ? `
-        <button onclick="SF.copyText('${SF.js(me.supportCode)}', 'Номер скопирован')" class="w-full text-center text-[10px] text-faint">
-          Ваш номер для поддержки: <span class="font-semibold text-muted">${SF.esc(me.supportCode)}</span>
-        </button>` : ''}
     `;
   }
 
@@ -265,8 +257,7 @@
     return `
       <div class="glass-card-3d p-3.5 space-y-2 text-xs">
         ${r && r.partner ? SF.partnerMedal(r.brought, { size: 72 }) : ''}
-        <div class="font-bold text-ink">Пригласить в SmartFlow</div>
-        <div class="text-[11px] text-muted leading-snug">Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам.</div>
+        <div class="font-bold text-ink flex items-center gap-1">Пригласить в SmartFlow${SF.info('Ваша личная ссылка. Кто впервые придёт в SmartFlow по ней или по ссылкам ваших SI-продавцов — засчитается вам. Отправьте в любое приложение: WhatsApp, Instagram, Telegram. Друг попадёт сразу к своему Бадди.')}</div>
         <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
           <div class="text-[11px] font-semibold text-ink-2">Что вы получаете</div>
           <div class="text-[11px] text-ink-2">• ${r ? r.partnerMin : 10} человек перешли по ссылке — вы получаете знак «SMARTFLOW PARTNER»: он виден рядом с вашим фото и именем везде в SmartFlow</div>
@@ -282,7 +273,6 @@
               <button onclick="SF.actions.saveInviteText()" class="px-3 py-1.5 rounded-lg btn-3d-tiffany text-[11px] font-bold">Сохранить текст</button>
               ${r.inviteText ? '<button onclick="SF.actions.resetInviteText()" class="text-[11px] text-muted underline">Вернуть исходный</button>' : ''}
             </div>
-            <div class="text-[10px] text-faint leading-snug">Ссылка добавится в конце сама.</div>
           </div>
           <div class="flex items-center gap-2 p-2 rounded-xl bg-sunken border border-line">
             <span class="text-[11px] font-mono text-brand truncate flex-1 min-w-0">${SF.esc(r.url)}</span>
@@ -291,7 +281,6 @@
             <button onclick="SF.actions.shareInvite()" class="py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="share-2" class="w-3.5 h-3.5"></i>Отправить</button>
             <button onclick="SF.actions.copyInvite()" class="py-2.5 rounded-xl bg-card border border-line text-ink text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="copy" class="w-3.5 h-3.5"></i>Скопировать</button>
           </div>
-          <div class="text-[10px] text-faint leading-snug">Отправьте в любое приложение: WhatsApp, Instagram, Telegram и другие. Друг попадёт сразу к своему Бадди.</div>
           <div class="text-[11px] text-ink-2">Пришло по вашим ссылкам: <b>${r.brought}</b>${r.partner ? '' : ` · знак партнёра — с ${r.partnerMin}`}</div>
           ${r.brought ? `<div class="text-[11px] text-ink-2">Сообщений Бадди в день: <b>${30 + 10 * r.brought}</b></div>` : ''}` : '<div class="text-muted">Загружаю…</div>'}
       </div>`;
@@ -402,7 +391,6 @@
               ${SF.avatar(me.photoUrl, { size: 64, kind: 'human' })}
               <span class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-card border border-line-2 flex items-center justify-center text-ink-2 shadow"><i data-lucide="camera" class="w-3.5 h-3.5"></i></span>
             </button>
-            <div class="text-[11px] text-muted leading-snug">Своё фото поднимает доверие сильнее всего. Его увидят клиенты в профиле и в Маркетплейсе.</div>
           </div>
           ${field('displayName', 'Имя', p.displayName || me.displayName, 'Как вас называть', 0, 80)}
           ${field('headline', 'Чем вы занимаетесь (одна строка)', p.headline, 'Например: нутрициолог, 8 лет практики', 0, 120)}
@@ -534,21 +522,28 @@
   // ---------------- Screen ----------------
   // Support panel screens (route.screen 'admin…') are in js/screens/admin.js
   const isAdmin = (route) => route.screen.startsWith('admin');
+  // The Office opens inside Settings (owner's decision 23 Nov.): its screens are in js/screens/office.js
+  const isOffice = (route) => route.screen.startsWith('office');
+  const TITLES = { view: 'Настройки', me: 'Мой профиль', edit: 'Редактировать профиль', invite: 'Пригласить друзей' };
   SF.screens.profile = {
     title(route, state) {
       if (isAdmin(route)) return SF.admin.title(route, state);
-      return route.screen === 'edit' ? 'Редактировать профиль' : 'Профиль';
+      if (isOffice(route)) return SF.office.title(route, state);
+      return TITLES[route.screen] || 'Настройки';
     },
     render(route, state) {
       if (isAdmin(route)) return SF.admin.render(route, state);
-      return route.screen === 'edit' ? renderEdit(state) : renderView(state);
+      if (isOffice(route)) return SF.office.render(route, state);
+      if (route.screen === 'edit') return renderEdit(state);
+      if (route.screen === 'me') return renderView(state);
+      if (route.screen === 'invite') return renderInvite(state);
+      return renderSettings(state);
     },
     afterRender(route, state) {
-      if (isAdmin(route)) SF.admin.afterRender(route, state);
-      else if (route.screen !== 'edit') {
-        SF.data.referral();
-        if (store().isBusinessView() && store().isBusinessActive()) SF.data.businesses();
-      }
+      if (isAdmin(route)) return SF.admin.afterRender(route, state);
+      if (isOffice(route)) return SF.office.afterRender && SF.office.afterRender(route, state);
+      if (route.screen === 'invite' || route.screen === 'me') SF.data.referral();
+      if (route.screen === 'view' && store().isBusinessView() && store().isBusinessActive()) SF.data.businesses();
     }
   };
 })(window);
