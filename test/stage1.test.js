@@ -4166,6 +4166,12 @@ async function runAllTests() {
       assert.strictEqual(pushService.testOutbox.length, 1, 'push outbox');
       assert.strictEqual(pushService.testOutbox[0].payload.url, '/?startapp=CAL');
       assert(pushService.testOutbox[0].payload.body.includes('Новая запись'));
+      // The red number on the app icon: how much is unread now (this notification is unread at Buddy)
+      assert(Number.isInteger(pushService.testOutbox[0].payload.badge) && pushService.testOutbox[0].payload.badge >= 1, 'Badge sent');
+      const unreadAtBuddy = Number((await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND sender = 'buddy' AND read_at IS NULL`, [me.user.id])).n);
+      assert.strictEqual(await require('../server/services/badge-service').count(me.user.id), unreadAtBuddy, 'Badge = unread at Buddy (no chats yet)');
+      await db.run(`UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ?`, [me.user.id]);
+      assert.strictEqual(await require('../server/services/badge-service').count(me.user.id), 0, 'Read — no number');
       assert.strictEqual(notifyService.emailOutbox.length, 0, 'Push delivered — no e-mail');
       // Still saved for Buddy first
       assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND start_param = 'CAL'`, [me.user.id]));

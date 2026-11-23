@@ -3,6 +3,7 @@
 // a fetch handler must exist for the browser to offer «Установить».
 // Part 2: notifications (Web Push). The server sends { title, body, url, tag }; a tap opens SmartFlow on that screen
 // (an open SmartFlow window is reused).
+// Since 24 Nov. also the red number on the app icon (badge: how much is unread).
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', () => {
@@ -16,14 +17,18 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     data = { body: event.data ? event.data.text() : '' };
   }
-  event.waitUntil(self.registration.showNotification(data.title || 'SmartFlow', {
+  // The red number on the app icon (iPhone / iPad 16.4+ and some browsers; elsewhere nothing happens)
+  const badge = typeof data.badge === 'number' && self.navigator && 'setAppBadge' in self.navigator
+    ? (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()).catch(() => {})
+    : Promise.resolve();
+  event.waitUntil(Promise.all([badge, self.registration.showNotification(data.title || 'SmartFlow', {
     body: data.body || 'Новое в SmartFlow',
     icon: 'images/icon-192.png',
     badge: 'images/icon-192.png',
     tag: data.tag || 'smartflow',
     renotify: true,
     data: { url: data.url || '/' }
-  }));
+  })]));
 });
 
 self.addEventListener('notificationclick', (event) => {
