@@ -2091,6 +2091,26 @@ async function runAllTests() {
       assert.strictEqual(Number(forgot.notify), 1, '«напомни» always means a reminder');
       await db.run(`DELETE FROM buddy_reminders WHERE user_id = ? AND text = 'Проверить уведомления'`, [user.id]);
 
+      // «Напомни через 2 минуты» just after midnight: the AI put yesterday's date — the server counts the time itself
+      answer = { reply: 'Добавлено.', plans: [{ text: 'Проверить уведомления', at: '2020-01-01 00:17', remind_before: 0 }], cancel: [], open: 'none' };
+      const t0 = Date.now();
+      await api('POST', '/api/buddy/messages', token, { text: 'напомни через 2 минуты проверить уведомления', tzOffset: 300 });
+      const soon = await db.get(`SELECT * FROM buddy_reminders WHERE user_id = ? AND text = 'Проверить уведомления'`, [user.id]);
+      const at = soon.remind_at instanceof Date ? soon.remind_at : new Date(String(soon.remind_at).replace(' ', 'T') + 'Z');
+      assert(at - t0 > 60000 && at - t0 < 4 * 60000, 'In about 2 minutes');
+      assert.strictEqual(Number(soon.notify), 1);
+      await db.run(`DELETE FROM buddy_reminders WHERE user_id = ? AND text = 'Проверить уведомления'`, [user.id]);
+      // …and the AI gave no plan at all: still added, the words after the time become the text
+      answer = { reply: 'Добавлено.', plans: [], cancel: [], open: 'none' };
+      await api('POST', '/api/buddy/messages', token, { text: 'Напомни через полчаса выпить воды', tzOffset: 300 });
+      assert(await db.get(`SELECT id FROM buddy_reminders WHERE user_id = ? AND text = 'Выпить воды' AND notify = 1`, [user.id]));
+      await db.run(`DELETE FROM buddy_reminders WHERE user_id = ? AND text = 'Выпить воды'`, [user.id]);
+      assert.strictEqual(buddyService.inMinutes('напомни через 5 минут'), 5);
+      assert.strictEqual(buddyService.inMinutes('напомни через 2 часа позвонить'), 120);
+      assert.strictEqual(buddyService.inMinutes('напомни через час'), 60);
+      assert.strictEqual(buddyService.inMinutes('remind me in 10 minutes'), 10);
+      assert.strictEqual(buddyService.inMinutes('через 5 минут созвон'), null, 'Only when asked to remind');
+
       // Voice: transcribed and answered like text; the recording is not kept
       answer = { reply: 'Записал ужин.', plans: [{ text: 'Ужин с Айнур', at: `${day} 18:00`, remind_before: null }], cancel: [], open: 'none' };
       const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(2000, 7)]);
