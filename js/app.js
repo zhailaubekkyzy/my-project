@@ -51,6 +51,8 @@ async function initTelegramAuth() {
   } else {
     // A browser or the app installed on the home screen (owner's decisions 23 Nov.): signed in by e-mail before —
     // the saved session; otherwise the sign-in screen. On a developer's computer — the demo sign-in.
+    // Back from Google (part 3): the address has #id_token=… — sign in with it
+    if (await finishGoogleLogin()) return;
     if (api.getToken()) {
       try {
         store.setAuth(await api.getMe());
@@ -76,7 +78,49 @@ async function initTelegramAuth() {
 // -------------------------------------------------------------
 // Sign-in outside Telegram: e-mail → a 6-digit code from the letter (owner's decisions 23 Nov.)
 // -------------------------------------------------------------
-const login = { step: 'email', email: '', busy: false, error: '', resendAt: 0 };
+const login = { step: 'email', email: '', busy: false, error: '', resendAt: 0, google: undefined };
+
+// «Войти через Google» (part 3): the whole page goes to Google and comes back to this same address with
+// #id_token=…&state=… (works the same in the browser and in the app on the home screen). nonce and state —
+// one-time numbers kept on this device: the server checks nonce inside Google's answer.
+const GOOGLE_KEY = 'sf_google_login';
+SF.actions.loginGoogle = () => {
+  if (!login.google) return;
+  const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+  const pending = { nonce: rnd(), state: rnd() };
+  try { sessionStorage.setItem(GOOGLE_KEY, JSON.stringify(pending)); } catch (e) { /* the check below will fail honestly */ }
+  const params = new URLSearchParams({
+    client_id: login.google,
+    redirect_uri: `${location.origin}/`,
+    response_type: 'id_token',
+    scope: 'openid email profile',
+    nonce: pending.nonce,
+    state: pending.state,
+    prompt: 'select_account'
+  });
+  location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+};
+
+async function finishGoogleLogin() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (!hash.get('id_token') && !hash.get('error')) return false;
+  history.replaceState(null, '', location.pathname + location.search); // the pass never stays in the address
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(GOOGLE_KEY) || 'null'); sessionStorage.removeItem(GOOGLE_KEY); } catch (e) { /* none */ }
+  if (hash.get('error') || !pending || hash.get('state') !== pending.state) {
+    login.error = hash.get('error') === 'access_denied' ? 'Вход через Google отменён' : 'Вход через Google не получился — попробуйте ещё раз';
+    return false;
+  }
+  try {
+    const res = await window.smartFlowApi.googleLogin(hash.get('id_token'), pending.nonce);
+    window.funnelStore.setAuth(res);
+    SF.webPush.sync();
+    return true;
+  } catch (err) {
+    login.error = err.message || 'Вход через Google не получился';
+    return false;
+  }
+}
 
 function renderLogin() {
   const field = 'w-full p-3.5 rounded-2xl bg-sunken border border-line-2 text-ink text-base';
@@ -107,6 +151,12 @@ function renderLogin() {
               <button type="button" onclick="SF.actions.loginResend()" class="text-brand font-semibold">Отправить ещё раз</button>
             </div>` : ''}
         </form>
+        ${!codeStep && login.google ? `
+          <div class="flex items-center gap-3 text-[11px] text-faint"><span class="flex-1 h-px bg-line"></span>или<span class="flex-1 h-px bg-line"></span></div>
+          <button type="button" onclick="SF.actions.loginGoogle()" class="w-full py-3.5 rounded-2xl bg-card border border-line-2 text-ink text-sm font-bold flex items-center justify-center gap-2.5">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            Войти через Google
+          </button>` : ''}
         <div class="text-center text-[11px] text-faint">Письмо не пришло? Проверьте «Спам».</div>
       </div>
     </main>`;
@@ -115,6 +165,10 @@ function renderLogin() {
 function drawLogin() {
   const container = document.getElementById('app-root');
   if (!container) return;
+  if (login.google === undefined) {
+    login.google = null;
+    window.smartFlowApi.googleConfig().then(c => { login.google = c.clientId || null; if (login.google) drawLogin(); }).catch(() => {});
+  }
   container.innerHTML = renderLogin();
   if (window.lucide) window.lucide.createIcons();
   if (SF.translateDom) SF.translateDom(container);

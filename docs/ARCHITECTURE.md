@@ -94,7 +94,21 @@
     подтверждение оплаты, клиент просит человека, человек ответил клиенту лично, сценарий «Сообщить мне», ответ
     поддержки, добавили помощником, покупки шаблонов. Рассылки, группы, сообщества, «Клиент замолчал» — без писем.
   - iPhone и iPad: уведомления только в SmartFlow, установленном на экран «Домой» (iOS 16.4+), — так устроен Safari.
-- **Часть 3 — вход через Google.**
+- **Настройки без лишнего (решение владелицы 23 нояб.):** строк «Уведомления», «Важное на почту» и «Показывать меня в
+  поиске» в Настройках нет. Уведомления включаются сообщением у Бадди («Включить уведомления» / «Позже»); письма о
+  важном и видимость в поиске — включены по умолчанию (`users.email_notify`, `profile.hiddenFromSearch` остаются в базе).
+- **Часть 3 — сделано: вход через Google** (`server/services/google-login.js`, без новой таблицы). На экране входа под
+  почтой — «Войти через Google» (только если в Railway есть `GOOGLE_CLIENT_ID`; `GET /api/auth/google/config`).
+  Нажатие уводит всю страницу на Google (`response_type=id_token`, `prompt=select_account`, одноразовые `nonce` и `state`
+  хранятся на устройстве в `sessionStorage`) → Google возвращает на тот же адрес `…/#id_token=…&state=…` → приложение
+  стирает пропуск из адреса и отправляет его на `POST /api/auth/google` → сервер проверяет подпись открытыми ключами
+  Google (кэш по `Cache-Control`), адресата (`aud` = `GOOGLE_CLIENT_ID`), издателя, срок, `nonce` и
+  `email_verified`. Аккаунт: тот же Google (`auth_identities.provider = 'google'`, `provider_user_id` = `sub`) — тот же
+  человек; почта, с которой уже входили по коду, — тот же аккаунт (Google добавляется к нему); иначе новый (имя из
+  Google). Вход по почте с этим адресом потом ведёт в тот же аккаунт. Сессия — 90 дней, как по почте.
+  Владелице: Google Cloud → APIs & Services → OAuth consent screen (External) → Credentials → OAuth client ID
+  «Web application»: Authorized JavaScript origins и redirect URIs — `https://app.techsmartflow.com` и
+  `https://app.techsmartflow.com/` (и запасной адрес Workers) → Client ID в Railway `GOOGLE_CLIENT_ID`.
 
 ## Бизнес-режим 2.0: AI-продавцы, шаблоны, «пазл» (решения владелицы 21–22 нояб., ещё не сделано)
 
@@ -700,7 +714,7 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
 
   | Событие | Когда | Свойства | Где в коде |
   |---|---|---|---|
-  | `app_opened` | вход через Telegram; с 23 нояб. и по почте из браузера | — (Telegram); по почте: `method: 'email'`, `signed_up` (новый аккаунт) | `server/routes/auth.js` |
+  | `app_opened` | вход через Telegram; с 23 нояб. и по почте или через Google из браузера | — (Telegram); из браузера: `method` (`'email'` / `'google'` — с 23 нояб.), `signed_up` (новый аккаунт) | `server/routes/auth.js` |
   | `push_subscribed` | человек включил уведомления на новом устройстве (с 23 нояб.) | `device` (система и браузер, например «iOS · Safari») | `server/routes/push.js` |
   | `email_code_requested` | запрошен код для входа по почте (с 23 нояб.; без человека и без почты — анонимно) | — | `server/routes/auth.js` |
   | `link_opened` | вход по ссылке с меткой источника или приглашению | `kind`, `link_id`, `project_id`, `new_user` | `server/services/partner-service.js` |

@@ -57,6 +57,8 @@ const config = {
   // MAIL_FROM — the sender on the domain confirmed in Resend
   resendApiKey: process.env.RESEND_API_KEY || '',
   mailFrom: process.env.MAIL_FROM || 'SmartFlow <no-reply@techsmartflow.com>',
+  // Вход через Google (часть 3): OAuth client ID из Google Cloud (тип «Web application»); не секрет, но только в Railway
+  googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
   // Web Push (часть 2): ключи VAPID — только в Railway; создать пару — панель поддержки → «Состояние системы»
   vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
   vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),

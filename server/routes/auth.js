@@ -128,6 +128,38 @@ router.post('/email/verify', emailRoute(async (req, res) => {
   });
 }));
 
+// ---------- Sign-in through Google (part 3; owner's decisions 23 Nov.) ----------
+const googleLogin = require('../services/google-login');
+
+/** GET /api/auth/google/config — { clientId } (null: the button is not shown) */
+router.get('/google/config', (req, res) => {
+  res.json({ clientId: config.googleClientId || null });
+});
+
+/** POST /api/auth/google { idToken, nonce } — signs in (a new person gets a new account) */
+router.post('/google', async (req, res, next) => {
+  try {
+    const who = await googleLogin.verify((req.body || {}).idToken, (req.body || {}).nonce);
+    const user = await authService.findOrCreateGoogleUser(who);
+    if (user.status === 'blocked') {
+      supportService.setBlocked(user.id, true);
+      return res.status(403).json(BLOCKED_RESPONSE);
+    }
+    await db.run('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
+    analytics.capture('app_opened', user.id, { method: 'google', signed_up: Boolean(user.created) });
+    res.json({
+      token: authService.generateSessionToken(user, { expiresIn: config.webJwtExpiresIn }),
+      user: await supportService.sessionUser(user),
+      app: await appInfo.forUser(user.id),
+      projects: await projectService.getUserProjects(user.id),
+      subscription: await subscriptionService.getPlatformSubscription(user.id)
+    });
+  } catch (err) {
+    if (err instanceof googleLogin.GoogleLoginError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+});
+
 /**
  * GET /api/auth/me
  * Retrieves current authenticated user profile and projects

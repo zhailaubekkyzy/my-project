@@ -111,6 +111,8 @@ app.get('/api/health', async (req, res) => {
       mail: { configured: require('./services/mail-service').isConfigured() },
       // true = notifications to phones and computers from the browser work (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY)
       push: { configured: require('./services/push-service').isConfigured() },
+      // true = the «Войти через Google» button is shown (GOOGLE_CLIENT_ID)
+      google: { configured: Boolean(config.googleClientId) },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()

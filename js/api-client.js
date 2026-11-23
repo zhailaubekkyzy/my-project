@@ -195,6 +195,16 @@
       return res;
     },
 
+    // Sign-in through Google (part 3): the id_token Google returned + the one-time number this device sent
+    async googleConfig() {
+      return await apiFetch('/api/auth/google/config');
+    },
+    async googleLogin(idToken, nonce) {
+      const res = await apiFetch('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken, nonce }) });
+      if (res.token) this.setToken(res.token);
+      return res;
+    },
+
     async getMe() {
       return await apiFetch('/api/auth/me');
     },

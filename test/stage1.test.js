@@ -4177,6 +4177,59 @@ async function runAllTests() {
     }
   });
 
+  await test('85. Вход через Google: проверка подписи, адресата и одноразового числа, тот же аккаунт по почте', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const googleLogin = require('../server/services/google-login');
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'test-kid', alg: 'RS256', use: 'sig' };
+    const saved = config.googleClientId;
+    const CLIENT = 'test-client.apps.googleusercontent.com';
+    const idToken = (claims, opts = {}) => jwt.sign(
+      { iss: 'https://accounts.google.com', aud: CLIENT, email_verified: true, ...claims },
+      opts.key || privateKey, { algorithm: 'RS256', keyid: 'test-kid', expiresIn: opts.expiresIn || '10m' }
+    );
+    const login = (token, nonce) => api('POST', '/api/auth/google', null, { idToken: token, nonce });
+    try {
+      config.googleClientId = '';
+      assert.strictEqual((await api('GET', '/api/auth/google/config')).body.clientId, null, 'No button without GOOGLE_CLIENT_ID');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'a@example.com', nonce: 'n1' }), 'n1')).status, 503);
+
+      config.googleClientId = CLIENT;
+      googleLogin.setTestKeys([jwk]);
+      assert.strictEqual((await api('GET', '/api/auth/google/config')).body.clientId, CLIENT);
+      // Forged and wrong passes are refused
+      const otherKey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }, { key: otherKey }), 'n1')).status, 400, 'Not signed by Google');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1', aud: 'someone-else' }), 'n1')).status, 400, 'For another app');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }), 'n2')).body.code, 'BAD_NONCE');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }, { expiresIn: -3600 }), 'n1')).status, 400, 'Expired');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1', email_verified: false }), 'n1')).body.code, 'EMAIL_NOT_VERIFIED');
+
+      // A new person — a new account with the name from Google
+      const first = await login(idToken({ sub: 'g1', email: 'G.User@example.com', name: 'Айгуль Г.', nonce: 'n1' }), 'n1');
+      assert.strictEqual(first.status, 200);
+      assert(first.body.token);
+      const user = await db.get('SELECT * FROM users WHERE id = ?', [first.body.user.id]);
+      assert.strictEqual(user.email, 'g.user@example.com');
+      assert.strictEqual(user.display_name, 'Айгуль Г.');
+      assert.strictEqual((await api('GET', '/api/auth/me', first.body.token)).body.user.id, user.id);
+      // Again — the same account; by e-mail with the same address — the same account too
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n3' }), 'n3')).body.user.id, user.id);
+      const code = await api('POST', '/api/auth/email/start', null, { email: 'g.user@example.com' });
+      assert.strictEqual((await api('POST', '/api/auth/email/verify', null, { email: 'g.user@example.com', code: code.body.devCode })).body.user.id, user.id);
+
+      // Signed in by e-mail before → Google with that address joins the same account
+      const a = await api('POST', '/api/auth/email/start', null, { email: 'mail.first@example.com' });
+      const byMail = (await api('POST', '/api/auth/email/verify', null, { email: 'mail.first@example.com', code: a.body.devCode })).body.user.id;
+      assert.strictEqual((await login(idToken({ sub: 'g2', email: 'mail.first@example.com', nonce: 'n4' }), 'n4')).body.user.id, byMail);
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM auth_identities WHERE user_id = ? AND provider = 'google'`, [byMail])).n), 1);
+    } finally {
+      config.googleClientId = saved;
+      googleLogin.setTestKeys(null);
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

@@ -25,7 +25,7 @@
 
   // ---------------- Settings (owner's decision 23 Nov.: «Профиль» became «Настройки») ----------------
   // One short list: me (→ my profile) · personal / business mode · my businesses (each opens its Office here) ·
-  // notifications · search · language · invite · support panel · clear the phone · my support number.
+  // notifications · language · invite · support panel · clear the phone · my support number.
   function row({ icon, label, right = '', onclick = '', tone = 'text-ink', info = '' }) {
     // A div with role="button": an «i» inside must not be a button inside a button
     return `
@@ -66,8 +66,6 @@
         SF.botCanWrite() !== null ? row({ icon: 'bell', label: 'Уведомления в Telegram', right: SF.botCanWrite()
           ? '<span class="text-xs text-brand font-semibold">Включены ✓</span>'
           : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>' }) : '',
-        ...webNotificationRows(me),
-        me.id ? row({ icon: 'search', label: 'Показывать меня в поиске', right: `<input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />` }) : '',
         row({ icon: 'languages', label: 'Язык', right: `<span class="flex gap-1" data-no-tr>${[['ru', 'RU'], ['en', 'EN']].map(([code, label]) => `
           <button onclick="SF.actions.setLanguage('${code}')" class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${SF.lang() === code ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-sunken text-muted border-line'}">${label}</button>`).join('')}</span>` })
       ])}
@@ -85,35 +83,6 @@
         <button onclick="SF.copyText('${SF.js(me.supportCode)}', 'Номер скопирован')" class="w-full text-center text-[10px] text-faint">
           Ваш номер для поддержки: <span class="font-semibold text-muted">${SF.esc(me.supportCode)}</span>
         </button>` : ''}`;
-  }
-
-  // Outside Telegram (browser / home screen; part 2 of the browser login, 23 Nov.): notifications on this device
-  // and «Важное на почту» — meetings, payments, a client waiting, the support's answer, if notifications did not arrive
-  function webNotificationRows(me) {
-    if (!me.id || !SF.inTelegram || SF.inTelegram() || !SF.webPush) return [];
-    const wp = SF.webPush;
-    if (!wp.loaded) setTimeout(() => wp.loadStatus(), 0);
-    const st = wp.state();
-    const right = {
-      on: '<span class="text-xs text-brand font-semibold">Включены ✓</span>',
-      off: '<button onclick="event.stopPropagation(); SF.webPush.enable()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>',
-      install: '<button onclick="event.stopPropagation(); SF.actions.installApp()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Как включить</button>',
-      blocked: '<button onclick="event.stopPropagation(); SF.webPush.blockedHelp()" class="px-3 py-1.5 rounded-xl btn-3d-dark text-xs">Запрещены</button>',
-      unsupported: '<span class="text-xs text-faint">нет в этом браузере</span>'
-    }[st];
-    const rows = [row({
-      icon: 'bell', label: 'Уведомления', right,
-      info: st === 'install' ? 'На iPhone и iPad уведомления приходят только в SmartFlow, установленный на экран «Домой». Установите — и включите их там.' : ''
-    })];
-    const status = wp.status;
-    if (status && status.email) {
-      rows.push(row({
-        icon: 'mail', label: 'Важное на почту',
-        info: `Встречи, оплаты, ответ человека и поддержки — письмом на ${status.email}, если уведомление не дошло (не больше 20 писем в сутки).`,
-        right: `<input type="checkbox" ${status.emailNotify ? 'checked' : ''} onchange="SF.webPush.setEmail(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />`
-      }));
-    }
-    return rows;
   }
 
   // «Мои бизнесы» (owner's decisions 22–23 Nov.): up to 3; a business opens its Office right here, in Settings
