@@ -74,6 +74,34 @@ function localLabel(date, offset) {
 }
 
 // "2026-10-14 09:00" in the person's time → UTC Date (or null)
+// «через 5 минут», «через полчаса», «через 2 часа», «in 10 minutes» → minutes (only with «напомни» / «remind»)
+function inMinutes(text) {
+  const t = String(text || '').toLowerCase();
+  if (!/напомн|remind/.test(t)) return null;
+  if (/через\s+полчаса|in half an hour/.test(t)) return 30;
+  const m = /(?:через|in)\s+(\d{1,4})?\s*(минут\w*|мин\b|minutes?|mins?|час\w*|hours?)/.exec(t);
+  if (!m) return null;
+  const n = m[1] ? parseInt(m[1], 10) : 1; // «через час» = 1 hour
+  const minutes = /^(час|hour)/.test(m[2]) ? n * 60 : n;
+  return minutes >= 1 && minutes <= 7 * 1440 ? minutes : null;
+}
+
+// What to remind of, from the words themselves (when the AI gave no plan): «напомни через 2 минуты проверить почту» → «Проверить почту»
+function reminderWhat(text) {
+  const rest = String(text || '')
+    .replace(/.*?(?:через\s+(?:полчаса|\d{0,4}\s*(?:минут\w*|мин\b|час\w*))|in\s+(?:half an hour|\d{0,4}\s*(?:minutes?|mins?|hours?)))/i, '')
+    .replace(/^[\s,.:—-]+/, '').trim();
+  const what = rest || 'Напоминание';
+  return (what.charAt(0).toUpperCase() + what.slice(1)).slice(0, 300);
+}
+
+// A moment as «ГГГГ-ММ-ДД ЧЧ:ММ» on the person's clock (rounded up to the minute)
+function localStamp(date, offset) {
+  const d = new Date(Math.ceil((date.getTime() + offset * 60000) / 60000) * 60000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
 function parseLocal(value, offset) {
   const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(String(value || '').trim());
   if (!m) return null;
@@ -312,6 +340,19 @@ async function send(user, rawText, tzOffset, now = new Date(), { voice = false }
   const asked = [];
   if (parsed && Array.isArray(parsed.plans)) asked.push(...parsed.plans);
   if (parsed && Array.isArray(parsed.reminders)) asked.push(...parsed.reminders.map(r => ({ ...r, remind_before: 0, reminder: true })));
+  // «Напомни через 5 минут / через 2 часа …» — the server counts the time itself (seen 24 Nov. just after midnight:
+  // the AI put yesterday's date, the plan was in the past and silently dropped, though Buddy said «добавлено»)
+  const after = inMinutes(text);
+  if (after) {
+    const at = localStamp(new Date(now.getTime() + after * 60000), offset);
+    if (asked.length) {
+      // The plan the AI meant as the reminder: the one with remind_before, otherwise the first
+      const i = Math.max(0, asked.findIndex(r => r && r.remind_before !== null && r.remind_before !== undefined && r.remind_before !== ''));
+      asked[i] = { ...asked[i], at, remind_before: 0 };
+    } else {
+      asked.push({ text: reminderWhat(text), at, remind_before: 0 });
+    }
+  }
   // «Напомни …» — and the answer forgot to ask for a reminder anywhere: remind at that very time
   // (seen 23 Nov.: «напомни через 2 минуты» was saved as a plain plan, nothing came)
   if (asked.length && /напомн|remind/i.test(text) && asked.every(r => !r || r.remind_before === null || r.remind_before === undefined || r.remind_before === '')) {
@@ -378,6 +419,8 @@ async function reminderText(r) {
 }
 
 module.exports = {
+  inMinutes,
+  reminderWhat,
   DAILY_LIMIT,
   PER_INVITED,
   dailyLimit,
