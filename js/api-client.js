@@ -199,6 +199,15 @@
       return await apiFetch('/api/auth/me');
     },
 
+    // Notifications on this device (Web Push) and «Важное на почту» (browser login, part 2)
+    push: {
+      status: () => apiFetch('/api/push/status'),
+      subscribe: (subscription) => apiFetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription }) }),
+      unsubscribe: (endpoint) => apiFetch('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
+      setEmail: (on) => apiFetch('/api/push/email', { method: 'PUT', body: JSON.stringify({ on }) }),
+      test: () => apiFetch('/api/push/test', { method: 'POST' })
+    },
+
     // Projects endpoints
     async getProjects() {
       return await apiFetch('/api/projects');
@@ -785,6 +794,7 @@
     // ---------- Support panel (team only) ----------
     admin: {
       overview: () => apiFetch('/api/admin/overview'),
+      pushKeys: () => apiFetch('/api/admin/push-keys', { method: 'POST' }),
       funnels: (status) => apiFetch(`/api/admin/funnels?status=${encodeURIComponent(status || 'published')}`),
       funnel: (id) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}`),
       decideFunnel: (id, decision, note) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }),

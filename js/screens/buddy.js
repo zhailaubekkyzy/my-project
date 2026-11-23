@@ -348,6 +348,15 @@
               ${step.secondary ? `<button onclick="${step.secondary.action}" class="px-3 py-1.5 rounded-xl btn-3d-dark text-[11px]">${step.secondary.label}</button>` : ''}
             </div>` : ''
         }) : ''}
+        ${signedIn && SF.webPush && SF.webPush.showPrompt() ? buddyBubble(SF.esc(SF.t(SF.webPush.state() === 'install'
+          ? 'Чтобы не пропускать ответы, встречи и напоминания, установите SmartFlow на экран «Домой» и включите уведомления.'
+          : 'Включите уведомления — так вы не пропустите ответы, встречи и напоминания.')), {
+          buttons: `
+            <div class="flex flex-wrap gap-2">
+              <button onclick="SF.webPush.enable()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-[11px] font-bold">${SF.t(SF.webPush.state() === 'install' ? 'Как установить' : 'Включить уведомления')}</button>
+              <button onclick="SF.webPush.dismissPrompt()" class="px-3 py-1.5 rounded-xl btn-3d-dark text-[11px]">${SF.t('Позже')}</button>
+            </div>`
+        }) : ''}
         <div id="buddy-typing" class="hidden flex items-end gap-1.5">
           <img src="${SF.MASCOTS.buddy}" alt="" class="mascot-avatar" />
           <div class="typing-dots"><span class="text-[10px] text-muted font-medium mr-1.5">печатает</span><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>

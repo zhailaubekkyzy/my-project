@@ -85,7 +85,7 @@ async function saveReceipt(project, client, buffer, userId) {
     await telegramBot.notifyUser(
       personId,
       `🧾 ${client.name || 'Клиент'} прислал(а) чек об оплате.\nSI-продавец: «${project.name}».\n\nПроверьте поступление денег и подтвердите оплату в карточке клиента.`,
-      { buttonText: 'Открыть', startParam: `I_${project.id}` }
+      { important: true, buttonText: 'Открыть', startParam: `I_${project.id}` }
     );
   }
   return toReceipt(await db.get('SELECT * FROM payment_receipts WHERE id = ?', [id]));
@@ -149,7 +149,7 @@ async function reviewReceipt(project, client, receiptId, action, member) {
       confirm
         ? { ru: `✅ Оплата подтверждена: «${project.name}».`, en: `✅ Payment confirmed: «${project.name}».` }
         : { ru: `🧾 По вашему чеку для «${project.name}» есть вопрос.`, en: `🧾 There is a question about your receipt for «${project.name}».` },
-      { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
+      { important: true, buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
     );
   }
   return { receipt: toReceipt(await db.get('SELECT * FROM payment_receipts WHERE id = ?', [receipt.id])), message, funnelStatus: client.funnel_status };

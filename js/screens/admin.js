@@ -122,10 +122,35 @@
         ${row('База', sys.database === 'postgres' ? 'Supabase ✓' : esc(sys.database))}
         ${row('OpenAI (ответы SI)', sys.openai ? `работает ✓ (${esc(sys.openaiModel)})` : '<span class="text-si">нет ключа</span>')}
         ${row('Бот Telegram', sys.bot ? 'работает ✓' : '<span class="text-si">нет токена</span>')}
+        ${row('Письма (вход по почте)', sys.mail ? 'работают ✓' : '<span class="text-si">нет ключа Resend</span>')}
+        ${row('Уведомления в браузере', sys.push ? 'работают ✓' : '<span class="text-si">нет ключей</span>')}
+        ${!sys.push && o.me.role === 'owner' ? pushKeysBlock() : ''}
         ${sys.scheduler ? row('«Будильник» (раз в минуту)', sys.scheduler.running ? `работает ✓${sys.scheduler.lastTickAt ? ` · ${esc(new Date(sys.scheduler.lastTickAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))}` : ''}` : '<span class="text-si">не запущен</span>') : ''}
         ${row('Ваша роль', esc(o.me.roleLabel || o.me.role))}
       `)}
     `;
+  }
+
+  // Notifications from the browser need a key pair in Railway: the owner makes it here (shown once, not saved)
+  function pushKeysBlock() {
+    const k = cache.pushKeys;
+    const keyRow = (name, value) => `
+      <div class="space-y-1">
+        <div class="text-[11px] font-semibold text-ink-2">${name}</div>
+        <div class="flex gap-1.5">
+          <input readonly value="${esc(value)}" class="flex-1 min-w-0 p-2 rounded-lg bg-sunken border border-line-2 text-ink text-[10px] font-mono" />
+          <button onclick="SF.admin.copyKey('${SF.js(value)}')" class="px-2.5 rounded-lg btn-3d-dark text-[11px]">Копировать</button>
+        </div>
+      </div>`;
+    if (!k) {
+      return `<button onclick="SF.admin.makePushKeys()" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs font-semibold">Создать ключи для уведомлений</button>`;
+    }
+    return `
+      <div class="p-3 rounded-xl bg-sunken border border-line space-y-2">
+        <div class="text-[11px] text-ink-2 leading-snug">Railway → сервис → <b>Variables</b> → <b>New Variable</b>: впишите имя слева и вставьте значение. Ключи показываются один раз.</div>
+        ${keyRow('VAPID_PUBLIC_KEY', k.publicKey)}
+        ${keyRow('VAPID_PRIVATE_KEY', k.privateKey)}
+      </div>`;
   }
 
   function tile({ icon, title, sub, onclick, alert = false }) {
@@ -738,6 +763,19 @@
     SF.patch({ code: e.target.code.value.trim().toUpperCase() });
   }
 
+  async function makePushKeys() {
+    try {
+      cache.pushKeys = await api().admin.pushKeys();
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+    store().notify();
+  }
+
+  function copyKey(value) {
+    SF.copyText(value, 'Скопировано');
+  }
+
   async function addStaff(e) {
     e.preventDefault();
     try {
@@ -1048,6 +1086,8 @@
     searchUsers,
     searchErrors,
     addStaff,
+    makePushKeys,
+    copyKey,
     removeStaff,
     decideFunnel,
     hideCommunity,

@@ -109,6 +109,8 @@ app.get('/api/health', async (req, res) => {
       amplitude: { configured: analytics.isAmplitudeConfigured(), region: config.amplitudeRegion },
       // true = letters with the login code go out through Resend (RESEND_API_KEY is set); the key is never shown
       mail: { configured: require('./services/mail-service').isConfigured() },
+      // true = notifications to phones and computers from the browser work (VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY)
+      push: { configured: require('./services/push-service').isConfigured() },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
@@ -142,6 +144,7 @@ app.use('/api/people', require('./routes/people'));
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/communities', require('./routes/communities'));
 app.use('/api/ready-funnels', require('./routes/ready-funnels'));
+app.use('/api/push', require('./routes/push'));
 
 // Serve ONLY the public frontend assets. The repository root also holds server code,
 // package.json, migrations and scripts — none of it may be reachable over HTTP.
