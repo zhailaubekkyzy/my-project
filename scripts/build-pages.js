@@ -35,6 +35,9 @@ for (const dir of PUBLIC_DIRS) {
   fs.cpSync(path.join(ROOT, dir), path.join(DIST, dir), { recursive: true });
 }
 
+// The app on the home screen: its description and the service worker stay at the root, never hashed
+for (const file of ['manifest.webmanifest', 'sw.js']) fs.copyFileSync(path.join(ROOT, file), path.join(DIST, file));
+
 // Content-hashed copies for everything index.html links to directly.
 let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 html = html.replace(/(src|href)="((?:css|js)\/[^"?#]+)\.(css|js)"/g, (match, attr, base, ext) => {
@@ -63,6 +66,14 @@ fs.writeFileSync(path.join(DIST, '_headers'), `/assets/*
 
 /index.html
   Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+  Content-Type: application/manifest+json
 
 /*
   X-Content-Type-Options: nosniff

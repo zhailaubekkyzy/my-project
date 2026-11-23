@@ -88,6 +88,46 @@ router.post('/telegram', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------
+// Вход через браузер, часть 1 (решения владелицы 23 нояб.): почта + код из письма. Тот же ответ, что у Telegram.
+// ---------------------------------------------------------------
+const emailLogin = require('../services/email-login');
+const clientIp = (req) => String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
+const emailRoute = (fn) => async (req, res, next) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    if (err instanceof emailLogin.EmailLoginError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
+    next(err);
+  }
+};
+
+/** POST /api/auth/email/start { email } — a letter with a 6-digit code */
+router.post('/email/start', emailRoute(async (req, res) => {
+  const result = await emailLogin.start((req.body || {}).email, clientIp(req));
+  analytics.capture('email_code_requested', null); // no e-mail in the numbers: anonymous
+  res.json(result);
+}));
+
+/** POST /api/auth/email/verify { email, code } — signs in (a new person gets a new account) */
+router.post('/email/verify', emailRoute(async (req, res) => {
+  const user = await emailLogin.verify((req.body || {}).email, (req.body || {}).code);
+  if (user.status === 'blocked') {
+    supportService.setBlocked(user.id, true);
+    return res.status(403).json(BLOCKED_RESPONSE);
+  }
+  await db.run('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
+  analytics.capture('app_opened', user.id, { method: 'email', signed_up: Boolean(user.created) });
+  const token = authService.generateSessionToken(user, { expiresIn: config.webJwtExpiresIn });
+  res.json({
+    token,
+    user: await supportService.sessionUser(user),
+    app: await appInfo.forUser(user.id),
+    projects: await projectService.getUserProjects(user.id),
+    subscription: await subscriptionService.getPlatformSubscription(user.id)
+  });
+}));
+
 /**
  * GET /api/auth/me
  * Retrieves current authenticated user profile and projects

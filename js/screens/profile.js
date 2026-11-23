@@ -75,6 +75,10 @@
         row({ icon: 'life-buoy', label: 'Поддержка', onclick: 'SF.actions.openSupport()' }),
         me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : ''
       ])}
+      ${SF.inTelegram && !SF.inTelegram() ? group([
+        SF.canInstall() ? row({ icon: 'smartphone', label: 'Установить на экран', onclick: 'SF.actions.installApp()' }) : '',
+        row({ icon: 'log-out', label: 'Выйти', tone: 'text-si', onclick: 'SF.actions.logout()' })
+      ]) : ''}
       <button onclick="SF.actions.resetDemo()" class="w-full py-2 text-[11px] text-faint hover:text-rose-400">Очистить данные на этом устройстве</button>
       ${me.supportCode ? `
         <button onclick="SF.copyText('${SF.js(me.supportCode)}', 'Номер скопирован')" class="w-full text-center text-[10px] text-faint">

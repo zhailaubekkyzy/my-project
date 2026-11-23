@@ -167,6 +167,18 @@ for (const dir of PUBLIC_DIRS) {
   app.use(`/${dir}`, express.static(path.join(ROOT_DIR, dir), staticOptions));
 }
 
+// The app on the home screen (вход через браузер, часть 1): its description and the service worker — two files
+// from the root, nothing else from there
+app.get('/manifest.webmanifest', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('application/manifest+json').sendFile(path.join(ROOT_DIR, 'manifest.webmanifest'));
+});
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.type('application/javascript').sendFile(path.join(ROOT_DIR, 'sw.js'));
+});
+
 // In production the stamped index.html is built once; in development it is rebuilt on
 // every request so edits to css/js show up without a restart.
 const prodIndexHtml = config.isProd ? renderIndexHtml() : null;

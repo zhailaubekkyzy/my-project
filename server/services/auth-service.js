@@ -156,18 +156,56 @@ async function findOrCreateTelegramUser(tgUser, requestedRole = 'expert') {
 }
 
 /**
- * Issue signed JWT for safe sessions
+ * Finds the person by their e-mail (signed in from a browser, owner's decisions 23 Nov.) or creates a new account,
+ * the same way as for Telegram: a permanent internal id, the e-mail identity, the free platform subscription.
  */
-function generateSessionToken(user) {
+async function findOrCreateEmailUser(email) {
+  const address = String(email || '').trim().toLowerCase();
+  if (!address) throw new Error('E-mail is required');
+  const identity = await db.get(`SELECT * FROM auth_identities WHERE provider = 'email' AND provider_user_id = ?`, [address]);
+  let user = identity ? await db.get('SELECT * FROM users WHERE id = ?', [identity.user_id]) : null;
+  let created = false;
+  if (!user) {
+    created = true;
+    const internalUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    // The name until the person writes their own: the part of the address before «@»
+    const displayName = address.split('@')[0].slice(0, 60) || 'Новый пользователь';
+    await db.run(
+      `INSERT INTO users (id, display_name, username, avatar_url, roles, status, is_demo, email)
+       VALUES (?, ?, NULL, NULL, ?, 'active', 0, ?)`,
+      [internalUserId, displayName, JSON.stringify(['expert']), address]
+    );
+    await db.run(
+      `INSERT INTO auth_identities (id, user_id, provider, provider_user_id, metadata) VALUES (?, ?, 'email', ?, ?)`,
+      [`ident_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, internalUserId, address, JSON.stringify({ email: address })]
+    );
+    const trialEndsAt = new Date(Date.now() + config.defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+    await db.run(
+      `INSERT INTO platform_subscriptions (id, user_id, plan_code, status, trial_ends_at, current_period_ends_at, auto_renew)
+       VALUES (?, ?, 'founder_free_100', 'trial', ?, ?, 1)`,
+      [`sub_plat_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, internalUserId, trialEndsAt, trialEndsAt]
+    );
+    user = await db.get('SELECT * FROM users WHERE id = ?', [internalUserId]);
+  } else if (!user.email) {
+    await db.run('UPDATE users SET email = ? WHERE id = ?', [address, user.id]);
+    user.email = address;
+  }
+  let roles = ['expert'];
+  try { roles = JSON.parse(user.roles); } catch (e) {}
+  return { ...user, roles, created };
+}
+
+/**
+ * Issue signed JWT for safe sessions. expiresIn: longer for the browser / installed app (no Telegram to sign in again)
+ */
+function generateSessionToken(user, { expiresIn = config.jwtExpiresIn } = {}) {
   const payload = {
     userId: user.id,
     telegramId: user.telegramId || null,
     roles: user.roles || ['expert']
   };
 
-  return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn
-  });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn });
 }
 
 /**
@@ -182,6 +220,7 @@ function verifySessionToken(token) {
 }
 
 module.exports = {
+  findOrCreateEmailUser,
   verifyTelegramInitData,
   findOrCreateTelegramUser,
   generateSessionToken,

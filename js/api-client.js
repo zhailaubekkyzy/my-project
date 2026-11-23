@@ -185,6 +185,16 @@
       return res;
     },
 
+    // Sign-in from a browser / the installed app: a code to the e-mail, then the code (owner's decisions 23 Nov.)
+    async emailLoginStart(email) {
+      return await apiFetch('/api/auth/email/start', { method: 'POST', body: JSON.stringify({ email }) });
+    },
+    async emailLoginVerify(email, code) {
+      const res = await apiFetch('/api/auth/email/verify', { method: 'POST', body: JSON.stringify({ email, code }) });
+      if (res.token) this.setToken(res.token);
+      return res;
+    },
+
     async getMe() {
       return await apiFetch('/api/auth/me');
     },
