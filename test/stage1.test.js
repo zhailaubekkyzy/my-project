@@ -2592,6 +2592,7 @@ async function runAllTests() {
     // a broken channel never breaks the others or the main action
     const notifyService = require('../server/services/notify-service');
     const got = [];
+    const builtIn = notifyService.CHANNELS.length;
     notifyService.CHANNELS.push({ name: 'broken', send: async () => { throw new Error('down'); } });
     notifyService.CHANNELS.push({ name: 'test', send: async (userId, msg) => { got.push({ userId, ...msg }); return true; } });
     try {
@@ -2600,7 +2601,7 @@ async function runAllTests() {
       const saved = await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND text = ?`, [boris.user.id, 'Проверка']);
       assert.strictEqual(Number(saved.n), 1, 'Saved in SmartFlow (Buddy) too');
     } finally {
-      notifyService.CHANNELS.splice(1);
+      notifyService.CHANNELS.splice(builtIn);
     }
   });
 
@@ -4100,6 +4101,133 @@ async function runAllTests() {
     config.devLoginAllowed = saved;
     assert.strictEqual(notReady.status, 503);
     assert.strictEqual(notReady.body.code, 'MAIL_NOT_CONFIGURED');
+  });
+
+  await test('84. Уведомления в браузере (Web Push) и важное на почту, если уведомления не дошли', async () => {
+    const pushService = require('../server/services/push-service');
+    const notifyService = require('../server/services/notify-service');
+    const login = async (email) => {
+      const a = await api('POST', '/api/auth/email/start', null, { email });
+      return (await api('POST', '/api/auth/email/verify', null, { email, code: a.body.devCode })).body;
+    };
+    const me = await login('push.test@example.com');
+    const other = await login('push.other@example.com');
+    const sub = { endpoint: 'https://push.example.com/send/abc123', keys: { p256dh: 'BPpublickey', auth: 'authsecret' } };
+
+    // Without keys in Railway: honestly «скоро», nothing saved
+    const saved = { pub: config.vapidPublicKey, priv: config.vapidPrivateKey };
+    config.vapidPublicKey = ''; config.vapidPrivateKey = '';
+    const st0 = await api('GET', '/api/push/status', me.token);
+    assert.strictEqual(st0.body.configured, false);
+    assert.strictEqual(st0.body.email, 'push.test@example.com');
+    assert.strictEqual(st0.body.emailNotify, true);
+    assert.strictEqual((await api('POST', '/api/push/subscribe', me.token, { subscription: sub })).status, 503);
+
+    const keys = pushService.newKeys();
+    config.vapidPublicKey = keys.publicKey; config.vapidPrivateKey = keys.privateKey;
+    try {
+      assert.strictEqual((await api('GET', '/api/push/status', me.token)).body.publicKey, keys.publicKey);
+      assert.strictEqual((await api('POST', '/api/push/subscribe', me.token, { subscription: { endpoint: 'http://bad' } })).status, 400);
+      const ok = await api('POST', '/api/push/subscribe', me.token, { subscription: sub });
+      assert.strictEqual(ok.status, 200);
+      await api('POST', '/api/push/subscribe', me.token, { subscription: sub }); // the same device again — one row
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?', [me.user.id])).n), 1, 'one device row');
+
+      // A notification goes to the device; delivered — no letter
+      pushService.testOutbox.length = 0; notifyService.emailOutbox.length = 0;
+      assert.strictEqual(await notifyService.notifyUser(me.user.id, '📅 Новая запись: Анна — завтра 10:00.', { buttonText: 'Открыть календарь', startParam: 'CAL', important: true }), true);
+      assert.strictEqual(pushService.testOutbox.length, 1, 'push outbox');
+      assert.strictEqual(pushService.testOutbox[0].payload.url, '/?startapp=CAL');
+      assert(pushService.testOutbox[0].payload.body.includes('Новая запись'));
+      assert.strictEqual(notifyService.emailOutbox.length, 0, 'Push delivered — no e-mail');
+      // Still saved for Buddy first
+      assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND start_param = 'CAL'`, [me.user.id]));
+
+      // Someone else cannot remove my device
+      assert.strictEqual((await api('POST', '/api/push/unsubscribe', other.token, { endpoint: sub.endpoint })).body.removed, 0);
+      // This device off (or «Выйти») → important goes by e-mail, ordinary does not
+      assert.strictEqual((await api('POST', '/api/push/unsubscribe', me.token, { endpoint: sub.endpoint })).body.removed, 1, 'removed mine');
+      pushService.testOutbox.length = 0;
+      assert.strictEqual(await notifyService.notifyUser(me.user.id, '💬 Новое сообщение', { startParam: 'S_support' }), false);
+      assert.strictEqual(notifyService.emailOutbox.length, 0, 'Not important — no letter');
+      assert.strictEqual(await notifyService.notifyUser(me.user.id, '✅ Оплата подтверждена: «Тест».', { buttonText: 'Открыть чат', startParam: 'demo-slug', important: true }), true);
+      assert.strictEqual(notifyService.emailOutbox.length, 1, 'one letter');
+      const letter = notifyService.emailOutbox[0];
+      assert.strictEqual(letter.to, 'push.test@example.com');
+      assert(letter.subject.includes('Оплата подтверждена'));
+      assert(letter.html.includes('?startapp=demo-slug'));
+
+      // «Важное на почту» off — no letters
+      assert.strictEqual((await api('PUT', '/api/push/email', me.token, { on: false })).body.emailNotify, false);
+      assert.strictEqual(await notifyService.notifyUser(me.user.id, '📅 Встреча отменена.', { important: true }), false);
+      assert.strictEqual(notifyService.emailOutbox.length, 1);
+      await api('PUT', '/api/push/email', me.token, { on: true });
+
+      // Not more than 20 letters a day
+      for (let i = 0; i < 25; i++) await notifyService.notifyUser(me.user.id, `⏰ Напоминание ${i}`, { important: true, buddy: false });
+      assert.strictEqual(notifyService.emailOutbox.length, notifyService.EMAILS_PER_DAY);
+
+      // The key pair for Railway: only the owner of the platform
+      assert.strictEqual((await api('POST', '/api/admin/push-keys', me.token)).status, 403);
+      const health = await api('GET', '/api/health');
+      assert.strictEqual(health.body.push.configured, true);
+    } finally {
+      config.vapidPublicKey = saved.pub; config.vapidPrivateKey = saved.priv;
+      await db.run('DELETE FROM push_subscriptions WHERE user_id IN (?, ?)', [me.user.id, other.user.id]);
+    }
+  });
+
+  await test('85. Вход через Google: проверка подписи, адресата и одноразового числа, тот же аккаунт по почте', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const googleLogin = require('../server/services/google-login');
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'test-kid', alg: 'RS256', use: 'sig' };
+    const saved = config.googleClientId;
+    const CLIENT = 'test-client.apps.googleusercontent.com';
+    const idToken = (claims, opts = {}) => jwt.sign(
+      { iss: 'https://accounts.google.com', aud: CLIENT, email_verified: true, ...claims },
+      opts.key || privateKey, { algorithm: 'RS256', keyid: 'test-kid', expiresIn: opts.expiresIn || '10m' }
+    );
+    const login = (token, nonce) => api('POST', '/api/auth/google', null, { idToken: token, nonce });
+    try {
+      config.googleClientId = '';
+      assert.strictEqual((await api('GET', '/api/auth/google/config')).body.clientId, null, 'No button without GOOGLE_CLIENT_ID');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'a@example.com', nonce: 'n1' }), 'n1')).status, 503);
+
+      config.googleClientId = CLIENT;
+      googleLogin.setTestKeys([jwk]);
+      assert.strictEqual((await api('GET', '/api/auth/google/config')).body.clientId, CLIENT);
+      // Forged and wrong passes are refused
+      const otherKey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }, { key: otherKey }), 'n1')).status, 400, 'Not signed by Google');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1', aud: 'someone-else' }), 'n1')).status, 400, 'For another app');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }), 'n2')).body.code, 'BAD_NONCE');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1' }, { expiresIn: -3600 }), 'n1')).status, 400, 'Expired');
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n1', email_verified: false }), 'n1')).body.code, 'EMAIL_NOT_VERIFIED');
+
+      // A new person — a new account with the name from Google
+      const first = await login(idToken({ sub: 'g1', email: 'G.User@example.com', name: 'Айгуль Г.', nonce: 'n1' }), 'n1');
+      assert.strictEqual(first.status, 200);
+      assert(first.body.token);
+      const user = await db.get('SELECT * FROM users WHERE id = ?', [first.body.user.id]);
+      assert.strictEqual(user.email, 'g.user@example.com');
+      assert.strictEqual(user.display_name, 'Айгуль Г.');
+      assert.strictEqual((await api('GET', '/api/auth/me', first.body.token)).body.user.id, user.id);
+      // Again — the same account; by e-mail with the same address — the same account too
+      assert.strictEqual((await login(idToken({ sub: 'g1', email: 'g.user@example.com', nonce: 'n3' }), 'n3')).body.user.id, user.id);
+      const code = await api('POST', '/api/auth/email/start', null, { email: 'g.user@example.com' });
+      assert.strictEqual((await api('POST', '/api/auth/email/verify', null, { email: 'g.user@example.com', code: code.body.devCode })).body.user.id, user.id);
+
+      // Signed in by e-mail before → Google with that address joins the same account
+      const a = await api('POST', '/api/auth/email/start', null, { email: 'mail.first@example.com' });
+      const byMail = (await api('POST', '/api/auth/email/verify', null, { email: 'mail.first@example.com', code: a.body.devCode })).body.user.id;
+      assert.strictEqual((await login(idToken({ sub: 'g2', email: 'mail.first@example.com', nonce: 'n4' }), 'n4')).body.user.id, byMail);
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM auth_identities WHERE user_id = ? AND provider = 'google'`, [byMail])).n), 1);
+    } finally {
+      config.googleClientId = saved;
+      googleLogin.setTestKeys(null);
+    }
   });
 
   await new Promise(resolve => httpServer.close(resolve));

@@ -72,6 +72,8 @@ router.get('/overview', async (req, res, next) => {
         openai: siEngine.isConfigured(),
         openaiModel: config.openaiModel,
         bot: Boolean(config.telegramBotToken),
+        mail: require('../services/mail-service').isConfigured(),
+        push: require('../services/push-service').isConfigured(),
         scheduler: { running: alarm.running, lastTickAt: alarm.lastTickAt, jobs: alarm.jobs },
         warnings
       }
@@ -164,7 +166,7 @@ router.post('/feedback/:id/reply', async (req, res, next) => {
       'UPDATE feedback SET reply = ?, replied_at = ?, replied_by = ?, status = ?, updated_at = ? WHERE id = ?',
       [text, now, req.staff.userId, status, now, fb.id]
     );
-    const notified = await telegramBot.notifyUser(fb.user_id, `💬 Ответ поддержки SmartFlow:\n\n${text}`, { buttonText: 'Открыть поддержку', startParam: 'S_support' });
+    const notified = await telegramBot.notifyUser(fb.user_id, `💬 Ответ поддержки SmartFlow:\n\n${text}`, { important: true, buttonText: 'Открыть поддержку', startParam: 'S_support' });
     await supportService.logAction(req.staff.userId, fb.user_id, 'feedback:reply', { feedbackId: fb.id, text, status, notified });
     const row = await db.get(`${FEEDBACK_SQL} WHERE f.id = ?`, [fb.id]);
     res.json({ feedback: toFeedback(row), notified });
@@ -349,7 +351,7 @@ router.post('/users/:id/message', async (req, res, next) => {
     if (!user) return res.status(404).json({ error: 'not_found', message: 'Человек не найден' });
     const text = String(req.body?.text || '').trim().slice(0, 2000);
     if (!text) return res.status(400).json({ error: 'bad_request', message: 'Напишите сообщение' });
-    const notified = await telegramBot.notifyUser(user.id, `💬 Поддержка SmartFlow:\n\n${text}`, { buttonText: 'Открыть SmartFlow' });
+    const notified = await telegramBot.notifyUser(user.id, `💬 Поддержка SmartFlow:\n\n${text}`, { important: true, buttonText: 'Открыть SmartFlow' });
     await supportService.logAction(req.staff.userId, user.id, 'message', { text, notified });
     res.json({ notified });
   } catch (err) {
@@ -562,6 +564,16 @@ router.post('/niches/:id/merge', nicheRoute(async (req) => {
 // ---------------------------------------------------------------
 // The team (owner only)
 // ---------------------------------------------------------------
+/**
+ * POST /api/admin/push-keys — the owner gets a new key pair for notifications (Web Push) to put into Railway:
+ * VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY. Nothing is saved on the server; shown once. Owner only.
+ */
+router.post('/push-keys', requireStaff('owner'), async (req, res) => {
+  const pushService = require('../services/push-service');
+  res.set('Cache-Control', 'no-store');
+  res.json({ configured: pushService.isConfigured(), ...pushService.newKeys() });
+});
+
 router.get('/staff', requireStaff('owner'), async (req, res, next) => {
   try {
     const owners = [];

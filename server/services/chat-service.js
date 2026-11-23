@@ -366,7 +366,7 @@ async function clientEvent(project, client, type, actor, data = null) {
         await telegramBot.notifyUser(
           userId,
           `📍 ${client.name || 'Клиент'}: ${what}.\nSI-продавец: «${project.name}».${scenario.text ? `\n\n${scenario.text}` : ''}`,
-          { buttonText: 'Открыть', startParam: `I_${project.id}` }
+          { important: true, buttonText: 'Открыть', startParam: `I_${project.id}` }
         );
       }
     }
@@ -516,7 +516,7 @@ async function createHumanRequest(project, lead, { reason, leadName, leadUsernam
     const sent = await telegramBot.notifyUser(
       userId,
       notice || `🔔 ${leadName || lead.name || 'Клиент'} просит связаться лично.\nSI-продавец: «${project.name}».\n\n«${text}»`,
-      { buttonText: 'Открыть обращение', startParam: `I_${project.id}` }
+      { important: true, buttonText: 'Открыть обращение', startParam: `I_${project.id}` }
     );
     if (userId === project.owner_id) notified = sent;
   }
@@ -544,7 +544,7 @@ async function humanReply(project, client, text, member) {
       author.type === 'assistant'
         ? { ru: `💬 Помощник ${expertName} ответил(а) вам лично в SmartFlow.`, en: `💬 ${expertName}’s assistant replied to you personally in SmartFlow.` }
         : { ru: `💬 ${expertName} ответил(а) вам лично в SmartFlow.`, en: `💬 ${expertName} replied to you personally in SmartFlow.` },
-      { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
+      { important: true, buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: project.slug }
     );
   }
   return message;

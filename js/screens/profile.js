@@ -25,7 +25,7 @@
 
   // ---------------- Settings (owner's decision 23 Nov.: «Профиль» became «Настройки») ----------------
   // One short list: me (→ my profile) · personal / business mode · my businesses (each opens its Office here) ·
-  // notifications · search · language · invite · support panel · clear the phone · my support number.
+  // notifications · language · invite · support panel · clear the phone · my support number.
   function row({ icon, label, right = '', onclick = '', tone = 'text-ink', info = '' }) {
     // A div with role="button": an «i» inside must not be a button inside a button
     return `
@@ -66,7 +66,6 @@
         SF.botCanWrite() !== null ? row({ icon: 'bell', label: 'Уведомления в Telegram', right: SF.botCanWrite()
           ? '<span class="text-xs text-brand font-semibold">Включены ✓</span>'
           : '<button onclick="SF.actions.enableNotifications()" class="px-3 py-1.5 rounded-xl btn-3d-tiffany text-xs">Включить</button>' }) : '',
-        me.id ? row({ icon: 'search', label: 'Показывать меня в поиске', right: `<input type="checkbox" ${me.hiddenFromSearch ? '' : 'checked'} onchange="SF.actions.setSearchVisibility(this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />` }) : '',
         row({ icon: 'languages', label: 'Язык', right: `<span class="flex gap-1" data-no-tr>${[['ru', 'RU'], ['en', 'EN']].map(([code, label]) => `
           <button onclick="SF.actions.setLanguage('${code}')" class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${SF.lang() === code ? 'bg-[#81D8D0] text-[#08302c] border-[#81D8D0]' : 'bg-sunken text-muted border-line'}">${label}</button>`).join('')}</span>` })
       ])}

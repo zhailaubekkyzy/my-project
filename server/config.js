@@ -57,6 +57,14 @@ const config = {
   // MAIL_FROM — the sender on the domain confirmed in Resend
   resendApiKey: process.env.RESEND_API_KEY || '',
   mailFrom: process.env.MAIL_FROM || 'SmartFlow <no-reply@techsmartflow.com>',
+  // Вход через Google (часть 3): OAuth client ID из Google Cloud (тип «Web application»); не секрет, но только в Railway
+  googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
+  // Web Push (часть 2): ключи VAPID — только в Railway; создать пару — панель поддержки → «Состояние системы»
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT || 'mailto:support@techsmartflow.com').trim(),
+  // The address of the app in the browser (links in push and letters); by default the first CORS origin
+  webAppUrl: (process.env.WEB_APP_URL || (process.env.CORS_ORIGINS || '').split(',')[0] || 'https://app.techsmartflow.com').trim().replace(/\/+$/, ''),
   telegramMaxAgeSeconds: 86400, // 24 hours max age for initData
 
   // Telegram bot that sends notifications and opens the Mini App (t.me/<bot>/<app>)

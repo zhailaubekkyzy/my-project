@@ -131,7 +131,7 @@
     // Marketplace
     'Все': 'All', 'Продажи': 'Sales', 'Прогрев и заявки': 'Warm-up & leads',
     // Sign-in from a browser and the app on the home screen (23 Nov.)
-    'Установить на экран': 'Install on the home screen', 'Вход по почте': 'Sign in by e-mail', 'Ваша почта': 'Your e-mail', 'Получить код': 'Get a code', 'Войти': 'Sign in', '6 цифр из письма': '6 digits from the letter', 'Другая почта': 'Another e-mail', 'Отправить ещё раз': 'Send again', 'Письмо не пришло? Проверьте «Спам».': 'No letter? Check «Spam».', 'Минутку…': 'One moment…', 'Установить SmartFlow на экран': 'Install SmartFlow on the home screen',
+    'Установить на экран': 'Install on the home screen', 'Войти через Google': 'Sign in with Google', 'или': 'or', 'Вход через Google отменён': 'Google sign-in cancelled', 'Вход через Google не получился — попробуйте ещё раз': 'Google sign-in failed — please try again', 'Вход через Google не получился': 'Google sign-in failed', 'Вход по почте': 'Sign in by e-mail', 'Ваша почта': 'Your e-mail', 'Получить код': 'Get a code', 'Войти': 'Sign in', '6 цифр из письма': '6 digits from the letter', 'Другая почта': 'Another e-mail', 'Отправить ещё раз': 'Send again', 'Письмо не пришло? Проверьте «Спам».': 'No letter? Check «Spam».', 'Минутку…': 'One moment…', 'Установить SmartFlow на экран': 'Install SmartFlow on the home screen',
     // Settings (23 Nov.: «Профиль» became «Настройки»)
     'Настройки': 'Settings', 'Мой профиль': 'My profile', 'Режим': 'Mode', 'Мои бизнесы': 'My businesses', 'Язык': 'Language', 'Пригласить друзей': 'Invite friends', 'Включить бизнес-профиль': 'Turn on the business profile', 'Что это?': 'What is this?', 'Открыть ещё бизнес': 'Open another business', 'Открыть бизнес': 'Open a business',
     // Niches of the Marketplace and «Вопросы и ответы» (22 Nov.)
@@ -304,6 +304,15 @@
     'Не удалось открыть фото. Попробуйте другое.': 'Could not open the photo. Try another one.',
     'Оставить как было': 'Keep as it was', 'Мои SI-продавцы': 'My SI-sellers', 'Панель поддержки': 'Support panel',
     'Уведомления в Telegram': 'Telegram notifications', 'Включены ✓': 'On ✓',
+    'Уведомления': 'Notifications', 'Как включить': 'How to turn on', 'Запрещены': 'Blocked', 'нет в этом браузере': 'not in this browser',
+    'Важное на почту': 'Important by e-mail', 'Включить уведомления': 'Turn on notifications', 'Позже': 'Later', 'Как установить': 'How to install',
+    'Включите уведомления — так вы не пропустите ответы, встречи и напоминания.': 'Turn on notifications so you don’t miss replies, meetings and reminders.',
+    'Чтобы не пропускать ответы, встречи и напоминания, установите SmartFlow на экран «Домой» и включите уведомления.': 'To not miss replies, meetings and reminders, add SmartFlow to your home screen and turn on notifications.',
+    'Уведомления запрещены': 'Notifications are blocked', 'Готово! Уведомления включены 🔔': 'Done! Notifications are on 🔔',
+    'Уведомления скоро заработают': 'Notifications are coming soon', 'Уведомления не включены': 'Notifications are not on',
+    'Уведомления запрещены — их можно разрешить в настройках браузера': 'Notifications are blocked — you can allow them in the browser settings',
+    'Важное будет приходить на почту, если уведомления не дошли': 'Important things will come by e-mail if a notification did not arrive',
+    'Письма о важном выключены': 'Important e-mails are off', 'Не получилось сохранить': 'Could not save',
     'Без разрешения бот не сможет писать вам. Можно включить позже': 'Without permission the bot cannot write to you. You can turn it on later',
     'Готово! Уведомления будут приходить в Telegram': 'Done! Notifications will come to Telegram',
     'Показывать меня в поиске': 'Show me in search', 'Люди в SmartFlow найдут вас по имени и смогут написать.': 'People in SmartFlow can find you by name and message you.',

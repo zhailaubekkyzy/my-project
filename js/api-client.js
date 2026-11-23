@@ -195,8 +195,27 @@
       return res;
     },
 
+    // Sign-in through Google (part 3): the id_token Google returned + the one-time number this device sent
+    async googleConfig() {
+      return await apiFetch('/api/auth/google/config');
+    },
+    async googleLogin(idToken, nonce) {
+      const res = await apiFetch('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken, nonce }) });
+      if (res.token) this.setToken(res.token);
+      return res;
+    },
+
     async getMe() {
       return await apiFetch('/api/auth/me');
+    },
+
+    // Notifications on this device (Web Push) and «Важное на почту» (browser login, part 2)
+    push: {
+      status: () => apiFetch('/api/push/status'),
+      subscribe: (subscription) => apiFetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription }) }),
+      unsubscribe: (endpoint) => apiFetch('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
+      setEmail: (on) => apiFetch('/api/push/email', { method: 'PUT', body: JSON.stringify({ on }) }),
+      test: () => apiFetch('/api/push/test', { method: 'POST' })
     },
 
     // Projects endpoints
@@ -785,6 +804,7 @@
     // ---------- Support panel (team only) ----------
     admin: {
       overview: () => apiFetch('/api/admin/overview'),
+      pushKeys: () => apiFetch('/api/admin/push-keys', { method: 'POST' }),
       funnels: (status) => apiFetch(`/api/admin/funnels?status=${encodeURIComponent(status || 'published')}`),
       funnel: (id) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}`),
       decideFunnel: (id, decision, note) => apiFetch(`/api/admin/funnels/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }),

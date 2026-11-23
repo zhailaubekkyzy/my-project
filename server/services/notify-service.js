@@ -3,19 +3,70 @@
 // 1. It is saved in SmartFlow first: Buddy → «Уведомления» (table notifications).
 //    This is ours and works without any outside service. Exception: groups in «Чаты» (buddy: false) —
 //    they are seen in «Чаты» itself (the number on the tab, marks in the group).
-// 2. Then it goes to the person's phone through the delivery channels below. Today there is one,
-//    Telegram (the bot). Later: web notifications (Web Push), our own app, e-mail — each is one
-//    more entry in CHANNELS, nothing else changes (owner's decision 16 Oct.: do not depend on Telegram).
+// 2. Then it goes to the person's phone through the delivery channels below: Telegram (the bot) and
+//    web notifications (Web Push — SmartFlow in the browser or on the home screen; part 2 of the browser
+//    login, 23 Nov.). A new channel (our own app) is one more entry in CHANNELS
+//    (owner's decision 16 Oct.: do not depend on Telegram).
+// 3. important: true (meetings, payments, a client waiting for a person, the support's answer) — if no
+//    channel delivered it (notifications not allowed), the same goes by e-mail to a person who signed in
+//    by e-mail and has not turned «Важное на почту» off. Not more than 20 letters a day per person.
 // A failure never breaks the main action.
 const crypto = require('crypto');
 const db = require('../db');
 const { langOf, pick } = require('./i18n');
+const config = require('../config');
 const telegramBot = require('./telegram-bot');
+const pushService = require('./push-service');
+const mail = require('./mail-service');
 
 // A channel: { name, send(userId, { text, buttonText, startParam }) → true if delivered }. Never throws.
 const CHANNELS = [
-  { name: 'telegram', send: telegramBot.sendTelegram }
+  { name: 'telegram', send: telegramBot.sendTelegram },
+  { name: 'push', send: pushService.sendPush }
 ];
+
+const EMAILS_PER_DAY = 20;
+const emailOutbox = []; // tests only
+
+const escHtml = (v) => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/** The e-mail fallback for important notifications. Returns true if the letter went. Never throws. */
+async function sendImportantEmail(userId, { text, buttonText, startParam }) {
+  try {
+    const user = await db.get('SELECT email, email_notify FROM users WHERE id = ?', [userId]);
+    if (!user || !user.email || Number(user.email_notify) === 0) return false;
+    if (!config.isTest && !mail.isConfigured()) return false;
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+    const sent = await db.get('SELECT COUNT(*) AS n FROM email_notifications WHERE user_id = ? AND created_at >= ?', [userId, dayAgo]);
+    if (Number(sent.n) >= EMAILS_PER_DAY) return false;
+    const url = pushService.appUrl(startParam);
+    const firstLine = String(text).split('\n')[0].replace(/^[^\p{L}\p{N}«]+/u, '').slice(0, 90) || 'Новое в SmartFlow';
+    const letter = {
+      to: user.email,
+      subject: `SmartFlow: ${firstLine}`,
+      text: `${text}\n\n${buttonText}: ${url}\n\nЧтобы письма не приходили, включите уведомления в SmartFlow или выключите «Важное на почту» в Настройках.`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.45">
+        <p style="white-space:pre-line">${escHtml(text)}</p>
+        <p><a href="${escHtml(url)}" style="display:inline-block;padding:10px 18px;border-radius:10px;background:#0d9488;color:#fff;text-decoration:none;font-weight:bold">${escHtml(buttonText)}</a></p>
+        <p style="color:#64748b;font-size:12px">Чтобы письма не приходили, включите уведомления в SmartFlow или выключите «Важное на почту» в Настройках.</p>
+      </div>`
+    };
+    let ok;
+    if (config.isTest) {
+      emailOutbox.push({ userId, ...letter });
+      ok = true;
+    } else {
+      ok = await mail.send(letter);
+    }
+    if (ok) {
+      await db.run('INSERT INTO email_notifications (id, user_id) VALUES (?, ?)', [`eml_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, userId]);
+    }
+    return ok;
+  } catch (err) {
+    console.warn('[SmartFlow Notify] e-mail not sent:', err.message);
+    return false;
+  }
+}
 
 async function saveInApp(userId, text, startParam) {
   if (!userId) return;
@@ -36,7 +87,7 @@ async function saveInApp(userId, text, startParam) {
  */
 // buddy: false — only to the phone, not to Buddy (owner's decision 21 Nov.: groups in «Чаты» do not go to
 // Buddy; Buddy will have a function of its own). The rest still goes to Buddy first.
-async function notifyUser(userId, rawText, { buttonText = 'Открыть в SmartFlow', startParam, buddy = true } = {}) {
+async function notifyUser(userId, rawText, { buttonText = 'Открыть в SmartFlow', startParam, buddy = true, important = false } = {}) {
   let text = rawText;
   let button = buttonText;
   try {
@@ -60,7 +111,8 @@ async function notifyUser(userId, rawText, { buttonText = 'Открыть в Sma
       console.warn(`[SmartFlow Notify] ${channel.name} failed:`, err.message);
     }
   }
+  if (!delivered && important) delivered = await sendImportantEmail(userId, { text, buttonText: button, startParam });
   return delivered;
 }
 
-module.exports = { notifyUser, CHANNELS };
+module.exports = { notifyUser, CHANNELS, sendImportantEmail, emailOutbox, EMAILS_PER_DAY };

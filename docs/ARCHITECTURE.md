@@ -72,9 +72,43 @@
   `apple-touch-icon.png`. Настройки вне Telegram: «Установить на экран» (Chrome/Android — системное окно
   `beforeinstallprompt`, iPhone — инструкция «Safari → Поделиться → На экран „Домой“») и «Выйти».
   Владелице: Resend → домен `techsmartflow.com` (записи DNS в Cloudflare) → `RESEND_API_KEY` и `MAIL_FROM` в Railway.
-- **Часть 2 — веб-уведомления** (Web Push как новый канал в `notify-service.CHANNELS`, ключи VAPID в Railway) и
-  **важное на почту**, если пуши не разрешены. На iPhone пуши приходят только в установленное приложение (iOS 16.4+).
-- **Часть 3 — вход через Google.**
+- **Часть 2 — сделано** (миграция 037): **уведомления на телефон и компьютер** (Web Push) и **важное на почту**.
+  - Канал `push` в `notify-service.CHANNELS` (`server/services/push-service.js`, библиотека `web-push`): таблица
+    `push_subscriptions` (одна строка — одно устройство: адрес от браузера и его ключи; до 10 устройств у человека;
+    устройство, которое браузер «забыл» (404/410), удаляется, после 5 неудач подряд — не используется). В уведомлении —
+    «SmartFlow», текст (до 240 знаков) и адрес `/?startapp=<параметр>` — тот же экран, что у кнопки в Telegram
+    (адрес относительный: открывается там, откуда установлено). `sw.js`: событие `push` → показать, нажатие → открыть
+    уже открытое окно SmartFlow или новое.
+  - Ключи VAPID — только в Railway: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (необязательно `VAPID_SUBJECT`, по умолчанию
+    `mailto:support@techsmartflow.com`). Пару создаёт владелица: панель поддержки → «Состояние системы» → «Создать ключи
+    для уведомлений» (`POST /api/admin/push-keys`, только владелица; на сервере не хранится, показывается один раз).
+    Проверка — `/api/health` → `push.configured`.
+  - Экраны (только вне Telegram, `SF.webPush` в `js/app.js`): Настройки → «Уведомления» (Включить / Включены ✓ /
+    Запрещены → как разрешить в браузере / iPhone без установки → «Как включить» = инструкция установки) и «Важное на
+    почту» (если вход по почте); у Бадди — сообщение «Включите уведомления» с кнопками «Включить» / «Позже» (скрывается на
+    3 дня на устройстве). При каждом запуске с разрешёнными уведомлениями устройство заново сообщается серверу; «Выйти»
+    отключает уведомления этого аккаунта на этом устройстве. `/api/push/status|subscribe|unsubscribe|email|test`.
+  - **Важное на почту** (`notifyUser(…, { important: true })`): если ни Telegram, ни уведомление не дошли, письмо через
+    Resend человеку, вошедшему по почте, если он не выключил «Важное на почту» (`users.email_notify`); не больше 20 писем
+    в сутки (`email_notifications` — только время). Важное: встречи (запись, перенос, отмена, напоминание за час), чек и
+    подтверждение оплаты, клиент просит человека, человек ответил клиенту лично, сценарий «Сообщить мне», ответ
+    поддержки, добавили помощником, покупки шаблонов. Рассылки, группы, сообщества, «Клиент замолчал» — без писем.
+  - iPhone и iPad: уведомления только в SmartFlow, установленном на экран «Домой» (iOS 16.4+), — так устроен Safari.
+- **Настройки без лишнего (решение владелицы 23 нояб.):** строк «Уведомления», «Важное на почту» и «Показывать меня в
+  поиске» в Настройках нет. Уведомления включаются сообщением у Бадди («Включить уведомления» / «Позже»); письма о
+  важном и видимость в поиске — включены по умолчанию (`users.email_notify`, `profile.hiddenFromSearch` остаются в базе).
+- **Часть 3 — сделано: вход через Google** (`server/services/google-login.js`, без новой таблицы). На экране входа под
+  почтой — «Войти через Google» (только если в Railway есть `GOOGLE_CLIENT_ID`; `GET /api/auth/google/config`).
+  Нажатие уводит всю страницу на Google (`response_type=id_token`, `prompt=select_account`, одноразовые `nonce` и `state`
+  хранятся на устройстве в `sessionStorage`) → Google возвращает на тот же адрес `…/#id_token=…&state=…` → приложение
+  стирает пропуск из адреса и отправляет его на `POST /api/auth/google` → сервер проверяет подпись открытыми ключами
+  Google (кэш по `Cache-Control`), адресата (`aud` = `GOOGLE_CLIENT_ID`), издателя, срок, `nonce` и
+  `email_verified`. Аккаунт: тот же Google (`auth_identities.provider = 'google'`, `provider_user_id` = `sub`) — тот же
+  человек; почта, с которой уже входили по коду, — тот же аккаунт (Google добавляется к нему); иначе новый (имя из
+  Google). Вход по почте с этим адресом потом ведёт в тот же аккаунт. Сессия — 90 дней, как по почте.
+  Владелице: Google Cloud → APIs & Services → OAuth consent screen (External) → Credentials → OAuth client ID
+  «Web application»: Authorized JavaScript origins и redirect URIs — `https://app.techsmartflow.com` и
+  `https://app.techsmartflow.com/` (и запасной адрес Workers) → Client ID в Railway `GOOGLE_CLIENT_ID`.
 
 ## Бизнес-режим 2.0: AI-продавцы, шаблоны, «пазл» (решения владелицы 21–22 нояб., ещё не сделано)
 
@@ -680,7 +714,8 @@ Railway `POSTHOG_API_KEY` и `POSTHOG_HOST`; без ключа ничего не
 
   | Событие | Когда | Свойства | Где в коде |
   |---|---|---|---|
-  | `app_opened` | вход через Telegram; с 23 нояб. и по почте из браузера | — (Telegram); по почте: `method: 'email'`, `signed_up` (новый аккаунт) | `server/routes/auth.js` |
+  | `app_opened` | вход через Telegram; с 23 нояб. и по почте или через Google из браузера | — (Telegram); из браузера: `method` (`'email'` / `'google'` — с 23 нояб.), `signed_up` (новый аккаунт) | `server/routes/auth.js` |
+  | `push_subscribed` | человек включил уведомления на новом устройстве (с 23 нояб.) | `device` (система и браузер, например «iOS · Safari») | `server/routes/push.js` |
   | `email_code_requested` | запрошен код для входа по почте (с 23 нояб.; без человека и без почты — анонимно) | — | `server/routes/auth.js` |
   | `link_opened` | вход по ссылке с меткой источника или приглашению | `kind`, `link_id`, `project_id`, `new_user` | `server/services/partner-service.js` |
   | `template_built` | автор собрал шаблон конструктором (с 22 нояб.) | `project_id`, `source` (`openai` / `brief` — без ИИ), `steps`, `scenarios`, `pieces` | `server/routes/projects.js` |

@@ -311,7 +311,7 @@ async function addAssistant(ownerId, rawCode, businessId = null) {
   await telegramBot.notifyUser(
     user.id,
     `🤝 ${displayNameOf(owner)} добавил(а) вас помощником в SmartFlow.\nВы сможете отвечать клиентам в «Мне написали» и ставить SI на паузу.`,
-    { buttonText: 'Открыть Офис', startParam: firstProject ? `I_${firstProject.id}` : undefined }
+    { important: true, buttonText: 'Открыть Офис', startParam: firstProject ? `I_${firstProject.id}` : undefined }
   );
   return listMembers(business.id);
 }

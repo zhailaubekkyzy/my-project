@@ -159,6 +159,35 @@ async function findOrCreateTelegramUser(tgUser, requestedRole = 'expert') {
  * Finds the person by their e-mail (signed in from a browser, owner's decisions 23 Nov.) or creates a new account,
  * the same way as for Telegram: a permanent internal id, the e-mail identity, the free platform subscription.
  */
+const newIdentityId = () => `ident_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+
+// A new account from the browser (e-mail or Google): the user, the e-mail identity, the free trial
+async function createWebUser(displayName, address) {
+  const internalUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  await db.run(
+    `INSERT INTO users (id, display_name, username, avatar_url, roles, status, is_demo, email)
+     VALUES (?, ?, NULL, NULL, ?, 'active', 0, ?)`,
+    [internalUserId, displayName, JSON.stringify(['expert']), address]
+  );
+  await db.run(
+    `INSERT INTO auth_identities (id, user_id, provider, provider_user_id, metadata) VALUES (?, ?, 'email', ?, ?)`,
+    [newIdentityId(), internalUserId, address, JSON.stringify({ email: address })]
+  );
+  const trialEndsAt = new Date(Date.now() + config.defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+  await db.run(
+    `INSERT INTO platform_subscriptions (id, user_id, plan_code, status, trial_ends_at, current_period_ends_at, auto_renew)
+     VALUES (?, ?, 'founder_free_100', 'trial', ?, ?, 1)`,
+    [`sub_plat_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, internalUserId, trialEndsAt, trialEndsAt]
+  );
+  return db.get('SELECT * FROM users WHERE id = ?', [internalUserId]);
+}
+
+const withRoles = (user, created) => {
+  let roles = ['expert'];
+  try { roles = JSON.parse(user.roles); } catch (e) {}
+  return { ...user, roles, created };
+};
+
 async function findOrCreateEmailUser(email) {
   const address = String(email || '').trim().toLowerCase();
   if (!address) throw new Error('E-mail is required');
@@ -167,32 +196,43 @@ async function findOrCreateEmailUser(email) {
   let created = false;
   if (!user) {
     created = true;
-    const internalUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
     // The name until the person writes their own: the part of the address before «@»
-    const displayName = address.split('@')[0].slice(0, 60) || 'Новый пользователь';
-    await db.run(
-      `INSERT INTO users (id, display_name, username, avatar_url, roles, status, is_demo, email)
-       VALUES (?, ?, NULL, NULL, ?, 'active', 0, ?)`,
-      [internalUserId, displayName, JSON.stringify(['expert']), address]
-    );
-    await db.run(
-      `INSERT INTO auth_identities (id, user_id, provider, provider_user_id, metadata) VALUES (?, ?, 'email', ?, ?)`,
-      [`ident_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, internalUserId, address, JSON.stringify({ email: address })]
-    );
-    const trialEndsAt = new Date(Date.now() + config.defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
-    await db.run(
-      `INSERT INTO platform_subscriptions (id, user_id, plan_code, status, trial_ends_at, current_period_ends_at, auto_renew)
-       VALUES (?, ?, 'founder_free_100', 'trial', ?, ?, 1)`,
-      [`sub_plat_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, internalUserId, trialEndsAt, trialEndsAt]
-    );
-    user = await db.get('SELECT * FROM users WHERE id = ?', [internalUserId]);
+    user = await createWebUser(address.split('@')[0].slice(0, 60) || 'Новый пользователь', address);
   } else if (!user.email) {
     await db.run('UPDATE users SET email = ? WHERE id = ?', [address, user.id]);
     user.email = address;
   }
-  let roles = ['expert'];
-  try { roles = JSON.parse(user.roles); } catch (e) {}
-  return { ...user, roles, created };
+  return withRoles(user, created);
+}
+
+/**
+ * Sign-in through Google (part 3): the same Google account — the same SmartFlow account; a person who signed in
+ * by e-mail before with the same (Google-confirmed) address — that account, now also with Google.
+ * { sub, email, name } come from google-login.verify.
+ */
+async function findOrCreateGoogleUser({ sub, email, name }) {
+  const address = String(email || '').trim().toLowerCase();
+  if (!sub || !address) throw new Error('Google account is required');
+  const google = await db.get(`SELECT * FROM auth_identities WHERE provider = 'google' AND provider_user_id = ?`, [String(sub)]);
+  let user = google ? await db.get('SELECT * FROM users WHERE id = ?', [google.user_id]) : null;
+  let created = false;
+  if (!user) {
+    const byEmail = await db.get(`SELECT * FROM auth_identities WHERE provider = 'email' AND provider_user_id = ?`, [address]);
+    user = byEmail ? await db.get('SELECT * FROM users WHERE id = ?', [byEmail.user_id]) : null;
+    if (!user) {
+      created = true;
+      user = await createWebUser(name || address.split('@')[0].slice(0, 60) || 'Новый пользователь', address);
+    }
+    await db.run(
+      `INSERT INTO auth_identities (id, user_id, provider, provider_user_id, metadata) VALUES (?, ?, 'google', ?, ?)`,
+      [newIdentityId(), user.id, String(sub), JSON.stringify({ email: address })]
+    );
+  }
+  if (!user.email) {
+    await db.run('UPDATE users SET email = ? WHERE id = ?', [address, user.id]);
+    user.email = address;
+  }
+  return withRoles(user, created);
 }
 
 /**
@@ -221,6 +261,7 @@ function verifySessionToken(token) {
 
 module.exports = {
   findOrCreateEmailUser,
+  findOrCreateGoogleUser,
   verifyTelegramInitData,
   findOrCreateTelegramUser,
   generateSessionToken,

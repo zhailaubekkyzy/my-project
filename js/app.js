@@ -51,9 +51,12 @@ async function initTelegramAuth() {
   } else {
     // A browser or the app installed on the home screen (owner's decisions 23 Nov.): signed in by e-mail before —
     // the saved session; otherwise the sign-in screen. On a developer's computer — the demo sign-in.
+    // Back from Google (part 3): the address has #id_token=… — sign in with it
+    if (await finishGoogleLogin()) return;
     if (api.getToken()) {
       try {
         store.setAuth(await api.getMe());
+        SF.webPush.sync();
         return;
       } catch (err) {
         if (err.status === 401 || err.status === 403) api.clearToken();
@@ -75,7 +78,49 @@ async function initTelegramAuth() {
 // -------------------------------------------------------------
 // Sign-in outside Telegram: e-mail → a 6-digit code from the letter (owner's decisions 23 Nov.)
 // -------------------------------------------------------------
-const login = { step: 'email', email: '', busy: false, error: '', resendAt: 0 };
+const login = { step: 'email', email: '', busy: false, error: '', resendAt: 0, google: undefined };
+
+// «Войти через Google» (part 3): the whole page goes to Google and comes back to this same address with
+// #id_token=…&state=… (works the same in the browser and in the app on the home screen). nonce and state —
+// one-time numbers kept on this device: the server checks nonce inside Google's answer.
+const GOOGLE_KEY = 'sf_google_login';
+SF.actions.loginGoogle = () => {
+  if (!login.google) return;
+  const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+  const pending = { nonce: rnd(), state: rnd() };
+  try { sessionStorage.setItem(GOOGLE_KEY, JSON.stringify(pending)); } catch (e) { /* the check below will fail honestly */ }
+  const params = new URLSearchParams({
+    client_id: login.google,
+    redirect_uri: `${location.origin}/`,
+    response_type: 'id_token',
+    scope: 'openid email profile',
+    nonce: pending.nonce,
+    state: pending.state,
+    prompt: 'select_account'
+  });
+  location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+};
+
+async function finishGoogleLogin() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (!hash.get('id_token') && !hash.get('error')) return false;
+  history.replaceState(null, '', location.pathname + location.search); // the pass never stays in the address
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(GOOGLE_KEY) || 'null'); sessionStorage.removeItem(GOOGLE_KEY); } catch (e) { /* none */ }
+  if (hash.get('error') || !pending || hash.get('state') !== pending.state) {
+    login.error = hash.get('error') === 'access_denied' ? 'Вход через Google отменён' : 'Вход через Google не получился — попробуйте ещё раз';
+    return false;
+  }
+  try {
+    const res = await window.smartFlowApi.googleLogin(hash.get('id_token'), pending.nonce);
+    window.funnelStore.setAuth(res);
+    SF.webPush.sync();
+    return true;
+  } catch (err) {
+    login.error = err.message || 'Вход через Google не получился';
+    return false;
+  }
+}
 
 function renderLogin() {
   const field = 'w-full p-3.5 rounded-2xl bg-sunken border border-line-2 text-ink text-base';
@@ -106,6 +151,12 @@ function renderLogin() {
               <button type="button" onclick="SF.actions.loginResend()" class="text-brand font-semibold">Отправить ещё раз</button>
             </div>` : ''}
         </form>
+        ${!codeStep && login.google ? `
+          <div class="flex items-center gap-3 text-[11px] text-faint"><span class="flex-1 h-px bg-line"></span>или<span class="flex-1 h-px bg-line"></span></div>
+          <button type="button" onclick="SF.actions.loginGoogle()" class="w-full py-3.5 rounded-2xl bg-card border border-line-2 text-ink text-sm font-bold flex items-center justify-center gap-2.5">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            Войти через Google
+          </button>` : ''}
         <div class="text-center text-[11px] text-faint">Письмо не пришло? Проверьте «Спам».</div>
       </div>
     </main>`;
@@ -114,6 +165,10 @@ function renderLogin() {
 function drawLogin() {
   const container = document.getElementById('app-root');
   if (!container) return;
+  if (login.google === undefined) {
+    login.google = null;
+    window.smartFlowApi.googleConfig().then(c => { login.google = c.clientId || null; if (login.google) drawLogin(); }).catch(() => {});
+  }
   container.innerHTML = renderLogin();
   if (window.lucide) window.lucide.createIcons();
   if (SF.translateDom) SF.translateDom(container);
@@ -138,6 +193,7 @@ SF.actions.loginSubmit = async (e) => {
       login.busy = false;
       login.step = 'email';
       window.funnelStore.setAuth(res);
+      SF.webPush.sync();
       SF.go('buddy');
       return;
     }
@@ -205,12 +261,146 @@ SF.actions.installApp = async () => {
 };
 
 // «Выйти» (browser / installed app only: inside Telegram the account is Telegram's)
-SF.actions.logout = () => {
+SF.actions.logout = async () => {
   if (!window.confirm('Выйти из SmartFlow на этом устройстве?')) return;
+  await SF.webPush.forgetDevice(); // notifications for this account stop coming to this device
   window.smartFlowApi.clearToken();
   window.funnelStore.resetToDefault();
   window.funnelStore.setNeedLogin();
 };
+
+// -------------------------------------------------------------
+// Notifications on this device (Web Push; browser login, part 2 — owner's decisions 23 Nov.)
+// Only outside Telegram (inside it the bot notifies). iPhone / iPad: only in the app installed on the home screen.
+// The browser asks the person once; «Запретить» can be changed only in the browser's settings.
+// -------------------------------------------------------------
+SF.webPush = (() => {
+  const supported = () => !SF.inTelegram() && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  // 'on' | 'off' (can ask) | 'blocked' (denied in the browser) | 'install' (iPhone: install first) | 'unsupported'
+  function state() {
+    if (SF.inTelegram()) return 'unsupported';
+    if (SF.isIOS() && !SF.isInstalled()) return 'install';
+    if (!supported()) return 'unsupported';
+    if (Notification.permission === 'denied') return 'blocked';
+    if (Notification.permission === 'granted' && SF.webPush.subscribed) return 'on';
+    return 'off';
+  }
+  const keyBytes = (base64) => {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  };
+  const registration = async () => {
+    await navigator.serviceWorker.register('sw.js').catch(() => null);
+    return navigator.serviceWorker.ready;
+  };
+  async function subscribeHere(publicKey) {
+    const reg = await registration();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+    await window.smartFlowApi.push.subscribe(sub.toJSON());
+    SF.webPush.subscribed = true;
+  }
+  // On every start: notifications already allowed — make sure the server knows this device for this account
+  async function sync() {
+    try {
+      if (!supported() || !window.smartFlowApi.getToken()) return;
+      if (Notification.permission !== 'granted') { SF.webPush.subscribed = false; return; }
+      const status = await window.smartFlowApi.push.status();
+      SF.webPush.status = status;
+      if (status.configured && status.publicKey) await subscribeHere(status.publicKey);
+      if (window.funnelStore) window.funnelStore.notify();
+    } catch (e) { /* not now: next start */ }
+  }
+  // The button «Включить»: the browser's question, then this device is saved
+  async function enable() {
+    const s = state();
+    if (s === 'install') return SF.actions.installApp();
+    if (s === 'blocked') return SF.webPush.blockedHelp();
+    if (s === 'unsupported') return SF.showToast('Этот браузер не умеет присылать уведомления — откройте SmartFlow в Chrome или Safari');
+    try {
+      const status = await window.smartFlowApi.push.status();
+      SF.webPush.status = status;
+      if (!status.configured || !status.publicKey) return SF.showToast('Уведомления скоро заработают');
+      const answer = await Notification.requestPermission();
+      if (answer !== 'granted') {
+        window.funnelStore.notify();
+        return SF.showToast(answer === 'denied' ? 'Уведомления запрещены — их можно разрешить в настройках браузера' : 'Уведомления не включены');
+      }
+      await subscribeHere(status.publicKey);
+      SF.webPush.dismissPrompt();
+      SF.showToast('Готово! Уведомления включены 🔔');
+    } catch (err) {
+      SF.showToast(SF.withErrorCode ? SF.withErrorCode('Не получилось включить уведомления', err) : 'Не получилось включить уведомления');
+    }
+    window.funnelStore.notify();
+  }
+  async function forgetDevice() {
+    try {
+      if (!supported()) return;
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (!sub) return;
+      await window.smartFlowApi.push.unsubscribe(sub.endpoint).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+      SF.webPush.subscribed = false;
+    } catch (e) { /* signing out anyway */ }
+  }
+  function blockedHelp() {
+    SF.openModal(`
+      <div class="flex items-start justify-between gap-3">
+        <div class="text-base font-bold text-ink">Уведомления запрещены</div>
+        <button onclick="SF.closeModal()" class="text-muted text-lg leading-none" aria-label="Закрыть">&times;</button>
+      </div>
+      ${SF.isIOS() ? `
+        <ol class="space-y-2 text-sm text-ink-2 list-decimal pl-5">
+          <li>Откройте <b>Настройки</b> iPhone → <b>Уведомления</b>.</li>
+          <li>Найдите <b>SmartFlow</b> и включите <b>«Допуск уведомлений»</b>.</li>
+        </ol>` : `
+        <ol class="space-y-2 text-sm text-ink-2 list-decimal pl-5">
+          <li>Нажмите на значок слева от адреса сайта (замок или ⓘ).</li>
+          <li>Найдите <b>«Уведомления»</b> и выберите <b>«Разрешить»</b>.</li>
+          <li>Обновите страницу.</li>
+        </ol>`}
+    `);
+  }
+  // The soft card at Buddy: until notifications are on; «Позже» hides it for 3 days on this device
+  const PROMPT_KEY = 'sf_push_prompt_hidden_at';
+  function showPrompt() {
+    const s = state();
+    if (s === 'on' || s === 'unsupported' || s === 'blocked') return false;
+    try {
+      const at = Number(localStorage.getItem(PROMPT_KEY) || 0);
+      if (at && Date.now() - at < 3 * 24 * 3600 * 1000) return false;
+    } catch (e) { /* storage closed: show */ }
+    return true;
+  }
+  function dismissPrompt() {
+    try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch (e) { /* fine */ }
+    if (window.funnelStore) window.funnelStore.notify();
+  }
+  async function setEmail(on) {
+    try {
+      const res = await window.smartFlowApi.push.setEmail(on);
+      SF.webPush.status = { ...(SF.webPush.status || {}), emailNotify: res.emailNotify };
+      SF.showToast(on ? 'Важное будет приходить на почту, если уведомления не дошли' : 'Письма о важном выключены');
+    } catch (err) {
+      SF.showToast('Не получилось сохранить');
+    }
+    window.funnelStore.notify();
+  }
+  async function loadStatus() {
+    if (SF.inTelegram() || SF.webPush.loading) return;
+    SF.webPush.loading = true;
+    SF.webPush.loaded = true;
+    try {
+      SF.webPush.status = await window.smartFlowApi.push.status();
+    } catch (e) { SF.webPush.status = SF.webPush.status || null; }
+    SF.webPush.loading = false;
+    window.funnelStore.notify();
+  }
+  return { subscribed: false, status: null, loading: false, loaded: false, supported, state, sync, enable, forgetDevice, blockedHelp, showPrompt, dismissPrompt, setEmail, loadStatus };
+})();
 
 window.reconnectTelegramAuth = () => {
   initTelegramAuth();

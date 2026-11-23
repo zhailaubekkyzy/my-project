@@ -60,7 +60,7 @@ async function nameOfUser(userId) {
 }
 
 function notify(userId, text, startParam) {
-  telegramBot.notifyUser(userId, text, { buttonText: 'Открыть', startParam })
+  telegramBot.notifyUser(userId, text, { important: true, buttonText: 'Открыть', startParam })
     .catch(err => console.warn('[SmartFlow Funnels] not notified:', err.message));
 }
 

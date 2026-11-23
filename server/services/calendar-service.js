@@ -303,7 +303,7 @@ async function book(chatService, project, client, atIso, { tzOffset = null, repl
     await telegramBot.notifyUser(
       userId,
       `📅 ${replaceMeeting ? 'Встреча перенесена' : 'Новая запись'}: ${client.name || 'Клиент'} — ${whenLabel(at, tz)}${userId !== host.userId ? ` (ведёт ${host.name})` : ''}.\nSI-продавец: «${project.name}».`,
-      { buttonText: 'Открыть календарь', startParam: 'CAL' }
+      { important: true, buttonText: 'Открыть календарь', startParam: 'CAL' }
     );
   }
   return toMeeting(await db.get('SELECT * FROM meetings WHERE id = ?', [id]));
@@ -337,7 +337,7 @@ async function cancel(chatService, project, client, meeting, by, now = new Date(
       by.type === 'client'
         ? `📅 ${client.name || 'Клиент'} отменил(а) встречу ${whenLabel(meeting.startsAt, settings.tzOffset)}.`
         : { ru: `📅 Встреча ${whenLabel(meeting.startsAt, clientTz)} с «${project.name}» отменена.`, en: `📅 The meeting on ${whenLabel(meeting.startsAt, clientTz, 'en')} with «${project.name}» is cancelled.` },
-      { buttonText: by.type === 'client' ? 'Открыть' : { ru: 'Открыть', en: 'Open' }, startParam: by.type === 'client' ? 'CAL' : project.slug }
+      { important: true, buttonText: by.type === 'client' ? 'Открыть' : { ru: 'Открыть', en: 'Open' }, startParam: by.type === 'client' ? 'CAL' : project.slug }
     );
   }
 }
@@ -402,9 +402,9 @@ async function runMeetingReminders(now = new Date()) {
       await telegramBot.notifyUser(m.external_client_id, {
         ru: `⏰ Через час встреча с «${m.project_name || 'экспертом'}»: ${whenLabel(m.starts_at, tz)}.${link}`,
         en: `⏰ In an hour: a meeting with «${m.project_name || 'the expert'}», ${whenLabel(m.starts_at, tz, 'en')}.${link.replace('Ссылка:', 'Link:')}`
-      }, { buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: m.slug });
+      }, { important: true, buttonText: { ru: 'Открыть чат', en: 'Open chat' }, startParam: m.slug });
     }
-    await telegramBot.notifyUser(m.host_user_id, `⏰ Через час встреча: ${m.client_name || 'клиент'} — ${whenLabel(m.starts_at, settings.tzOffset)}.${link}`, { buttonText: 'Открыть календарь', startParam: 'CAL' });
+    await telegramBot.notifyUser(m.host_user_id, `⏰ Через час встреча: ${m.client_name || 'клиент'} — ${whenLabel(m.starts_at, settings.tzOffset)}.${link}`, { important: true, buttonText: 'Открыть календарь', startParam: 'CAL' });
     sent++;
   }
   return { sent };
