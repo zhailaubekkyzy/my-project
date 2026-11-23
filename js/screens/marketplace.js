@@ -27,27 +27,27 @@
     return c.priceLabel || '';
   }
 
+  // A tile like in goods marketplaces (owner's decision 23 Nov.): 2 in a row on a phone, 3 on a wide screen.
+  // The picture on top (the SI-продавец's photo or the mascot), then the price, the offer, the rating, the name.
   function card(c) {
+    const rating = c.reviews && c.reviews.count
+      ? `<span class="flex items-center gap-0.5 text-[11px]"><span class="text-amber-400">★</span><span class="font-bold text-ink">${String(c.reviews.average).replace('.', ',')}</span><span class="text-faint">(${c.reviews.count})</span></span>` : '';
     return `
-      <button onclick="SF.push('consultant', { id: '${SF.js(c.id)}' })" class="w-full glass-card-3d p-3.5 text-left space-y-2">
-        <div class="flex items-center gap-3">
-          ${SF.avatar(c.photoUrl, { size: 44, kind: 'si' })}
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-bold text-ink truncate">${SF.esc(c.name)}</div>
-            <div class="text-[11px]">${SF.siLabel(c.roleTitle)}</div>
-          </div>
-          <div class="text-right text-[11px] text-faint">
-            ${c.reviews && c.reviews.count ? `<div class="font-bold text-ink">★ ${String(c.reviews.average).replace('.', ',')} <span class="text-faint font-normal">(${c.reviews.count})</span></div>` : ''}
-            <div>${c.stats.dialogs} диалог.</div>
-          </div>
-        </div>
-        <div class="text-xs font-semibold text-ink leading-snug">${SF.esc(c.offer)}</div>
-        <div class="flex items-center justify-between text-[11px] gap-2">
-          <span class="text-brand font-bold truncate">${SF.esc(priceText(c))}</span>
-          <span class="text-muted whitespace-nowrap">${trialLabel(c)}</span>
-        </div>
+      <button onclick="SF.push('consultant', { id: '${SF.js(c.id)}' })" class="w-full glass-card-3d p-2 text-left flex flex-col gap-1.5 min-w-0">
+        <span class="relative block aspect-square rounded-xl bg-[var(--si-bubble)] overflow-hidden">
+          <img src="${SF.esc(c.photoUrl || SF.MASCOTS.consultant)}" alt="" loading="lazy" class="w-full h-full ${c.photoUrl ? 'object-cover' : 'object-contain p-4'}" />
+          <span class="absolute top-1.5 left-1.5 si-dot"></span>
+          ${c.niche ? `<span class="absolute bottom-1.5 left-1.5 max-w-[85%] truncate px-1.5 py-0.5 rounded-md bg-card/90 text-[10px] font-semibold text-ink-2">${SF.esc(c.niche.name)}</span>` : ''}
+        </span>
+        ${priceText(c) ? `<span class="block text-sm font-extrabold text-ink truncate px-0.5">${SF.esc(priceText(c))}</span>` : ''}
+        <span class="block text-xs text-ink leading-snug line-clamp-2 px-0.5">${SF.esc(c.offer)}</span>
+        <span class="mt-auto flex items-center justify-between gap-1 px-0.5">
+          <span class="text-[10px] text-muted truncate">${SF.esc(c.name)}</span>
+          ${rating}
+        </span>
       </button>`;
   }
+
 
   // Two parts of the Marketplace (owner's decisions 22 Nov.): experts' products for everyone, and «Шаблоны» (was
   // «Для бизнеса») — templates of AI-продавцов, also seen by everyone (buying them is in the business profile)
@@ -83,9 +83,9 @@
 
       ${SF.niches.filter('experts', route)}
 
+      ${all === null ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
+      ${items.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">${items.map(card).join('')}</div>` : ''}
       <div class="space-y-2.5">
-        ${all === null ? '<div class="text-xs text-muted px-1">Загружаю…</div>' : ''}
-        ${items.map(card).join('')}
         ${all && !items.length && q ? '<div class="text-xs text-muted px-1">Ничего не нашли. Людей можно найти во вкладке «Чаты».</div>' : ''}
         ${all && all.length && !items.length && !q ? '<div class="text-xs text-muted px-1">В этой нише пока никого. Посмотрите другие разделы.</div>' : ''}
         ${all && !all.length && !q ? SF.emptyState('consultant', 'Витрина только открывается', 'Здесь появятся SI-продавцы экспертов.') : ''}

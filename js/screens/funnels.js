@@ -82,23 +82,23 @@
     return r.salesShare !== null && r.salesShare !== undefined ? `${who} · купили ${r.salesShare}% клиентов` : who;
   }
 
+  // A tile like in goods marketplaces (owner's decision 23 Nov.): 2 in a row on a phone, 3 on a wide screen
   function funnelCard(f, { mine = false } = {}) {
     const status = mine && STATUS[f.status];
     return `
-      <button onclick="SF.push('office-funnel', { id: '${SF.js(f.id)}' })" class="w-full glass-card-3d p-3.5 text-left space-y-2">
-        <span class="flex items-start justify-between gap-2">
-          <span class="text-sm font-bold text-ink leading-snug">${esc(f.title)}</span>
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-sunken border border-line text-ink-2 flex-shrink-0">${esc(f.niche)}</span>
+      <button onclick="SF.push('office-funnel', { id: '${SF.js(f.id)}' })" class="w-full glass-card-3d p-2 text-left flex flex-col gap-1.5 min-w-0">
+        <span class="relative block aspect-square rounded-xl bg-[#81D8D0]/15 overflow-hidden flex flex-col items-center justify-center gap-1.5 p-3 text-center">
+          <i data-lucide="layers" class="w-8 h-8 text-brand"></i>
+          <span class="text-[11px] font-bold text-ink leading-snug line-clamp-3">${f.steps.map(st => esc(st.title)).join(' → ')}</span>
+          ${f.niche ? `<span class="absolute bottom-1.5 left-1.5 max-w-[85%] truncate px-1.5 py-0.5 rounded-md bg-card/90 text-[10px] font-semibold text-ink-2">${esc(f.niche)}</span>` : ''}
         </span>
-        ${f.result ? `<span class="block text-[11px] text-ink-2 leading-snug line-clamp-2">${esc(f.result)}</span>` : ''}
-        <span class="block text-[11px] text-muted">${f.steps.map(st => esc(st.title)).join(' → ')}</span>
-        ${!mine && resultsLine(f.results) ? `<span class="block text-[11px] text-brand">${resultsLine(f.results)}</span>` : ''}
-        <span class="flex items-center justify-between gap-2 text-[11px]">
-          ${mine ? `<span class="font-semibold ${status ? status.cls : 'text-muted'}">${status ? status.label : ''}</span>` : author(f, 22)}
-          <span class="text-right">${priceLine(f)}</span>
-        </span>
+        <span class="block text-sm font-extrabold text-ink truncate px-0.5">${esc(f.priceLabel)}</span>
+        <span class="block text-xs text-ink leading-snug line-clamp-2 px-0.5">${esc(f.title)}</span>
+        ${!mine && resultsLine(f.results) ? `<span class="block text-[10px] text-brand px-0.5 line-clamp-1">${resultsLine(f.results)}</span>` : ''}
+        <span class="mt-auto block text-[10px] ${mine ? `font-semibold ${status ? status.cls : 'text-muted'}` : 'text-muted'} truncate px-0.5">${mine ? (status ? status.label : '') : `${esc(f.author.name)} · ${esc(f.priceTypeLabel)}`}</span>
       </button>`;
   }
+
 
   // ---------------- Catalogue and «Мои воронки» ----------------
   function renderList(route) {
@@ -138,7 +138,7 @@
     const filtered = data.funnels.filter(f => SF.niches.matches(f, route, keys));
     const any = q || route[keys.sec] || route[keys.nic];
     const list = filtered.length
-      ? filtered.map(f => funnelCard(f)).join('')
+      ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">${filtered.map(f => funnelCard(f)).join('')}</div>`
       : SF.emptyState('consultant', any ? 'Ничего не нашлось' : 'Шаблонов пока нет',
         any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов.');
     return `${intro}${search}${SF.niches.filter('templates', route, keys)}<div class="space-y-2.5">${list}</div>`;
@@ -153,7 +153,7 @@
     const how = `<div class="flex items-center justify-center gap-1 text-[11px] text-muted">Как это работает${SF.info('1. Соберите воронку в своём SI-продавце: шаги, сценарии «если…, то…», общее описание и пазл для покупателей.\n2. Опубликуйте: название, ниша, что внутри, результат, как вам платят и кто продаёт шаблон.\n3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны ИИ-продавцов» и в вашем Мозге как продукт. Команда снимает только по жалобе.\n4. Эксперты увидят описание, шаги и результат и смогут переписаться с вашим SI-продавцом. Ваши инструкции и тексты сценариев они не видят.')}</div>`;
     if (!data) return publish + how + waiting('mine');
     const list = data.funnels.length ? data.funnels.map(f => funnelCard(f, { mine: true })).join('') : '';
-    return `${renderSales()}${publish}${list ? `<div class="space-y-2.5">${list}</div>` : ''}${how}`;
+    return `${renderSales()}${publish}${list ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">${list}</div>` : ''}${how}`;
   }
 
   // ---------------- The author: who bought my funnels ----------------
