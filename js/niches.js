@@ -71,18 +71,17 @@
     return `
       <div class="space-y-1.5">
         <label class="block space-y-1">
-          <span class="font-semibold text-ink-2">${label}</span>
+          <span class="font-semibold text-ink-2 flex items-center gap-1">${label}${SF.info(hint || 'Начните писать — появятся подсказки. Нет вашей ниши — она создастся сама и сразу появится в фильтрах.')}</span>
           <input name="nicheName" list="${listId}" maxlength="60" value="${esc(value)}" autocomplete="off" ${onName ? `oninput="${onName}"` : ''} placeholder="Например: Нутрициология, Йога, SMM"
             class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
           <datalist id="${listId}">${niches().map(n => `<option value="${esc(n.name)}">${esc(sectionLabel(n.section))}</option>`).join('')}</datalist>
         </label>
         <label class="block space-y-1">
-          <span class="text-[11px] text-muted">Раздел (если вашей ниши ещё нет в списке)</span>
+          <span class="text-[11px] text-muted">Раздел</span>
           <select name="nicheSection" ${onSection ? `onchange="${onSection}"` : ''} class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
             ${sections().map(s => `<option value="${s.id}" ${s.id === (sec || 'other') ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
           </select>
         </label>
-        <span class="block text-[10px] text-faint">${hint || 'Начните писать — появятся подсказки. Нет вашей ниши — она создастся сама и сразу появится в фильтрах.'}</span>
       </div>`;
   }
 

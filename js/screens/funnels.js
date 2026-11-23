@@ -127,11 +127,12 @@
     const q = inline ? (route.tq || '') : (route.q || '');
     const key = catalogKey({ q, niche: '' });
     const data = cache[key];
-    const intro = `<div class="text-[11px] text-muted px-1 leading-snug">Шаблоны ИИ-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.</div>`;
+    const intro = '';
     const search = `
       <form onsubmit="SF.funnels.${inline ? 'searchInline' : 'search'}(event)" class="flex gap-2">
         <input name="q" value="${esc(q)}" autocomplete="off" placeholder="Задача или слово: запись, вебинар, курс…" class="flex-1 p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
         <button type="submit" class="px-3 rounded-xl btn-3d-tiffany text-xs" aria-label="Найти"><i data-lucide="search" class="w-4 h-4"></i></button>
+        <span class="self-center">${SF.info('Шаблоны ИИ-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.')}</span>
       </form>`;
     if (!data) return intro + search + waiting(key);
     const filtered = data.funnels.filter(f => SF.niches.matches(f, route, keys));
@@ -139,7 +140,7 @@
     const list = filtered.length
       ? filtered.map(f => funnelCard(f)).join('')
       : SF.emptyState('consultant', any ? 'Ничего не нашлось' : 'Шаблонов пока нет',
-        any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов. Опубликовать свой можно из своего SI-продавца.');
+        any ? 'Попробуйте другое слово или другой раздел.' : 'Здесь появятся шаблоны маркетологов и экспертов.');
     return `${intro}${search}${SF.niches.filter('templates', route, keys)}<div class="space-y-2.5">${list}</div>`;
   }
 
@@ -148,15 +149,8 @@
     const consultants = store().data.office.consultants.filter(c => !c.assisting);
     const publish = consultants.length
       ? `<button onclick="SF.push('office-funnel-publish')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5"><i data-lucide="upload" class="w-4 h-4"></i> Опубликовать шаблон</button>`
-      : `<div class="text-[11px] text-muted px-1">Чтобы опубликовать шаблон, сначала создайте SI-продавца и соберите в нём шаги и сценарии.</div>`;
-    const how = `
-      <div class="glass-card-3d p-3.5 space-y-1.5 text-[11px] text-ink-2 leading-snug">
-        <div class="text-xs font-bold text-ink">Как это работает</div>
-        <div>1. Соберите воронку в своём SI-продавце: шаги, сценарии «если…, то…», общее описание и пазл для покупателей.</div>
-        <div>2. Опубликуйте: название, ниша, что внутри, результат, как вам платят и кто продаёт шаблон.</div>
-        <div>3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны ИИ-продавцов» и в вашем Мозге как продукт. Команда снимает только по жалобе.</div>
-        <div>4. Эксперты увидят описание, шаги и результат и смогут переписаться с вашим SI-продавцом. Ваши инструкции и тексты сценариев они не видят.</div>
-      </div>`;
+      : ``;
+    const how = `<div class="flex items-center justify-center gap-1 text-[11px] text-muted">Как это работает${SF.info('1. Соберите воронку в своём SI-продавце: шаги, сценарии «если…, то…», общее описание и пазл для покупателей.\n2. Опубликуйте: название, ниша, что внутри, результат, как вам платят и кто продаёт шаблон.\n3. Шаблон сразу появляется в Маркетплейсе → «Шаблоны ИИ-продавцов» и в вашем Мозге как продукт. Команда снимает только по жалобе.\n4. Эксперты увидят описание, шаги и результат и смогут переписаться с вашим SI-продавцом. Ваши инструкции и тексты сценариев они не видят.')}</div>`;
     if (!data) return publish + how + waiting('mine');
     const list = data.funnels.length ? data.funnels.map(f => funnelCard(f, { mine: true })).join('') : '';
     return `${renderSales()}${publish}${list ? `<div class="space-y-2.5">${list}</div>` : ''}${how}`;
@@ -249,7 +243,8 @@
     if (!f) return waiting(key);
     const mine = f.status !== undefined;
     const status = mine && STATUS[f.status];
-    const ownerBlock = mine ? `
+    const inMarketplace = store().data.ui.tab === 'marketplace';
+    const ownerBlock = mine && !inMarketplace ? `
       <div class="glass-card-3d p-3.5 space-y-2 text-xs">
         <div class="font-bold ${status ? status.cls : 'text-ink'}">${status ? status.label : ''}</div>
         ${f.reviewNote ? `<div class="p-2.5 rounded-xl bg-sunken border border-line text-ink-2 leading-snug"><span class="text-muted">Команда:</span> ${esc(f.reviewNote)}</div>` : ''}
@@ -258,7 +253,6 @@
           <button onclick="SF.push('office-funnel-publish', { id: '${SF.js(f.id)}' })" class="py-2.5 rounded-xl btn-3d-tiffany text-xs">Изменить</button>
           <button onclick="SF.funnels.withdraw('${SF.js(f.id)}')" class="py-2.5 rounded-xl btn-3d-dark text-xs">Убрать</button>
         </div>
-        <div class="text-[10px] text-faint">Изменения публикуются сразу. Покупатели получат новые шаги, когда подключат шаблон заново.</div>
       </div>` : '';
     const contact = mine ? '' : renderBuy(f);
     return `
@@ -278,7 +272,6 @@
           ${SF.avatar(f.seller.photoUrl, { size: 40, kind: 'si' })}
           <span class="flex-1 min-w-0">
             <span class="block text-sm font-bold text-ink truncate">${esc(f.seller.name)}</span>
-            <span class="block text-[11px] text-muted leading-snug">Задайте вопросы продавцу шаблона — он работает на этом же скелете</span>
           </span>
           <i data-lucide="message-circle" class="w-5 h-5 text-si flex-shrink-0"></i>
         </button>` : ''}
@@ -289,9 +282,8 @@
       </div>
       ${f.puzzle ? `
         <div class="glass-card-3d p-4 space-y-2 text-xs">
-          ${SF.sectionTitle('puzzle', `Что вы дополните · ${f.puzzle.pieces.length}`)}
+          ${SF.sectionTitle('puzzle', `Что вы дополните · ${f.puzzle.pieces.length}`, '', `После покупки — короткие вопросы по каждому кусочку; что есть в вашем Мозге, подставится само. Шаблон начнёт продавать, ${f.puzzle.release}.`)}
           <div class="flex flex-wrap gap-1.5">${f.puzzle.pieces.map(p => `<span class="px-2 py-1 rounded-lg ${p.required ? 'bg-amber-500/10 border border-amber-500/50' : 'bg-sunken border border-line'} text-ink">${esc(p.title)}</span>`).join('')}</div>
-          <div class="text-[11px] text-muted leading-snug">После покупки — короткие вопросы по каждому кусочку; что есть в вашем Мозге, подставится само. Шаблон начнёт продавать, ${esc(f.puzzle.release)}.</div>
         </div>` : ''}
       <div class="glass-card-3d p-4 space-y-2">
         ${SF.sectionTitle('target', 'Результат')}
@@ -317,7 +309,7 @@
         <div class="glass-card-3d p-4 space-y-2.5 text-xs border border-[#81D8D0]">
           ${SF.sectionTitle('briefcase', 'Доступно в бизнес-режиме')}
           <div class="text-ink-2 leading-snug">Шаблон становится вашим SI-продавцом в Офисе бизнеса. ${active ? 'Переключитесь на бизнес-профиль — и подключайте.' : 'Бизнес-профиль бесплатный: включите его — и подключайте.'}</div>
-          <button onclick="${active ? 'SF.actions.setPersonalMode(false)' : "SF.openIn('marketplace', 'office')"}" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">${active ? 'Перейти в бизнес-режим' : 'Включить бизнес-профиль'}</button>
+          <button onclick="${active ? 'SF.actions.setPersonalMode(false)' : "SF.openIn('profile', 'office')"}" class="w-full py-2.5 rounded-xl btn-3d-tiffany text-xs">${active ? 'Перейти в бизнес-режим' : 'Включить бизнес-профиль'}</button>
         </div>`;
     }
     const writeAuthor = `<button onclick="SF.funnels.contact('${SF.js(f.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i> Написать автору</button>`;
@@ -333,7 +325,7 @@
           <div class="text-ink-2 leading-snug">2. Напишите, как и когда оплатили, и нажмите «Я оплатил(а)». Автор проверит поступление и подтвердит.</div>
           <input id="buy-note-${esc(f.id)}" maxlength="300" placeholder="Например: Kaspi, 21 ноября, с карты на имя Айгерим" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs" />
           <button onclick="SF.funnels.buy('${SF.js(f.id)}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs">${button}</button>
-          <div class="text-[10px] text-faint">Скриншот чека можно отправить автору в переписке.</div>`}
+          `}
         ${writeAuthor}
       </div>`;
     if (!p || p.status === 'declined' || p.status === 'ended') {
@@ -364,12 +356,11 @@
     const connected = p.connectedTo ? `
       <div class="p-2.5 rounded-xl bg-[#81D8D0]/15 border border-[#81D8D0] space-y-1.5">
         <div class="font-semibold text-ink">Работает в SI-продавце «${esc(p.connectedTo.name)}»</div>
-        <button type="button" onclick="SF.openIn('marketplace', 'office-consultant', { id: '${SF.js(p.connectedTo.projectId)}', tab: 'methodology' })" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs">Открыть продавца и пазл</button>
+        <button type="button" onclick="SF.openIn('profile', 'office-consultant', { id: '${SF.js(p.connectedTo.projectId)}', tab: 'methodology' })" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs">Открыть продавца и пазл</button>
         <button type="button" onclick="SF.funnels.detach('${SF.js(p.id)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Отключить шаблон</button>
       </div>` : '';
     const connect = p.expired || p.connectedTo ? '' : `
       <form onsubmit="SF.funnels.launch(event, '${SF.js(p.id)}')" class="space-y-2.5">
-        <div class="text-[11px] text-ink-2 leading-snug">Шаблон станет вашим <b>новым</b> SI-продавцом. Уже созданные работают как раньше.</div>
         <label class="block space-y-1">
           <span class="font-semibold text-ink-2">В каком бизнесе</span>
           <select name="businessId" onchange="SF.funnels.launchField('businessId', this.value, true)" class="${field}">
@@ -382,7 +373,6 @@
             <option value="">Выберу потом</option>
             ${products.map(pr => `<option value="${esc(pr.id)}" ${pr.id === launchDraft.productId ? 'selected' : ''}>${esc(pr.name)}${pr.priceLabel ? ` · ${esc(pr.priceLabel)}` : ''}</option>`).join('')}
           </select>
-          <span class="block text-[10px] text-faint">Продукты — в Офисе → «Мозг». Чего не хватит, спросит пазл шаблона.</span>
         </label>
         <label class="block space-y-1">
           <span class="font-semibold text-ink-2">Имя SI-продавца</span>
@@ -393,14 +383,14 @@
             <input name="m_${esc(st.id)}" maxlength="1000" value="${esc((p.materials || {})[st.id] || '')}" placeholder="https://… или текст" class="${field}" /></label>`).join('')}` : ''}
         <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
           <input type="checkbox" name="brainAccess" checked class="w-4 h-4 mt-0.5 accent-[#0d9488] flex-shrink-0" />
-          <span><span class="block font-semibold text-ink">Дать шаблону доступ к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть о бизнесе, продукте и в материалах, подставится в пазл само — меньше писать. Автор шаблона ваш Мозг не видит. Можно выключить потом в пазле.</span></span>
+          <span class="flex items-center gap-1 font-semibold text-ink">Дать шаблону доступ к Мозгу${SF.info('Что уже есть о бизнесе, продукте и в материалах, подставится в пазл само — меньше писать. Автор шаблона ваш Мозг не видит. Можно выключить потом в пазле.')}</span>
         </label>
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Запустить SI-продавца</button>
       </form>`;
     const nums = p.numbers ? `<div class="text-[11px] text-ink-2">С подключения: новых клиентов ${p.numbers.clients}, продаж ${p.numbers.sales}${percent ? ' — эти же цифры видит автор' : ''}</div>` : '';
     return `
       <div class="glass-card-3d p-4 space-y-2.5 text-xs">
-        ${SF.sectionTitle('check-circle', 'Шаблон ваш')}
+        ${SF.sectionTitle('check-circle', 'Шаблон ваш', '', 'Шаблон станет вашим новым SI-продавцом. Уже созданные работают как раньше.')}
         ${month}
         ${nums}
         ${connected}
@@ -436,11 +426,10 @@
     const steps = (chosen && chosen.steps) || [];
     const fieldBox = (name, label, opts = {}) => `
       <label class="block space-y-1">
-        <span class="font-semibold text-ink-2">${label}</span>
+        <span class="font-semibold text-ink-2 flex items-center gap-1">${label}${opts.hint ? SF.info(opts.hint) : ''}</span>
         ${opts.rows
           ? `<textarea name="${name}" rows="${opts.rows}" maxlength="${opts.max}" placeholder="${esc(opts.placeholder || '')}" oninput="SF.funnels.field('${SF.js(route.id || 'new')}', '${name}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${esc(d[name] || '')}</textarea>`
           : `<input name="${name}" type="${opts.type || 'text'}" maxlength="${opts.max}" value="${esc(d[name] || '')}" placeholder="${esc(opts.placeholder || '')}" oninput="SF.funnels.field('${SF.js(route.id || 'new')}', '${name}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />`}
-        ${opts.hint ? `<span class="block text-[10px] text-faint">${opts.hint}</span>` : ''}
       </label>`;
     const priceType = PRICE_TYPES.find(p => p.id === d.priceType) || PRICE_TYPES[0];
     return `
@@ -463,19 +452,16 @@
           ${fieldBox('result', 'Результат для эксперта', { rows: 3, max: 600, placeholder: 'Что получит эксперт. Только честные обещания — без цифр, которых вы не можете подтвердить', hint: 'Нечестное обещание — повод для жалобы, и команда снимет шаблон.' })}
           <div class="space-y-1.5">
             <div class="font-semibold text-ink-2">Вопросы и ответы</div>
-            <div class="text-[10px] text-faint leading-snug">Видны всем на странице шаблона: кому подходит, что нужно от эксперта, как платить.</div>
             ${SF.niches.faqEditor(d.faq || [])}
           </div>
           ${fieldBox('videoUrl', 'Видео-презентация (необязательно)', { type: 'url', max: 300, placeholder: 'https://… YouTube, Instagram, Google Drive' })}
         </div>
         <div class="glass-card-3d p-4 space-y-3">
-          ${SF.sectionTitle('message-circle', 'Кто продаёт шаблон')}
-          <div class="text-[11px] text-muted leading-snug">Эксперты переписываются с этим SI-продавцом до покупки. Это может быть этот же продавец, другой ваш — созданный для шаблона или купленный в Маркетплейсе.</div>
+          ${SF.sectionTitle('message-circle', 'Кто продаёт шаблон', '', 'Эксперты переписываются с этим SI-продавцом до покупки. Это может быть этот же продавец, другой ваш — созданный для шаблона или купленный в Маркетплейсе. Шаблон сам появится в Мозге этого бизнеса продуктом.')}
           <select name="sellerProjectId" onchange="SF.funnels.field('${SF.js(route.id || 'new')}', 'sellerProjectId', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">
             ${consultants.map(c => `<option value="${esc(c.id)}" ${c.id === sellerId ? 'selected' : ''}>${esc(c.name)}${c.id === d.projectId ? ' (этот же)' : ''}</option>`).join('')}
             <option value="none" ${sellerId === 'none' || (!sellerId && editing) ? 'selected' : ''}>Без переписки</option>
           </select>
-          <div class="text-[10px] text-faint">Шаблон сам появится в Мозге этого бизнеса продуктом — с ценой и ссылкой на оплату.</div>
         </div>
         <div class="glass-card-3d p-4 space-y-3">
           ${SF.sectionTitle('wallet', 'Как вам платят')}
@@ -483,13 +469,12 @@
             ${PRICE_TYPES.map(p => `
               <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer ${p.id === priceType.id ? 'bg-[#81D8D0]/15 border-[#81D8D0]' : 'bg-sunken border-line'}">
                 <input type="radio" name="priceType" value="${p.id}" ${p.id === priceType.id ? 'checked' : ''} onchange="SF.funnels.field('${SF.js(route.id || 'new')}', 'priceType', this.value, true)" class="mt-0.5" />
-                <span><span class="block font-semibold text-ink">${p.label}</span><span class="block text-[10px] text-muted">${p.hint}</span></span>
+                <span class="font-semibold text-ink">${p.label}</span>
               </label>`).join('')}
           </div>
           ${fieldBox('priceLabel', priceType.id === 'percent' ? 'Процент' : 'Цена', { max: 60, placeholder: priceType.placeholder })}
           ${fieldBox('paymentUrl', priceType.id === 'percent' ? 'Ваша ссылка на оплату (необязательно)' : 'Ваша ссылка на оплату', { type: 'url', max: 300, placeholder: 'https://...', hint: 'Деньги идут вам напрямую. Оплату подтверждаете вы — пока SmartFlow не подключит свой приём платежей.' })}
         </div>
-        <div class="text-[11px] text-muted px-1 leading-snug">Шаблон публикуется сразу — без проверки. Ваши инструкции и тексты сценариев эксперты не видят.</div>
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">${editing ? 'Сохранить' : 'Опубликовать'}</button>
       </form>`;
   }
@@ -593,7 +578,7 @@
       if (res && res.puzzle && !res.released) {
         // The funnel waits for its puzzle: straight to it
         showToast('Подключено. Соберите пазл воронки — и она начнёт продавать 🧩');
-        SF.openIn('marketplace', 'office-consultant', { id: projectId, tab: 'methodology' });
+        SF.openIn('profile', 'office-consultant', { id: projectId, tab: 'methodology' });
       } else showToast('Готово: SI-продавец ведёт клиентов по воронке');
     } catch (err) {
       showToast(err.message || 'Не получилось подключить');
@@ -630,7 +615,7 @@
       SF.confetti();
       if (businessId) store().setCurrentBusiness(businessId);
       showToast(res.puzzle && !res.released ? 'SI-продавец создан 🎉 Соберите пазл шаблона — и он начнёт продавать' : 'SI-продавец запущен 🎉');
-      SF.openIn('marketplace', 'office-consultant', { id: res.projectId, tab: 'methodology' });
+      SF.openIn('profile', 'office-consultant', { id: res.projectId, tab: 'methodology' });
     } catch (err) {
       showToast(err.message || 'Не получилось запустить');
     } finally {
@@ -695,26 +680,15 @@
     SF.push('office-funnel-publish');
   }
 
-  // An entry in the Office (list of SI-sellers)
-  // «Для бизнеса» in the Marketplace: the catalogue right there (everyone sees it); the business profile
-  // also gets «Купленные» and «Мои шаблоны»
+  // The Marketplace tab «Шаблоны ИИ-продавцов» (owner's decision 23 Nov.): only look and buy — creating, my
+  // templates and the bought ones are in Настройки → «Мои бизнесы» → Офис
   function catalogInline(route) {
-    const business = store().isBusinessView();
-    const waitingSales = (cache.purchases && cache.purchases.waiting) || 0;
-    return `
-      ${business ? `
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="SF.push('office-funnels', { view: 'bought' })" class="py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="shopping-bag" class="w-4 h-4"></i>Купленные</button>
-          <button onclick="SF.push('office-funnels', { view: 'mine' })" class="relative py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="pen-line" class="w-4 h-4"></i>Мои шаблоны
-            ${waitingSales ? `<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">${waitingSales}</span>` : ''}</button>
-        </div>` : ''}
-      ${renderCatalog(route, { inline: true })}`;
+    return renderCatalog(route, { inline: true });
   }
 
   function loadInline(route) {
     if (!SF.feature('funnels')) return;
     load(catalogKey({ q: route.tq || '', niche: '' }), () => api().readyFunnels.catalogue(route.tq || '', ''));
-    if (store().isBusinessView()) load('purchases', () => api().readyFunnels.purchases());
   }
 
   function searchInline(event) {
@@ -722,18 +696,17 @@
     SF.patch({ tq: String(new FormData(event.target).get('q') || '').trim() });
   }
 
+  // A row in the Office (list of SI-sellers): bought templates and my own
   function officeEntry() {
     if (!SF.feature('funnels')) return '';
     return `
-      <button onclick="SF.push('office-funnels')" class="w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
-        <span class="w-10 h-10 rounded-2xl bg-sunken border border-line flex items-center justify-center flex-shrink-0"><i data-lucide="layers" class="w-5 h-5 text-brand"></i></span>
-        <span class="flex-1 min-w-0">
-          <span class="block text-sm font-bold text-ink">Шаблоны</span>
-          <span class="block text-[11px] text-muted leading-snug">Купленные и мои. Каталог — в Маркетплейсе → «Шаблоны ИИ-продавцов»</span>
-        </span>
+      <button onclick="SF.push('office-funnels', { view: 'bought' })" class="w-full px-3.5 py-3 flex items-center gap-3 text-left text-sm">
+        <i data-lucide="layers" class="w-5 h-5 text-brand"></i>
+        <span class="flex-1 font-semibold text-ink">Шаблоны: купленные и мои</span>
         <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
       </button>`;
   }
+
 
   const TITLES = {
     'office-funnels': 'Шаблоны ИИ-продавцов',

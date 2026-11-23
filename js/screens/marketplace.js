@@ -18,21 +18,7 @@
   }
 
   // ---------------- List ----------------
-  // Business profile only: the way into the Office. A personal profile sees just the experts'
-  // products; the business profile is turned on in Профиль (owner's decision 21 Nov., like Instagram).
-  function officeEntry(state) {
-    if (!store().isBusinessView()) return '';
-    const waiting = SF.data.waitingInquiries(state).length;
-    return `
-      <button onclick="SF.push('office')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left border-[#81D8D0]">
-        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="briefcase" class="w-5 h-5"></i></span>
-        <span class="flex-1">
-          <span class="block text-sm font-bold text-ink">Мой Офис</span>
-          <span class="block text-[11px] text-muted">SI-продавцов: ${state.office.consultants.length}${waiting ? ` · ждут ответа: ${waiting}` : ''}</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-      </button>`;
-  }
+  // The Office is not here any more (owner's decision 23 Nov.): Настройки → «Мои бизнесы».
 
   // The price as the expert set it: a sum, «Бесплатно» or «Цена по запросу»
   function priceText(c) {
@@ -78,7 +64,7 @@
 
   function renderList(state, route = {}) {
     if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) {
-      return `${officeEntry(state)}${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
+      return `${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
     }
     const all = state.remote.marketplace;
     const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
@@ -87,7 +73,6 @@
     // Filters by niche, like on marketplaces: a section, then a niche inside it
     const items = (all || []).filter(c => SF.niches.matches(c, route) && matches(c));
     return `
-      ${officeEntry(state)}
       ${marketTabs(route)}
 
       <div class="relative">
@@ -103,10 +88,7 @@
         ${items.map(card).join('')}
         ${all && !items.length && q ? '<div class="text-xs text-muted px-1">Ничего не нашли. Людей можно найти во вкладке «Чаты».</div>' : ''}
         ${all && all.length && !items.length && !q ? '<div class="text-xs text-muted px-1">В этой нише пока никого. Посмотрите другие разделы.</div>' : ''}
-        ${all && !all.length && !q ? SF.emptyState('consultant', 'Витрина только открывается',
-          store().isBusinessView()
-            ? 'Здесь появятся SI-продавцы экспертов. Своего SI-продавца можно показать здесь из Офиса — включите «Показывать в Маркетплейсе».'
-            : 'Здесь появятся SI-продавцы экспертов.') : ''}
+        ${all && !all.length && !q ? SF.emptyState('consultant', 'Витрина только открывается', 'Здесь появятся SI-продавцы экспертов.') : ''}
       </div>
     `;
   }
@@ -346,20 +328,23 @@
       if (route.screen === 'list') return renderList(state, route);
       if (route.screen === 'consultant') return renderConsultant(route, state);
       if (route.screen === 'person') return renderPerson(route, state);
-      return SF.office.render(route, state);
+      // Only look and buy here (owner's decision 23 Nov.): a template's page stays; the Office lives in Настройки
+      if (route.screen === 'office-funnel') return SF.office.render(route, state);
+      const { screen, ...params } = route;
+      setTimeout(() => SF.openIn('profile', screen, params), 0);
+      return '';
     },
     afterRender(route, state) {
       if (route.screen === 'list') {
         SF.data.niches();
         if (route.mtab === 'biz' && SF.funnels) SF.funnels.loadInline(route);
         SF.data.marketplace();
-        if (store().isBusinessView()) SF.data.allInquiries();
       } else if (route.screen === 'consultant') {
         if (!findCard(state, route.id)) SF.data.cardById(route.id);
         SF.data.cardReviews(route.id);
       } else if (route.screen === 'person') {
         SF.data.profile(route.id);
-      } else if (SF.office.afterRender) {
+      } else if (route.screen === 'office-funnel' && SF.office.afterRender) {
         SF.office.afterRender(route, state);
       }
     }

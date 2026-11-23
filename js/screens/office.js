@@ -96,11 +96,10 @@
   function field(name, label, value, { placeholder = '', rows = 0, max = 200, type = 'text', hint = '' } = {}) {
     return `
       <label class="block space-y-1">
-        <span class="font-semibold text-ink-2">${label}</span>
+        <span class="font-semibold text-ink-2 flex items-center gap-1">${label}${hint ? SF.info(hint) : ''}</span>
         ${rows
           ? `<textarea name="${name}" rows="${rows}" maxlength="${max}" placeholder="${placeholder}" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(value)}</textarea>`
           : `<input name="${name}" type="${type}" maxlength="${max}" value="${SF.esc(value)}" placeholder="${placeholder}" ${type === 'url' ? 'inputmode="url"' : ''} class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />`}
-        ${hint ? `<span class="block text-[10px] text-faint">${hint}</span>` : ''}
       </label>`;
   }
 
@@ -156,18 +155,7 @@
     if (section === 'consultants') body = renderConsultantList(state);
     if (section === 'brain') body = renderBrainSection(state);
     if (section === 'team') body = renderTeam(state);
-    const business = store().currentBusiness();
-    const many = ((state.remote.businesses && state.remote.businesses.businesses) || []).length > 1;
     return `
-      ${business && !assistantOnly() ? `
-        <button onclick="SF.go('profile')" class="w-full p-3 rounded-2xl bg-card border border-line flex items-center gap-2.5 text-left">
-          <span class="w-9 h-9 rounded-xl bg-[#81D8D0]/20 text-brand flex items-center justify-center flex-shrink-0"><i data-lucide="briefcase" class="w-4 h-4"></i></span>
-          <span class="flex-1 min-w-0">
-            <span class="block text-sm font-bold text-ink truncate">${SF.esc(business.name || 'Мой бизнес')}</span>
-            <span class="block text-[10px] text-muted">${many ? 'Сменить бизнес — в Профиле' : 'Бизнесы — в Профиле, до 3'}</span>
-          </span>
-          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-        </button>` : ''}
       ${sections.length > 1 ? `
         <div class="grid grid-cols-3 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
           ${sections.map(s => `
@@ -195,8 +183,7 @@
           ${b.about ? `<div class="text-xs text-ink-2 leading-relaxed whitespace-pre-line">${SF.esc(b.about)}</div>` : '<div class="text-xs text-muted leading-snug">Расскажите в двух словах, что вы делаете и для кого — это узнают все SI-продавцы бизнеса.</div>'}
         </div>
         <div class="glass-card-3d p-4 space-y-2.5">
-          ${SF.sectionTitle('shopping-bag', 'Продукты')}
-          <p class="text-[11px] text-muted leading-snug">Опишите продукт один раз: что получает клиент, результат, цену, рассрочку. SI-продавец, привязанный к продукту, возьмёт отсюда всё, чего нет в его карточке.</p>
+          ${SF.sectionTitle('shopping-bag', 'Продукты', '', 'Опишите продукт один раз: что получает клиент, результат, цену, рассрочку. SI-продавец, привязанный к продукту, возьмёт отсюда всё, чего нет в его карточке.')}
           ${!products ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
           ${(products || []).map(p => `
             <button onclick="SF.push('office-product', { businessId: '${SF.js(b.id)}', id: '${SF.js(p.id)}' })" class="w-full p-3 rounded-xl bg-card border border-line flex items-center gap-2.5 text-left">
@@ -301,7 +288,7 @@
     const owners = [...new Set(assisted.map(c => c.ownerName))];
     const assistedBlock = assisted.length ? `
       <div class="space-y-2.5">
-        <div class="text-[11px] text-muted px-1 leading-snug">Вы помощник: ${SF.esc(owners.join(', '))}. Отвечаете клиентам и ставите SI на паузу; деньги, SI-мозг и настройки видит только владелец.</div>
+        <div class="text-[11px] text-muted px-1 flex items-center gap-1">Вы помощник: ${SF.esc(owners.join(', '))}${SF.info('Вы отвечаете клиентам и ставите SI на паузу. Деньги, SI-мозг и настройки видит только владелец.')}</div>
         ${assisted.map(c => `
           <button onclick="SF.push('office-consultant', { id: '${SF.js(c.id)}', tab: 'income' })" class="relative w-full glass-card-3d p-3.5 text-left flex items-center gap-3">
             ${waitingCount(state, c.id) ? `<span class="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold">ждут: ${waitingCount(state, c.id)}</span>` : ''}
@@ -321,18 +308,23 @@
         </button>`;
     }
     return `
-      <button onclick="SF.push('office-create')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i> Создать SI-продавца
-      </button>
-      ${SF.funnels ? SF.funnels.officeEntry() : ''}
-      <button onclick="SF.go('community')" class="w-full glass-card-3d p-3.5 flex items-center gap-3 text-left">
-        <span class="w-10 h-10 rounded-2xl bg-[#81D8D0]/20 flex items-center justify-center text-brand"><i data-lucide="users" class="w-5 h-5"></i></span>
-        <span class="flex-1">
-          <span class="block text-sm font-bold text-ink">Мои сообщества</span>
-          <span class="block text-[11px] text-muted">Лента, участники, заявки и оплаты, цифры — во вкладке «Комьюнити»</span>
-        </span>
-        <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
-      </button>
+      <!-- Owner's decision 23 Nov.: create one here, or find a template in the Marketplace -->
+      <div class="grid ${SF.feature('funnels') ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
+        <button onclick="SF.push('office-create')" class="py-3 rounded-2xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i> Создать
+        </button>
+        ${SF.feature('funnels') ? `<button onclick="SF.openIn('marketplace', 'list', { mtab: 'biz' })" class="py-3 rounded-2xl btn-3d-dark text-sm flex items-center justify-center gap-1.5">
+          <i data-lucide="search" class="w-4 h-4"></i> Найти
+        </button>` : ''}
+      </div>
+      <div class="glass-card-3d divide-y divide-line overflow-hidden">
+        ${SF.funnels ? SF.funnels.officeEntry() : ''}
+        <button onclick="SF.go('community')" class="w-full px-3.5 py-3 flex items-center gap-3 text-left text-sm">
+          <i data-lucide="users" class="w-5 h-5 text-brand"></i>
+          <span class="flex-1 font-semibold text-ink">Мои сообщества</span>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
+        </button>
+      </div>
       ${assistedBlock}
       <div class="space-y-2.5">
         ${list.map(c => `
@@ -459,7 +451,6 @@
               </div>
             </button>`).join('')}
         </div>
-        <div class="text-[10px] text-faint px-1 leading-snug">Всего клиентов: ${report.total}, купили: ${report.bought}. «Дошли» — дошли до шага или дальше; процент — от предыдущего шага. SI переводит клиента дальше, когда шаг пройден; вы или помощник можете перевести вручную в карточке клиента.</div>
         ${SF.sectionTitle('', `Сейчас на шаге «${SF.esc((steps.find(s => s.id === stepId) || {}).title || '')}»`)}
         ${!list ? '<div class="text-xs text-muted">Загружаю…</div>' : ''}
         ${list && !list.clients.length ? '<div class="text-xs text-muted px-1">Здесь сейчас никого нет.</div>' : ''}
@@ -588,7 +579,7 @@
       ${owner ? `
         ${SF.sectionTitle('', 'Кто принимает встречи')}
         ${cal.hosts.map(h => renderHostForm(h, s)).join('')}
-        ${cal.hosts.length < 2 ? '<div class="text-[10px] text-faint px-1">Помощника можно добавить в разделе «Помощник» — потом задать окна и ему.</div>' : ''}
+        ${cal.hosts.length < 2 ? '' : ''}
 
         ${SF.sectionTitle('', 'Правила записи')}
         <div class="glass-card-3d p-3.5 space-y-2.5" id="calendar-rules">
@@ -607,7 +598,6 @@
             <input type="number" min="0" max="168" value="${s.hoursBefore}" onchange="SF.actions.saveCalendarRules('${b}', { hoursBefore: this.value })" class="w-16 bg-card border border-line-2 rounded-lg px-2 py-1 text-xs text-ink" />
             ч до встречи
           </label>
-          <div class="text-[10px] text-faint leading-snug">Вы и помощник можете отменить встречу всегда. Клиент получит сообщение в чате, а вы — у Бадди и в Telegram. За час до встречи напоминание придёт обеим сторонам.</div>
         </div>` : ''}
     `;
   }
@@ -726,11 +716,9 @@
       <div class="glass-card-3d p-4 space-y-3">
         <div class="flex items-center gap-2">
           <span class="si-dot"></span>
-          <span class="text-sm font-bold text-ink">Мой SI-мозг</span>
+          <span class="text-sm font-bold text-ink">Мой SI-мозг</span>${SF.info('Загрузите то, что знаете вы: программу, прайс, ответы на частые вопросы, кейсы. SI будет отвечать клиентам по этим материалам своими словами. Каждый SI знает только то, что вы ему откроете. Файлы: PDF, Word (.docx) или текст, до 10 МБ; хранится только текст.')}
         </div>
-        <p class="text-xs text-muted leading-relaxed">Загрузите то, что знаете вы: программу, прайс, ответы на частые вопросы, кейсы. SI будет отвечать клиентам по этим материалам своими словами. Каждый SI знает только то, что вы ему откроете.</p>
         ${brainUploadButtons()}
-        <div class="text-[10px] text-faint">PDF, Word (.docx) или текст, до 10 МБ. Сохраняется только текст — сами файлы не хранятся. Сканы и картинки без текста не подойдут.</div>
       </div>
       ${!materials ? `<div class="text-xs text-muted px-1">${SF.data.signedIn() ? 'Загружаю…' : 'Откройте приложение в Telegram, чтобы увидеть свои материалы.'}</div>` : ''}
       ${materials && !materials.length ? SF.emptyState('consultant', 'Материалов пока нет', 'Начните с самого частого: что входит в ваш продукт, сколько стоит, кому подходит. Можно просто вставить текст.') : ''}
@@ -789,7 +777,6 @@
             </span>
           </label>`).join('')}
         ${brainUploadButtons(c.id)}
-        <div class="text-[10px] text-faint">Новый материал отсюда сразу откроется этому SI. Все материалы бизнеса — в Офисе, раздел «Мозг».</div>
       </div>
     `;
   }
@@ -801,7 +788,6 @@
     all.sort((a, b) => (a.status === 'waiting' ? 0 : 1) - (b.status === 'waiting' ? 0 : 1) ||
       String(b.created_at).localeCompare(String(a.created_at)));
     return `
-      <div class="text-[11px] text-muted px-1 leading-snug">Клиенты, которые нажали «Связаться с человеком». SI для них на паузе, пока вы не включите его обратно. О новых обращениях пишет бот в Telegram.</div>
       ${all.length ? all.map(i => `
         <div class="glass-card-3d p-3.5 space-y-2 ${i.status === 'waiting' ? 'border-[#81D8D0]' : ''}">
           <div class="flex items-start justify-between gap-2">
@@ -894,7 +880,6 @@
             <span class="w-10 h-10 rounded-xl bg-sunken flex items-center justify-center flex-shrink-0"><i data-lucide="${g.icon}" class="w-5 h-5 text-brand"></i></span>
             <span class="flex-1 min-w-0">
               <span class="block text-sm font-bold text-ink">${g.title}</span>
-              <span class="block text-[11px] text-muted leading-snug">${g.hint}</span>
             </span>
             <i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>
           </button>`).join('')}
@@ -926,7 +911,6 @@
         ${priceBlock}
         ${linkBlock}
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Создать SI-продавца</button>
-        <div class="text-[10px] text-faint text-center">Шаги разговора и мягкое напоминание SI подставит сам — их можно поменять в настройках.</div>
       </form>`;
   }
 
@@ -942,7 +926,6 @@
         <button onclick="SF.actions.openChat('${SF.js(c.slug)}')" class="w-full py-3 rounded-2xl btn-3d-red text-sm flex items-center justify-center gap-1.5">
           <i data-lucide="message-circle" class="w-4 h-4"></i> Поговорить как клиент
         </button>
-        <div class="text-[10px] text-faint">Попробуйте сами — так его увидят ваши клиенты. Этот разговор будет подписан «Вы (проверка)».</div>
       </div>
       <div class="glass-card-3d p-4 space-y-2 text-xs">
         <div class="font-semibold text-ink-2">Ссылка для клиентов — открывает чат с SI:</div>
@@ -971,7 +954,6 @@
     }
     return `${templateEntry()}
       <form onsubmit="SF.actions.createConsultant(event)" class="glass-card-3d p-4 space-y-3 text-xs">
-        <div class="text-[11px] text-muted leading-snug">У каждого SI-продавца есть цель, чёткие инструкции и лимит на клиента — он работает сам, без вашего участия.</div>
         ${field('name', 'Имя для клиентов', '', { placeholder: 'Например: Елена · менторство', max: 60 })}
         <label class="block space-y-1">
           <span class="font-semibold text-ink-2">Роль (всегда начинается с SI)</span>
@@ -980,7 +962,6 @@
         </label>
         ${field('goal', 'Цель', '', { placeholder: 'Например: записать на разбор', max: 160 })}
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Создать</button>
-        <div class="text-[10px] text-faint text-center">Оффер, цену и ссылку на оплату добавите на следующем шаге.</div>
       </form>
     `;
   }
@@ -1002,11 +983,10 @@
     const box = 'w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink';
     const inp = (key, label, opts = {}) => `
       <label class="block space-y-1">
-        <span class="font-semibold text-ink-2">${label}</span>
+        <span class="font-semibold text-ink-2 flex items-center gap-1">${label}${opts.hint ? SF.info(opts.hint) : ''}</span>
         ${opts.rows
           ? `<textarea rows="${opts.rows}" maxlength="${opts.max || 600}" placeholder="${SF.esc(opts.placeholder || '')}" oninput="SF.actions.tplSet('${key}', this.value)" class="${box}">${SF.esc(d[key] || '')}</textarea>`
           : `<input maxlength="${opts.max || 120}" value="${SF.esc(d[key] || '')}" placeholder="${SF.esc(opts.placeholder || '')}" oninput="SF.actions.tplSet('${key}', this.value)" class="${box}" />`}
-        ${opts.hint ? `<span class="block text-[10px] text-faint">${opts.hint}</span>` : ''}
       </label>`;
     const choice = (key, list) => `
       <div class="space-y-1.5">${list.map(([id, label]) => `
@@ -1042,7 +1022,6 @@
         ${inp('objections', 'Главные возражения клиентов — каждое с новой строки', { rows: 4, max: 800, placeholder: 'дорого\nнет времени\nуже пробовал(а), не помогло' })}`;
     } else {
       body = `
-        <div class="text-[11px] text-muted leading-snug">Как клиент идёт к цели — по шагам, своими словами: что происходит на каждом шаге и что SI говорит или делает. ИИ возьмёт ваши шаги как есть и допишет детали. От 2 до ${MAX_STEPS} шагов.</div>
         ${d.path.map((st, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1.5">
             <div class="flex items-center gap-1.5">
@@ -1076,7 +1055,7 @@
             : '<button onclick="SF.actions.tplGo(1)" class="py-2.5 rounded-xl btn-3d-tiffany">Дальше</button>'}
         </div>
       </div>
-      <div class="text-[10px] text-faint px-1 leading-snug">Получится новый SI-продавец «Шаблон: …» в открытом бизнесе. Всё можно поправить в его «Методологии», проверить на примерах бизнесов SmartFlow и потом опубликовать.</div>`;
+      `;
   }
 
   // Typing keeps the answers without re-drawing; a choice re-draws (its highlight)
@@ -1125,8 +1104,7 @@
     const demos = state.remote.templateDemos;
     return `
       <div class="glass-card-3d p-4 space-y-2.5 text-xs border border-amber-500/50">
-        ${SF.sectionTitle('flask-conical', 'Проверить на примере бизнеса')}
-        <div class="text-[11px] text-muted leading-snug">Переписка «как клиент», будто шаблон купил этот бизнес: продукт, цена и «Вопросы и ответы» — из примера, скелет — ваш. Настоящие клиенты и цифры не затрагиваются. Каждый раз чат начинается заново.</div>
+        ${SF.sectionTitle('flask-conical', 'Проверить на примере бизнеса', '', 'Переписка «как клиент», будто шаблон купил этот бизнес: продукт, цена и «Вопросы и ответы» — из примера, скелет — ваш. Настоящие клиенты и цифры не затрагиваются. Каждый раз чат начинается заново.')}
         ${demos ? `<div class="grid grid-cols-2 gap-1.5">${demos.map(dm => `
           <button onclick="SF.actions.testOnDemo('${SF.js(c.id)}', '${SF.js(dm.id)}')" class="p-2.5 rounded-xl bg-sunken border border-line text-left space-y-0.5">
             <span class="block font-bold text-ink">${SF.esc(dm.title)}</span>
@@ -1207,9 +1185,8 @@
     const stat = (s) => `перешли ${s.opens} · новых людей ${s.newPeople} · клиентов ${s.clients} · написали ${s.wrote} · купили ${s.bought}`;
     return `
       <details class="p-2.5 rounded-xl bg-sunken border border-line text-xs" ${data && data.links.length ? 'open' : ''}>
-        <summary class="cursor-pointer font-semibold text-ink-2">Ссылки с меткой источника${data ? ` · ${data.links.length} из ${data.max}` : ''}</summary>
+        <summary class="cursor-pointer font-semibold text-ink-2">Ссылки с меткой источника${data ? ` · ${data.links.length} из ${data.max}` : ''} ${SF.info('Отдельная ссылка на этого SI-продавца для Instagram, канала или блогера. Видно, сколько людей пришло с каждой и сколько купили.')}</summary>
         <div class="space-y-2 mt-2">
-          <div class="text-[10px] text-muted leading-snug">Напишите, где будете делиться ссылкой (Instagram, канал, блогер) — получите отдельную ссылку на этого SI-продавца. Видно, сколько людей пришло с каждой и сколько купили.</div>
           ${!data ? '<div class="text-muted">Загружаю…</div>' : ''}
           ${(data ? data.links : []).map(l => `
             <div class="p-2 rounded-lg bg-card border border-line space-y-1">
@@ -1274,7 +1251,7 @@
       </div>
       ${ctab === 'inbox' ? renderInbox(state, c) : ''}
       ${ctab === 'all' ? renderClients(c, state) : ''}
-      ${ctab === 'calendar' ? `<div class="text-[10px] text-faint px-1">Календарь общий для всех SI-продавцов этого бизнеса.</div>${c.businessId ? renderCalendar(state, c.businessId) : '<div class="text-xs text-muted">Загружаю…</div>'}` : ''}
+      ${ctab === 'calendar' ? `${c.businessId ? renderCalendar(state, c.businessId) : '<div class="text-xs text-muted">Загружаю…</div>'}` : ''}
     `;
   }
 
@@ -1293,7 +1270,7 @@
     const stepTitle = (id) => (steps.find(st => st.id === id) || {}).title || '';
     const toggle = (key, label, hint, on) => `
       <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
-        <span><span class="block font-semibold text-ink">${label}</span><span class="block text-[10px] text-faint leading-snug">${hint}</span></span>
+        <span class="flex items-center gap-1 font-semibold text-ink">${label}${SF.info(hint)}</span>
         <input type="checkbox" ${on ? 'checked' : ''} onchange="SF.actions.setPuzzleAccess('${SF.js(c.id)}', '${key}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
       </label>`;
     const field2 = 'w-full bg-card border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]';
@@ -1306,19 +1283,17 @@
           <div class="text-[11px] font-bold text-muted uppercase tracking-wider">Что брать из Мозга</div>
           ${funnel ? `
             <label class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-sunken border border-line cursor-pointer">
-              <span><span class="block font-semibold text-ink">Доступ шаблона к Мозгу</span><span class="block text-[10px] text-faint leading-snug">Что уже есть в Мозге, подставится в ответы само. Ваши ответы тоже сохранятся в Мозг.</span></span>
+              <span class="flex items-center gap-1 font-semibold text-ink">Доступ шаблона к Мозгу${SF.info('Что уже есть в Мозге, подставится в ответы само. Ваши ответы тоже сохранятся в Мозг.')}</span>
               <input type="checkbox" ${pz.access.brain ? 'checked' : ''} onchange="SF.actions.setPuzzleBrain('${SF.js(c.id)}', this.checked)" class="w-5 h-5 accent-[#0d9488] flex-shrink-0" />
             </label>` : ''}
           ${toggle('knowsBusiness', 'Знает о бизнесе', 'Что вы делаете и для кого — из Офиса → «Мозг».', pz.access.knowsBusiness)}
           ${toggle('knowsProfile', 'Знает обо мне', 'О себе, регалии и результаты из вашего Профиля.', pz.access.knowsProfile)}
-          <div class="text-[10px] text-faint leading-snug">Продукт и материалы этого SI выбираются ниже.</div>
         </div>
         <div class="space-y-1.5">
           <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold text-muted uppercase tracking-wider">Дополнения</span>
+            <span class="text-[11px] font-bold text-muted uppercase tracking-wider flex items-center gap-1">Дополнения${SF.info('О чём спрашивают клиенты и как отвечать. SI отвечает на эти темы именно так — даже по купленному шаблону.')}</span>
             ${!form ? `<button onclick="SF.actions.openNoteForm('${SF.js(c.id)}')" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>Добавить</button>` : ''}
           </div>
-          <div class="text-[10px] text-faint leading-snug">О чём спрашивают клиенты и как отвечать. SI отвечает на эти темы именно так — даже с подключённой готовой воронкой.</div>
           ${pz.notes.map(n => `
             <div class="p-2.5 rounded-xl bg-card border border-line space-y-0.5">
               <div class="flex items-start justify-between gap-2">
@@ -1394,7 +1369,7 @@
       </button>`;
     return `
       <div class="flex items-center justify-between gap-2">
-        ${SF.sectionTitle('puzzle', 'Пазл SI')}
+        ${SF.sectionTitle('puzzle', 'Пазл SI', '', 'Кусочки вокруг SI — то, что ему нужно знать, чтобы продавать без выдумок. Собранные — цветные, обязательные недостающие — оранжевые. Нажмите на кусочек, чтобы дополнить.')}
         <span class="text-[11px] font-bold ${pz.missingRequired.length ? 'text-amber-500' : 'text-brand'}">${pz.done} из ${pz.total}</span>
       </div>
       <div class="grid grid-cols-3 gap-1.5 max-w-[300px] mx-auto">
@@ -1420,7 +1395,7 @@
           <button onclick="${go(next)}" class="w-full py-2.5 rounded-xl ${next.required ? 'btn-3d-tiffany' : 'btn-3d-dark'} text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Следующий кусочек: ${SF.esc(next.label)}
           </button>
-          <div class="text-[10px] text-faint text-center leading-snug">${SF.esc(next.hint)}</div>` : ''}
+          ` : ''}
         ${pz.notes.length ? `<div class="text-[10px] text-brand font-semibold text-center">Вы научили SI ${pz.notes.length} ${pz.notes.length % 10 === 1 && pz.notes.length % 100 !== 11 ? 'теме' : 'темам'}</div>` : ''}
       </div>`;
   }
@@ -1477,10 +1452,9 @@
     return `
       <div id="author-puzzle" class="glass-card-3d p-4 space-y-3 text-xs">
         <div class="flex items-center justify-between gap-2">
-          ${SF.sectionTitle('puzzle', 'Пазл для покупателей шаблона')}
+          ${SF.sectionTitle('puzzle', 'Пазл для покупателей шаблона', '', 'Эксперт, купивший шаблон, увидит эти кусочки вокруг своего SI и ответит на вопросы по одному. Что уже есть в его Мозге, подставится само. Только то, что нужно этому шаблону: до 8 кусочков, в каждом до 6 вопросов. Изменения дойдут до покупателей, когда вы сохраните шаблон снова.')}
           <button onclick="SF.actions.authorPuzzleOpen(false)" class="p-1 text-faint" aria-label="Свернуть"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
         </div>
-        <div class="text-[11px] text-muted leading-snug">Эксперт, купивший шаблон, увидит эти кусочки вокруг своего SI и ответит на вопросы по одному. Что уже есть в его Мозге, подставится само. Без лишнего: только то, что нужно этому шаблону. До ${MAX_AUTHOR_PIECES} кусочков, в каждом до ${MAX_AUTHOR_QUESTIONS} вопросов. Изменения дойдут до покупателей, когда вы сохраните шаблон снова.</div>
         ${d.pieces.map((p, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-2">
             <div class="flex items-center gap-1.5">
@@ -1505,14 +1479,13 @@
           </div>`).join('')}
         ${d.pieces.length < MAX_AUTHOR_PIECES ? `<button onclick="SF.actions.authorPuzzleAdd()" class="w-full py-2 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Кусочек</button>` : ''}
         <div class="space-y-1.5 pt-2 border-t border-line">
-          <div class="font-semibold text-ink-2">Когда воронка начинает продавать у эксперта</div>
+          <div class="font-semibold text-ink-2 flex items-center gap-1">Когда шаблон начинает продавать у эксперта${SF.info('Пока условие не выполнено, SI эксперта работает по его методологии — неполный SI не испортит ваши цифры и имя.')}</div>
           <select onchange="SF.actions.authorPuzzleSet('release.mode', this.value)" class="${f}">
             <option value="required" ${d.release.mode === 'required' ? 'selected' : ''}>Когда собраны все обязательные кусочки</option>
             <option value="all" ${d.release.mode === 'all' ? 'selected' : ''}>Когда собраны все кусочки</option>
             <option value="count" ${d.release.mode === 'count' ? 'selected' : ''}>Когда собрано столько кусочков:</option>
           </select>
           ${d.release.mode === 'count' ? `<input type="number" min="1" max="${Math.max(1, d.pieces.length)}" value="${SF.esc(d.release.count || d.pieces.length || 1)}" oninput="SF.actions.authorPuzzleSet('release.count', this.value)" class="${f}" />` : ''}
-          <div class="text-[10px] text-faint leading-snug">Пока условие не выполнено, SI эксперта работает по его методологии — неполный SI не испортит ваши цифры и имя.</div>
         </div>
         <button onclick="SF.actions.authorPuzzleSave('${pid}')" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">Сохранить пазл</button>
       </div>`;
@@ -1693,7 +1666,7 @@
 
   // «Дополнить»: to the place where this piece is filled in
   SF.actions.puzzleGo = (projectId, place) => {
-    if (place === 'business') return SF.openIn('marketplace', 'office', { section: 'brain' });
+    if (place === 'business') return SF.openIn('profile', 'office', { section: 'brain' });
     if (place === 'profile') return SF.openIn('profile', 'edit');
     const target = { product: 'seller-product', card: 'seller-card', materials: 'seller-brain', methodology: 'seller-methodology' }[place];
     const el = target && document.getElementById(target);
@@ -1748,7 +1721,7 @@
   // From «Мне написали»: the client asked something the SI did not know — teach it right here
   SF.actions.noteFromInquiry = (projectId, reason) => {
     noteForm = null;
-    SF.openIn('marketplace', 'office-consultant', { id: projectId, tab: 'methodology', noteTopic: String(reason || '').slice(0, 120) });
+    SF.openIn('profile', 'office-consultant', { id: projectId, tab: 'methodology', noteTopic: String(reason || '').slice(0, 120) });
   };
 
   // Which product of the business this SI-продавец sells: what is not in its card, it takes from the product
@@ -1757,13 +1730,13 @@
     if (!products) return '';
     return `
       <div id="seller-product" class="glass-card-3d p-3.5 space-y-2 text-xs">
-        ${SF.sectionTitle('shopping-bag', 'Продукт')}
+        ${SF.sectionTitle('shopping-bag', 'Продукт', '', 'Чего нет в карточке этого SI-продавца (оффер, цена, ссылки), он возьмёт из продукта. Своё в карточке главнее.')}
         ${products.length ? `
           <select onchange="SF.actions.attachProduct('${SF.js(c.id)}', this.value)" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink text-xs">
             <option value="">Без продукта</option>
             ${products.map(p => `<option value="${SF.esc(p.id)}" ${c.productId === p.id ? 'selected' : ''}>${SF.esc(p.name)} · ${SF.esc(productPrice(p))}</option>`).join('')}
           </select>
-          <div class="text-[10px] text-faint leading-snug">Чего нет в карточке этого SI-продавца (оффер, цена, ссылки), он возьмёт из продукта. Своё в карточке главнее.</div>`
+          `
         : `<div class="text-muted leading-snug">Продуктов пока нет. Добавьте их в Офисе → «Мозг» — и привяжите здесь.</div>`}
       </div>`;
   }
@@ -1862,14 +1835,12 @@
           </div>
           <label class="flex items-center gap-2.5 p-3 rounded-xl bg-sunken border border-line cursor-pointer">
             <input type="checkbox" name="isListed" ${c.isListed ? 'checked' : ''} class="w-4 h-4 accent-[#0d9488]" />
-            <span class="text-xs font-semibold text-ink">Показывать в Маркетплейсе</span>
+            <span class="text-xs font-semibold text-ink flex items-center gap-1">Показывать в Маркетплейсе${SF.info('Показанный в Маркетплейсе SI-продавец может появляться и в чатах других экспертов, когда их клиенту что-то не подошло. Чем подробнее описаны продукт и ответы на возражения, тем чаще.')}</span>
           </label>
           <div class="space-y-1.5 pt-1">
-            <div class="font-semibold text-ink-2">Вопросы и ответы</div>
-            <div class="text-[10px] text-faint leading-snug">Видны всем в карточке, как на маркетплейсах. SI отвечает по ним; чего здесь и в сведениях нет — передаёт вопрос вам, и клиент ждёт вашего ответа в чате.</div>
+            <div class="font-semibold text-ink-2 flex items-center gap-1">Вопросы и ответы${SF.info('Видны всем в карточке, как на маркетплейсах. SI отвечает по ним; чего здесь и в сведениях нет — передаёт вопрос вам, и клиент ждёт вашего ответа в чате.')}</div>
             ${SF.niches.faqEditor(c.faq)}
           </div>
-          <div class="text-[10px] text-faint leading-snug px-1">Показанный в Маркетплейсе SI-продавец может появляться и в чатах других экспертов — когда их клиенту что-то не подошло. Чем подробнее в методологии описан продукт и закрыты возражения (общее описание, сценарии, шаги), тем чаще он появляется.</div>
         </div>
 
         <div class="glass-card-3d p-4 space-y-3">
@@ -1908,8 +1879,7 @@
     const steps = c.steps || [];
     return `
       <div class="glass-card-3d p-4 space-y-3 text-xs">
-        ${SF.sectionTitle('footprints', 'Шаги воронки')}
-        <div class="text-[11px] text-muted leading-snug">Путь клиента к покупке, по порядку: например, знакомство → материал или вебинар → вопросы и возражения → встреча или оффер → оплата. SI видит, на каком шаге каждый клиент, и мягко ведёт к следующему. В «Воронке» видно, где люди останавливаются. По умолчанию шагов нет — до ${MAX_STEPS}.</div>
+        ${SF.sectionTitle('footprints', 'Шаги воронки', '', 'Путь клиента к покупке по порядку: например, знакомство → материал → вопросы → оффер → оплата. SI видит, на каком шаге каждый клиент, и мягко ведёт к следующему. В аналитике видно, где люди останавливаются. До 8 шагов.')}
         ${steps.map((st, i) => route.editStep === st.id ? stepForm(c, st, i) : `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <span class="w-6 h-6 rounded-full bg-[#81D8D0] text-[#08302c] text-[11px] font-extrabold flex items-center justify-center flex-shrink-0">${i + 1}</span>
@@ -1965,12 +1935,11 @@
     };
     return `
       <div id="seller-methodology" class="glass-card-3d p-4 space-y-3 text-xs">
-        ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»')}
+        ${SF.sectionTitle('git-branch', 'Методология: сценарии «если…, то…»', '', 'Сценарий — что сделать в особом случае. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут → SI мягко напомнит». По умолчанию сценариев нет, до 20.')}
         <form onsubmit="SF.actions.saveMethodology(event, '${SF.js(c.id)}')" class="space-y-2">
           ${field('methodology', 'Общее описание', c.methodology || '', { rows: 6, max: 3000, placeholder: 'Опишите своими словами, как SI ведёт клиента к покупке: с чего начинает, какие вопросы задаёт, когда предлагает оффер, каким тоном говорит.', hint: 'SI следует этому описанию в каждом разговоре. Ниже — отдельные сценарии для особых случаев.' })}
           <button type="submit" class="w-full py-2.5 rounded-xl btn-3d-dark">Сохранить описание</button>
         </form>
-        <div class="text-[11px] text-muted leading-snug pt-2 border-t border-line">Каждый сценарий ведёт клиента к покупке своим путём. По умолчанию сценариев нет — вы создаёте их сами, до ${MAX_SCENARIOS}. Например: «если клиент спрашивает про рассрочку → отправить материал о рассрочке», «если молчит 60 минут после этого сценария → SI спрашивает, удалось ли посмотреть».</div>
         ${list.map((sc, i) => `
           <div class="p-2.5 rounded-xl bg-sunken border border-line flex items-start gap-2">
             <div class="flex-1 min-w-0 space-y-0.5">
@@ -2000,18 +1969,9 @@
               <option value="">на любом шаге</option>
               ${steps.map((st, i) => `<option value="${SF.esc(st.id)}">${i + 1}. ${SF.esc(st.title)}</option>`).join('')}
             </select>
-            <span class="block text-[10px] text-faint">Сценарий сработает, только пока клиент на этом шаге.</span>
           </label>` : ''}
           <div data-custom class="space-y-1">
             ${field('condition', 'Если… (опишите словами)', '', { placeholder: 'Опишите, что клиент написал или сделал', rows: 2, max: 200 })}
-            <div class="p-2 rounded-lg bg-sunken border border-line text-[10px] text-muted leading-snug">
-              <div class="font-semibold text-ink-2">Примеры, как можно написать:</div>
-              <div>• клиент сказал, что дорого</div>
-              <div>• клиент спросил про рассрочку</div>
-              <div>• клиент ответил, что у него уже есть свой бизнес</div>
-              <div>• клиент нажал «Купить», но не оплатил</div>
-              <div class="pt-0.5 text-faint">SI сам заметит это в переписке и в нажатых кнопках. Слово в кавычках, например «рассрочка», сработает, даже если SI не уверен.</div>
-            </div>
           </div>
           <div data-silent style="display:none" class="space-y-2">
             ${field('minutes', 'Сколько минут молчит', 60, { type: 'number', max: 5, hint: '60 = 1 час, 1440 = сутки. Срабатывает один раз, пока клиент снова не напишет.' })}
@@ -2026,7 +1986,6 @@
             <label class="block space-y-1" style="display:none">
               <span class="font-semibold text-ink-2">После того, как…</span>
               <input name="afterText" maxlength="200" placeholder="Опишите, после чего клиент замолчал" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
-              <span class="block text-[10px] text-faint">Например: SI назвал цену · клиенту отправили материал · клиент сказал «подумаю»</span>
             </label>
           </div>
           <label class="block space-y-1">
@@ -2077,7 +2036,6 @@
         ${tile('Ждут ответа', a.waiting || 0)}
       </div>
       ${renderEntries(a)}
-      <div class="text-[10px] text-faint px-1">Только настоящие цифры этого SI-продавца. Оплаты идут вам напрямую, поэтому продажи здесь пока не считаются. Советы SI по воронке появятся позже.</div>
       ${renderOwnerReviews(c, state)}
     `;
   }
@@ -2102,7 +2060,7 @@
               <button type="submit" class="w-full py-2 rounded-xl btn-3d-dark text-[11px]">${r.reply ? 'Изменить ответ' : 'Ответить'}</button>
             </form>
           </div>`).join('')}
-        ${list && list.length ? '<div class="text-[10px] text-faint">Удалить отзыв нельзя — можно ответить. Если отзыв нарушает правила, нажмите «Пожаловаться» на карточке в Маркетплейсе: команда проверит.</div>' : ''}
+        ${list && list.length ? '' : ''}
       </div>
     `;
   }
@@ -2167,8 +2125,7 @@
     const id = SF.js(c.id);
     return `
       <div class="glass-card-3d p-4 space-y-2.5 text-xs">
-        ${SF.sectionTitle('send-horizontal', 'Новая рассылка')}
-        <div class="text-[11px] text-muted leading-snug">Анонс мероприятия, новость, акция. Напишите словами, кому и что отправить, — SI подберёт клиентов и подготовит текст. Ничего не уйдёт без вашего подтверждения${assisting ? ' (рассылку помощника одобряет владелец)' : ''}.</div>
+        ${SF.sectionTitle('send-horizontal', 'Новая рассылка', '', 'Анонс, новость, акция. Напишите словами, кому и что отправить, — SI подберёт клиентов и подготовит текст. Ничего не уйдёт без вашего подтверждения. Не получат: отказавшиеся, нажавшие «Не присылать рассылки» и те, кто не писал. Только с 9:00 до 21:00 по времени клиента, не больше 1 в день и 3 в неделю.')}
         <textarea rows="3" maxlength="500" data-keep="bc-request-${id}" oninput="SF.office.broadcastField('${id}', 'request', this.value)" placeholder="Например: всем, кто не купил за последний месяц, — пригласить на бесплатный эфир в субботу в 19:00" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(d.request)}</textarea>
         <div class="flex gap-2">
           <button onclick="SF.actions.planBroadcast('${id}')" ${d.busy ? 'disabled' : ''} class="flex-1 py-2.5 rounded-xl btn-3d-tiffany font-bold disabled:opacity-60">${d.busy ? 'SI готовит…' : 'Подготовить'}</button>
@@ -2192,7 +2149,6 @@
             </div>
             <div class="font-semibold text-ink-2 pt-1">Текст</div>
             <textarea rows="5" maxlength="1000" data-keep="bc-text-${id}" oninput="SF.office.broadcastField('${id}', 'text', this.value)" placeholder="Сообщение придёт клиенту от вас в чат с SI-продавцом" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink">${SF.esc(d.text)}</textarea>
-            <div class="text-[10px] text-faint leading-snug">Не получат: отказавшиеся, нажавшие «Не присылать рассылки» и те, кто ни разу не писал. Сообщение придёт в чат с SI-продавцом и уведомлением у Бадди / в Telegram — с 9:00 до 21:00 по времени клиента. Не больше 1 рассылки в день и 3 в неделю.</div>
             ${assisting
               ? `<button onclick="SF.actions.sendBroadcast('${id}', false)" class="w-full py-2.5 rounded-xl btn-3d-tiffany font-bold">Отправить владельцу на одобрение</button>`
               : `<div class="flex gap-2">
@@ -2270,7 +2226,6 @@
           <input type="text" name="text" data-keep="expert-reply" maxlength="2000" autocomplete="off" placeholder="Ответить лично (SI встанет на паузу)..." class="flex-1 bg-sunken border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
           <button type="submit" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs flex items-center gap-1" aria-label="Отправить"><i data-lucide="send" class="w-3.5 h-3.5"></i></button>
         </form>
-        <div class="text-[10px] text-faint">Клиент получит уведомление в Telegram, если разрешил боту писать ему.</div>
       </div>
     `;
   }
@@ -2358,10 +2313,10 @@
   // "Создать своего SI-продавца" in the Marketplace: the form, or the Office terms first
   SF.actions.startCreateConsultant = () => {
     if (store().isBusinessActive()) {
-      SF.openIn('marketplace', 'office', { section: 'consultants' });
+      SF.openIn('profile', 'office', { section: 'consultants' });
       SF.push('office-create');
     } else {
-      SF.openIn('marketplace', 'office', { section: 'consultants', next: 'create' });
+      SF.openIn('profile', 'office', { section: 'consultants', next: 'create' });
     }
   };
 
@@ -2492,7 +2447,6 @@
           <input name="role" list="role-suggestions-edit" maxlength="40" value="${SF.esc(c.roleTitle)}" class="w-full p-2.5 rounded-xl bg-sunken border border-line-2 text-ink" />
           <datalist id="role-suggestions-edit">${ROLE_SUGGESTIONS.map(r => `<option value="${r}"></option>`).join('')}</datalist>
         </label>
-        <div class="text-[10px] text-faint">Внутри платформы все они — SI-продавцы; клиенты видят это имя и роль.</div>
         <div class="flex gap-2">
           <button type="button" onclick="SF.closeModal()" class="flex-1 py-2.5 rounded-xl btn-3d-dark">Отмена</button>
           <button type="submit" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany">Сохранить</button>
@@ -3114,6 +3068,8 @@
     thenHints: THEN_HINTS,
     title(route) {
       if (SF.funnels && SF.funnels.owns(route.screen)) return SF.funnels.title(route);
+      // The Office of one business: its name is the title (owner's decision 23 Nov.: no plaque on top)
+      if (route.screen === 'office' && !assistantOnly() && store().currentBusiness()) return store().currentBusiness().name || 'Мой бизнес';
       return TITLES[route.screen] || 'Офис';
     },
     render(route, state) {
