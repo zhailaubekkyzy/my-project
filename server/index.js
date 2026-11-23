@@ -107,6 +107,8 @@ app.get('/api/health', async (req, res) => {
       posthog: { configured: analytics.isConfigured(), host: config.posthogHost },
       // true = the same numbers also go to Amplitude (AMPLITUDE_API_KEY is set); region eu / us
       amplitude: { configured: analytics.isAmplitudeConfigured(), region: config.amplitudeRegion },
+      // true = letters with the login code go out through Resend (RESEND_API_KEY is set); the key is never shown
+      mail: { configured: require('./services/mail-service').isConfigured() },
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
