@@ -62,8 +62,9 @@ router.put('/email', handle(async (req, res) => {
 
 /** POST /api/push/test — a test notification to my devices (button «Проверить») */
 router.post('/test', handle(async (req, res) => {
-  const delivered = await pushService.sendPush(req.user.userId, { text: '🔔 Уведомления работают! Так будут приходить новые сообщения и напоминания.', startParam: '' });
-  res.json({ delivered });
+  const devices = (await pushService.devicesOf(req.user.userId)).length;
+  const delivered = devices ? await pushService.sendPush(req.user.userId, { text: '🔔 Уведомления работают! Так будут приходить новые сообщения и напоминания.', startParam: '' }) : false;
+  res.json({ delivered, devices });
 }));
 
 module.exports = router;

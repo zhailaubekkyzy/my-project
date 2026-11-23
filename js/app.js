@@ -330,6 +330,8 @@ SF.webPush = (() => {
       await subscribeHere(status.publicKey);
       SF.webPush.dismissPrompt();
       SF.showToast('Готово! Уведомления включены 🔔');
+      // A test right away: the person sees that it really works on this device
+      window.smartFlowApi.push.test().catch(() => {});
     } catch (err) {
       SF.showToast(SF.withErrorCode ? SF.withErrorCode('Не получилось включить уведомления', err) : 'Не получилось включить уведомления');
     }
