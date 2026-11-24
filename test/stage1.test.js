@@ -4269,6 +4269,41 @@ async function runAllTests() {
     }
   });
 
+  await test('86. Новичок без ссылки: Маркетплейс, а Бадди пишет через минуту — один раз и только новичку', async () => {
+    const welcome = require('../server/services/welcome-service');
+    const scheduler = require('../server/services/scheduler-service');
+    const signIn = async (email) => {
+      const code = await api('POST', '/api/auth/email/start', null, { email });
+      return (await api('POST', '/api/auth/email/verify', null, { email, code: code.body.devCode })).body;
+    };
+    const fresh = await signIn('welcome.new@example.com');
+    assert.strictEqual(fresh.signedUp, true, 'The first sign-in is a sign-up');
+    await db.run(`UPDATE email_codes SET created_at = ? WHERE email = 'welcome.new@example.com'`, ['2020-01-01 00:00:00']);
+    assert.strictEqual((await signIn('welcome.new@example.com')).signedUp, false, 'The next sign-in is not');
+
+    const ask = () => api('POST', '/api/buddy/welcome', fresh.token);
+    assert.strictEqual((await ask()).body.scheduled, true);
+    assert.strictEqual((await ask()).body.scheduled, false, 'Only once');
+    const count = async () => Number((await db.get(
+      'SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND text = ?', [fresh.user.id, welcome.TEXT.ru])).n);
+    // Not before the minute
+    assert.strictEqual((await welcome.runWelcomes(new Date(Date.now() + 20 * 1000))).sent, 0);
+    assert.strictEqual(await count(), 0);
+    // After the minute — through the server's alarm clock, to Buddy
+    const run = (await scheduler.tick(new Date(Date.now() + 2 * 60 * 1000))).find(r => r.name === 'buddy-welcome');
+    assert(run && run.result && run.result.sent === 1, 'The alarm clock sends it');
+    assert.strictEqual(await count(), 1);
+    assert.strictEqual((await welcome.runWelcomes(new Date(Date.now() + 5 * 60 * 1000))).sent, 0, 'Never again');
+    assert.strictEqual(await count(), 1);
+    assert.strictEqual((await ask()).body.scheduled, false);
+
+    // An old account gets nothing, even if the phone asks
+    const old = await signIn('welcome.old@example.com');
+    await db.run('UPDATE users SET created_at = ? WHERE id = ?', ['2020-01-01 00:00:00', old.user.id]);
+    assert.strictEqual((await api('POST', '/api/buddy/welcome', old.token)).body.scheduled, false);
+    assert.strictEqual((await api('POST', '/api/buddy/welcome', null)).status, 401);
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

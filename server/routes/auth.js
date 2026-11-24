@@ -81,7 +81,8 @@ router.post('/telegram', async (req, res, next) => {
       user: { ...(await supportService.sessionUser(user)), telegramId: user.telegramId },
       app: await appInfo.forUser(user.id),
       projects,
-      subscription
+      subscription,
+      signedUp: !knownBefore // первый вход: без ссылки телефон открывает Маркетплейс
     });
   } catch (err) {
     next(err);
@@ -124,7 +125,8 @@ router.post('/email/verify', emailRoute(async (req, res) => {
     user: await supportService.sessionUser(user),
     app: await appInfo.forUser(user.id),
     projects: await projectService.getUserProjects(user.id),
-    subscription: await subscriptionService.getPlatformSubscription(user.id)
+    subscription: await subscriptionService.getPlatformSubscription(user.id),
+    signedUp: Boolean(user.created)
   });
 }));
 
@@ -152,7 +154,8 @@ router.post('/google', async (req, res, next) => {
       user: await supportService.sessionUser(user),
       app: await appInfo.forUser(user.id),
       projects: await projectService.getUserProjects(user.id),
-      subscription: await subscriptionService.getPlatformSubscription(user.id)
+      subscription: await subscriptionService.getPlatformSubscription(user.id),
+      signedUp: Boolean(user.created)
     });
   } catch (err) {
     if (err instanceof googleLogin.GoogleLoginError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });
