@@ -864,6 +864,11 @@
       return await apiFetch(`/api/buddy/plans/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
 
+    // Новичок без ссылки: Бадди поздоровается через минуту (сервер решает, новичок ли это)
+    async buddyWelcome() {
+      return await apiFetch('/api/buddy/welcome', { method: 'POST' });
+    },
+
     async markBuddyRead() {
       return await apiFetch('/api/buddy/read', { method: 'POST' });
     },

@@ -99,6 +99,18 @@ router.delete('/plans/:id', async (req, res, next) => {
 /**
  * POST /api/buddy/read — the person opened Buddy: everything is read
  */
+/**
+ * POST /api/buddy/welcome — новичок без ссылки открыл Маркетплейс: Бадди поздоровается через минуту
+ * (решение владелицы 24 нояб.). Только для только что созданного аккаунта и только один раз.
+ */
+router.post('/welcome', async (req, res, next) => {
+  try {
+    res.json({ scheduled: await require('../services/welcome-service').schedule(req.user.userId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/read', async (req, res, next) => {
   try {
     await buddyService.markAllRead(req.user.userId);

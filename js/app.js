@@ -16,6 +16,16 @@ const TABS = [
   { id: 'profile', label: 'Настройки', icon: 'settings', enabled: true }
 ];
 
+// Новичок без ссылки (решение владелицы 24 нояб.): первый экран — Маркетплейс, а Бадди пишет через минуту
+// (сервер, welcome-service.js). Пришёл по ссылке (SI-продавец, карточка, приглашение…) — ссылка решает сама.
+const startParamNow = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
+function afterSignIn(res) {
+  if (!res || !res.signedUp || startParamNow()) return false;
+  SF.go('marketplace');
+  window.smartFlowApi.buddyWelcome().catch(() => {});
+  return true;
+}
+
 // -------------------------------------------------------------
 // Login: Telegram inside the Mini App, dev login in a local browser preview
 // -------------------------------------------------------------
@@ -34,6 +44,7 @@ async function initTelegramAuth() {
     try {
       const res = await api.loginWithTelegram(initData, 'expert');
       store.setAuth(res);
+      afterSignIn(res);
       // The language the server knows (chosen in Профиль or Telegram's) wins over this device's guess
       if (res.user && res.user.lang && SF.setLang && res.user.lang !== SF.lang()) {
         SF.setLang(res.user.lang, { remember: Boolean(res.user.langChosen) });
@@ -114,6 +125,7 @@ async function finishGoogleLogin() {
   try {
     const res = await window.smartFlowApi.googleLogin(hash.get('id_token'), pending.nonce);
     window.funnelStore.setAuth(res);
+    afterSignIn(res);
     SF.webPush.sync();
     return true;
   } catch (err) {
@@ -194,7 +206,8 @@ SF.actions.loginSubmit = async (e) => {
       login.step = 'email';
       window.funnelStore.setAuth(res);
       SF.webPush.sync();
-      SF.go('buddy');
+      // По ссылке — туда, куда она ведёт; новичок без ссылки — Маркетплейс; иначе Бадди
+      if (!afterSignIn(res)) { if (startParamNow()) handleStartParam(); else SF.go('buddy'); }
       return;
     }
   } catch (err) {
@@ -555,7 +568,7 @@ SF.openIn = (tab, screen, params = {}) => {
 
 // Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=<param> (SF.appLink;
 // the test copy has its own bot, the server tells its link at sign-in)
-//   (no param)      → Buddy
+//   (no param)      → Buddy (first sign-up without a link — the Marketplace, Buddy writes a minute later)
 //   C_<projectId>   → consultant card in the Marketplace
 //   P_<userId>      → a person's profile
 //   I_<projectId>   → "Мне написали" in the Office (bot notification button)

@@ -15,6 +15,7 @@ scheduler.register('silent-clients', followupService.runSilentScenarios);
 scheduler.register('buddy-reminders', require('./services/buddy-service').runReminders);
 scheduler.register('meeting-reminders', require('./services/calendar-service').runMeetingReminders);
 scheduler.register('broadcasts', require('./services/broadcast-service').runBroadcasts);
+scheduler.register('buddy-welcome', require('./services/welcome-service').runWelcomes);
 const errorHandler = require('./middleware/error-handler');
 const { renderIndexHtml } = require('./asset-version');
 
