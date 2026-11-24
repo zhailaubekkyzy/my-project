@@ -183,7 +183,9 @@ router.post('/:clientId/receipts/:receiptId', requireProjectPermission('conversa
 router.get('/inquiries/list', requireProjectPermission('conversations:read'), async (req, res, next) => {
   try {
     const inquiries = await db.all(
-      'SELECT * FROM direct_inquiries WHERE project_id = ? ORDER BY created_at DESC',
+      `SELECT di.*, CASE WHEN c.responsible_type = 'human' THEN 1 ELSE 0 END AS si_paused
+       FROM direct_inquiries di LEFT JOIN clients c ON c.id = di.client_id
+       WHERE di.project_id = ? ORDER BY di.created_at DESC`,
       [req.project.id]
     );
 

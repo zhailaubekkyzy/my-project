@@ -781,6 +781,23 @@
     `;
   }
 
+  // SI on pause for this client (owner's decision 24 Nov.): a pause badge on the client's photo, everywhere in the Office
+  function clientAvatar(url, paused, size = 32) {
+    if (!paused) return SF.avatar(url, { size });
+    return `<span class="relative inline-block flex-shrink-0">${SF.avatar(url, { size })}<span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-brand border-2 border-card flex items-center justify-center" title="SI на паузе" aria-label="SI на паузе"><i data-lucide="pause" class="w-2.5 h-2.5 text-card"></i></span></span>`;
+  }
+
+  // «▶ Продолжить с SI»: after a person answered, they decide whether the SI goes on (it reads the whole conversation)
+  function resumeSiButton(projectId, clientId) {
+    return `
+      <div class="flex items-center gap-2">
+        <button onclick="SF.actions.setClientSi('${SF.js(projectId)}', '${SF.js(clientId)}', true)" class="flex-1 py-2.5 rounded-xl btn-3d-tiffany text-xs font-bold flex items-center justify-center gap-1.5">
+          <i data-lucide="play" class="w-4 h-4"></i> Продолжить с SI
+        </button>
+        ${SF.info('SI прочитает всю переписку — и свои сообщения, и ваши ответы — и продолжит с того же места. Не нажмёте — клиенту отвечаете только вы.')}
+      </div>`;
+  }
+
   // ---------------- "Мне написали" ----------------
   function renderInbox(state, only = null) {
     const all = state.office.consultants.filter(c => !only || c.id === only.id).flatMap(c =>
@@ -795,12 +812,16 @@
               <div class="text-sm font-bold text-ink truncate">${SF.esc(i.lead_name)}${i.lead_username ? ` <span class="text-[10px] font-mono text-brand">@${SF.esc(String(i.lead_username).replace(/^@/, ''))}</span>` : ''}</div>
               <div class="text-[10px] text-muted">${SF.esc(i.consultant.name)} · ${timeLabel(i.created_at)}</div>
             </div>
-            <span class="text-[10px] font-bold whitespace-nowrap ${i.status === 'waiting' ? 'text-rose-400' : 'text-emerald-400'}">${i.status === 'waiting' ? 'Ждёт ответа' : 'Отвечено'}</span>
+            <span class="flex flex-col items-end gap-1">
+              <span class="text-[10px] font-bold whitespace-nowrap ${i.status === 'waiting' ? 'text-rose-400' : 'text-emerald-400'}">${i.status === 'waiting' ? 'Ждёт ответа' : 'Отвечено'}</span>
+              ${i.si_paused ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-brand whitespace-nowrap"><i data-lucide="pause" class="w-3 h-3"></i>SI на паузе</span>' : ''}
+            </span>
           </div>
           <div class="text-xs text-ink-2">${SF.esc(i.reason)}</div>
           <button onclick="SF.push('office-client', { id: '${SF.js(i.client_id)}', projectId: '${SF.js(i.consultant.id)}' })" class="w-full py-2 rounded-xl btn-3d-tiffany text-xs flex items-center justify-center gap-1.5">
             <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Открыть переписку и ответить
           </button>
+          ${i.si_paused && i.status !== 'waiting' ? resumeSiButton(i.consultant.id, i.client_id) : ''}
           ${i.consultant.assisting ? '' : `<button onclick="SF.actions.noteFromInquiry('${SF.js(i.consultant.id)}', ${SF.esc(JSON.stringify(i.reason || ''))})" class="w-full py-1.5 rounded-xl btn-3d-dark text-[11px] flex items-center justify-center gap-1.5"><i data-lucide="puzzle" class="w-3.5 h-3.5"></i>Научить SI отвечать на это</button>`}
         </div>`).join('') : SF.emptyState('buddy', 'Пока никто не написал', 'Когда клиент нажмёт «Связаться с человеком», обращение появится здесь, а бот пришлёт вам сообщение в Telegram.')}
     `;
@@ -2075,7 +2096,7 @@
       <div class="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1">
         ${clients.map(cl => `
           <button onclick="SF.push('office-client', { id: '${SF.js(cl.id)}', projectId: '${SF.js(c.id)}' })" class="snap-start flex-shrink-0 w-[31%] min-w-[104px] p-2.5 rounded-2xl bg-card border border-line text-left space-y-1">
-            ${SF.avatar(cl.avatar_url, { size: 32 })}
+            ${clientAvatar(cl.avatar_url, cl.si_paused)}
             <div class="text-[11px] font-bold text-ink truncate">${SF.esc(cl.name)}</div>
             <div class="text-[10px] font-semibold truncate ${cl.si_paused ? 'text-amber-400' : 'text-muted'}">${cl.si_paused ? (cl.responsible_user_id === myUserId() ? 'Ждёт вас' : `Отвечает ${SF.esc(cl.responsible_name || 'человек')}`) : 'Говорит с SI'}</div>
           </button>`).join('')}
@@ -2083,7 +2104,7 @@
       <div class="space-y-1.5">
         ${clients.map(cl => `
           <button onclick="SF.push('office-client', { id: '${SF.js(cl.id)}', projectId: '${SF.js(c.id)}' })" class="w-full p-2.5 rounded-xl bg-card border border-line flex items-center gap-2.5 text-left">
-            ${SF.avatar(cl.avatar_url, { size: 32 })}
+            ${clientAvatar(cl.avatar_url, cl.si_paused)}
             <span class="flex-1 min-w-0">
               <span class="block text-xs font-bold text-ink truncate">${SF.esc(cl.name)}</span>
               <span class="block text-[10px] text-muted truncate">${SF.esc(String(cl.last_message || '').replace(/^\[(SI|Эксперт|Помощник)\]:\s*/, ''))}</span>
@@ -2195,7 +2216,7 @@
     };
     return `
       <div class="glass-card-3d p-3.5 flex items-center gap-3">
-        ${SF.avatar(client.avatar_url, { size: 44 })}
+        ${clientAvatar(client.avatar_url, paused, 44)}
         <div class="flex-1 min-w-0">
           <div class="text-sm font-bold text-ink truncate">${SF.esc(client.name)}</div>
           ${client.username ? `<div class="text-[10px] font-mono text-brand">@${SF.esc(String(client.username).replace(/^@/, ''))}</div>` : ''}
@@ -2204,9 +2225,11 @@
 
       <div class="flex items-center justify-between p-2.5 rounded-xl border ${paused ? 'bg-[var(--human-bubble)] border-[var(--human-bubble-line)]' : 'bg-[var(--si-bubble)] border-[var(--si-bubble-line)]'}">
         <span class="text-[11px] font-semibold flex items-center gap-1.5 ${paused ? 'text-brand' : 'text-si'}">
-          ${paused ? (mine ? '👤 SI на паузе — отвечаете вы' : `👤 SI на паузе — отвечает ${SF.esc(client.responsible_name || 'человек')}`) : '<span class="si-dot"></span> SI отвечает этому клиенту'}
+          ${paused ? `<i data-lucide="pause" class="w-3.5 h-3.5"></i> ${mine ? 'SI на паузе — отвечаете вы' : `SI на паузе — отвечает ${SF.esc(client.responsible_name || 'человек')}`}` : '<span class="si-dot"></span> SI отвечает этому клиенту'}
         </span>
-        <button onclick="SF.actions.setClientSi('${SF.js(route.projectId)}', '${SF.js(client.id)}', ${paused})" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] font-bold">${paused ? 'Включить SI' : 'Поставить на паузу'}</button>
+        ${paused
+          ? `<button onclick="SF.actions.setClientSi('${SF.js(route.projectId)}', '${SF.js(client.id)}', true)" class="px-2.5 py-1 rounded-lg btn-3d-tiffany text-[10px] font-bold flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Продолжить с SI</button>`
+          : `<button onclick="SF.actions.setClientSi('${SF.js(route.projectId)}', '${SF.js(client.id)}', false)" class="px-2 py-1 rounded-lg btn-3d-dark text-[10px] font-bold flex items-center gap-1"><i data-lucide="pause" class="w-3 h-3"></i>Поставить на паузу</button>`}
       </div>
 
       ${renderClientFunnel(route, client, state)}
@@ -2226,6 +2249,7 @@
           <input type="text" name="text" data-keep="expert-reply" maxlength="2000" autocomplete="off" placeholder="Ответить лично (SI встанет на паузу)..." class="flex-1 bg-sunken border border-line-2 rounded-xl px-3 py-2 text-xs text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]" />
           <button type="submit" class="px-3 py-2 rounded-xl btn-3d-tiffany text-xs flex items-center gap-1" aria-label="Отправить"><i data-lucide="send" class="w-3.5 h-3.5"></i></button>
         </form>
+        ${paused && (messages || []).some(m => m.sender === 'expert_human') ? resumeSiButton(route.projectId, client.id) : ''}
       </div>
     `;
   }
@@ -2929,7 +2953,7 @@
       SF.data.invalidate(`clients:${projectId}`);
       SF.data.invalidate(`inquiries:${projectId}`);
       await Promise.all([SF.data.clients(projectId), SF.data.inquiries(projectId)]);
-      showToast(enabled ? 'SI снова отвечает этому клиенту' : 'SI на паузе — отвечаете вы');
+      showToast(enabled ? 'SI продолжает разговор — он видит всю переписку' : 'SI на паузе — отвечаете вы');
     } catch (err) {
       showToast(err.message || 'Не получилось');
     }

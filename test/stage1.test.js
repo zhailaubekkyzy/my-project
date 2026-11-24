@@ -4335,6 +4335,49 @@ async function runAllTests() {
     assert.strictEqual(sent.text, welcome.TEXT.en);
   });
 
+  await test('88. Пауза SI: значок в «Мне написали», эксперт отвечает, «Продолжить с SI» — SI видит его ответ', async () => {
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    try {
+      const ex = await tokenFor({ id: 880001, first_name: 'Эксперт', last_name: 'Пауза' });
+      const cl = await tokenFor({ id: 880002, first_name: 'Клиент', last_name: 'Пауза' });
+      const seller = (await api('POST', '/api/projects', ex, { name: 'Продавец паузы' })).body;
+      const slug = seller.slug;
+      // The client asks for a person: the SI pauses, «Мне написали» shows it
+      assert.strictEqual((await api('POST', `/api/chat/${slug}/human`, cl, {})).status < 300, true);
+      let list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(list.length, 1);
+      assert.strictEqual(Number(list[0].si_paused), 1, 'The pause mark');
+      const clientId = list[0].client_id;
+      // The expert answers personally, then presses «Продолжить с SI»
+      await api('POST', `/api/projects/${seller.id}/conversations/${clientId}/messages`, ex, { text: 'Здравствуйте! Есть рассрочка на 3 месяца.' });
+      assert.strictEqual(Number((await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body[0].si_paused), 1, 'Still paused until the expert decides');
+      await api('POST', `/api/projects/${seller.id}/clients/${clientId}/si`, ex, { enabled: true });
+      list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(Number(list[0].si_paused), 0);
+      // The SI answers again and sees the expert's words
+      let sent = null;
+      config.openaiApiKey = 'sk-test-not-real';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          const body = JSON.parse(options.body);
+          if (body.response_format) return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 });
+          sent = body.messages;
+          return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, рассрочка на 3 месяца — оформить?' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      const reply = await api('POST', `/api/chat/${slug}/messages`, cl, { text: 'А как оформить рассрочку?' });
+      assert.strictEqual(reply.body.reply.text, 'Да, рассрочка на 3 месяца — оформить?');
+      assert(sent.some(m => m.role === 'system' && m.content === 'Эксперт лично написал(а) клиенту в этом чате: «Здравствуйте! Есть рассрочка на 3 месяца.»'), 'The expert’s answer is in the SI’s context, not as the SI’s own words');
+      assert(sent[0].content.includes('Ты не эксперт и не пишешь от его имени'));
+      assert(sent[0].content.includes('не здоровайся заново'));
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');
