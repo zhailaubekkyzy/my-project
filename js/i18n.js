@@ -362,6 +362,8 @@
 
   // Phrases with numbers or names inside: [RegExp of the Russian, English with $1…]
   const PATTERNS = [
+    [/^(.+) · эксперт$/, (m) => `${m[1]} · expert`],
+    [/^Помощник · (.+)$/, (m) => `${m[1]}’s assistant`],
     [/^Код отправлен на (.+)$/, (m) => `Code sent to ${m[1]}`],
     [/^SI-продавцов: (\d+)(?: · ждут ответа: (\d+))?$/, (m) => `SI-sellers: ${m[1]}${m[2] ? ` · waiting for a reply: ${m[2]}` : ''}`],
     [/^(\d+) диалог\.$/, (m) => `${m[1]} conv.`],

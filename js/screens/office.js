@@ -2211,8 +2211,9 @@
     const paused = Boolean(client.si_paused);
     const mine = client.responsible_user_id === myUserId();
     const who = (m) => {
-      if (m.authorUserId && m.authorUserId === myUserId()) return '👤 Вы лично';
-      return m.authorType === 'assistant' ? '👤 Помощник' : '👤 Владелец';
+      const mark = '<i data-lucide="badge-check" class="w-3 h-3 inline -mt-0.5 text-brand"></i>';
+      if (m.authorUserId && m.authorUserId === myUserId()) return `${mark} Вы лично`;
+      return m.authorType === 'assistant' ? `${mark} Помощник` : `${mark} Владелец`;
     };
     return `
       <div class="glass-card-3d p-3.5 flex items-center gap-3">

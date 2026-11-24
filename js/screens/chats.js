@@ -462,11 +462,18 @@
           <button onclick="SF.actions.toggleBroadcasts('${SF.js(slug)}', ${thread.broadcastsOff ? 'false' : 'true'})" class="text-[9px] text-faint underline px-1 mt-0.5">${thread.broadcastsOff ? 'Снова присылать рассылки' : 'Не присылать рассылки'}</button>
         </div>`;
     }
+    // A person of the business answered (owner's decision 24 Nov.): their own photo and a «checked person» mark,
+    // so the client sees at once that it is a human, not the SI (the SI has the red mascot)
     if (msg.sender === 'expert_human') {
+      const assistant = msg.authorType === 'assistant';
+      const name = SF.esc(consultant?.author?.name || 'Эксперт');
       return `
-        <div class="flex flex-col items-start">
-          <div class="text-[9px] text-brand font-semibold px-1 mb-0.5">👤 ${msg.authorType === 'assistant' ? `Помощник ${SF.esc(consultant?.author?.name || 'эксперта')}` : `${SF.esc(consultant?.author?.name || 'Эксперт')} лично`}</div>
-          <div class="chat-bubble-expert">${SF.formatChatMarkdown(msg.text)}</div>
+        <div class="flex items-end gap-1.5">
+          ${SF.avatar(assistant ? null : consultant?.author?.photoUrl, { size: 28 })}
+          <div class="flex flex-col items-start min-w-0">
+            <div class="text-[10px] text-brand font-bold px-1 mb-0.5 flex items-center gap-1"><i data-lucide="badge-check" class="w-3 h-3"></i>${assistant ? `Помощник · ${name}` : `${name} · эксперт`}</div>
+            <div class="chat-bubble-expert">${SF.formatChatMarkdown(msg.text)}</div>
+          </div>
         </div>`;
     }
     return `
