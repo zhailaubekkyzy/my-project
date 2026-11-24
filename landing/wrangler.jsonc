@@ -1,0 +1,12 @@
+// Главная страница techsmartflow.com (лендинг). Отдельный Cloudflare Worker, с приложением не связан.
+// Настройка в Cloudflare: Workers → Create → Import a repository → этот репозиторий,
+// Root directory: landing, Build command: пусто, Deploy command: npx wrangler deploy. Пошагово — docs/LANDING.md.
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "smartflow-landing",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  }
+}
