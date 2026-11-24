@@ -4269,6 +4269,31 @@ async function runAllTests() {
     }
   });
 
+  await test('86. Юридические документы: /privacy, /terms, /dpa, /dmca с версией и датой, раздел DMCA по якорю', async () => {
+    const legalDocs = require('../server/services/legal-docs');
+    assert.deepStrictEqual(legalDocs.versions(), { privacy: 'v1.0', terms: 'v1.0', dpa: 'v1.0' });
+    for (const [slug, title] of [['privacy', 'Smartflow Privacy Policy'], ['terms', 'Smartflow Terms of Service'], ['dpa', 'Smartflow Data Processing Addendum']]) {
+      const res = await fetch(`${baseUrl}/${slug}`);
+      assert.strictEqual(res.status, 200, slug);
+      assert.ok(/text\/html/.test(res.headers.get('content-type')), slug);
+      const html = await res.text();
+      assert.strictEqual((html.match(/<h1/g) || []).length, 1, `${slug}: one title`);
+      assert.ok(html.includes(title) && html.includes('Version 1.0 · Effective November 24, 2026'), slug);
+      // Footer on every page: Privacy and Terms links (Google sign-in verification)
+      assert.ok(html.includes('href="/privacy"') && html.includes('href="/terms"'), `${slug}: footer`);
+      assert.ok(!html.includes('<script'), `${slug}: no scripts`);
+    }
+    const terms = await (await fetch(`${baseUrl}/terms`)).text();
+    assert.ok(terms.includes('<h2 id="dmca">14. Copyright complaints (DMCA)</h2>'));
+    assert.ok(terms.includes('<a href="mailto:Tomiris@techsmartflow.com">'));
+    const privacy = await (await fetch(`${baseUrl}/privacy`)).text();
+    assert.ok(privacy.includes('<table>') && privacy.includes('<td>Supabase</td>'));
+    const dmca = await (await fetch(`${baseUrl}/dmca`)).text();
+    assert.ok(dmca.includes('/terms#dmca'));
+    // The markdown sources themselves are never served
+    assert.strictEqual((await fetch(`${baseUrl}/legal/privacy.md`)).status, 404);
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

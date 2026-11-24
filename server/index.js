@@ -186,6 +186,16 @@ app.get('/sw.js', (req, res) => {
   res.type('application/javascript').sendFile(path.join(ROOT_DIR, 'sw.js'));
 });
 
+// Legal documents (legal/*.md): /privacy, /terms, /dpa and /dmca — the same pages Cloudflare serves from dist/
+const legalDocs = require('./services/legal-docs');
+for (const { slug } of legalDocs.allPages()) {
+  app.get(`/${slug}`, (req, res) => {
+    const html = slug === 'dmca' ? legalDocs.renderDmca() : legalDocs.renderDoc(slug);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+  });
+}
+
 // In production the stamped index.html is built once; in development it is rebuilt on
 // every request so edits to css/js show up without a restart.
 const prodIndexHtml = config.isProd ? renderIndexHtml() : null;

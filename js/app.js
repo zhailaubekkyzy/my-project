@@ -158,6 +158,10 @@ function renderLogin() {
             Войти через Google
           </button>` : ''}
         <div class="text-center text-[11px] text-faint">Письмо не пришло? Проверьте «Спам».</div>
+        <div class="text-center text-[11px] text-faint" data-no-tr>
+          <a href="/privacy" target="_blank" rel="noopener" class="underline">Privacy Policy</a> ·
+          <a href="/terms" target="_blank" rel="noopener" class="underline">Terms of Service</a>
+        </div>
       </div>
     </main>`;
 }

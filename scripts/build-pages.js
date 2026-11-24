@@ -8,6 +8,7 @@
 //   dist/index.html            no-cache, references content-hashed assets
 //   dist/assets/<name>.<hash>  css/js used by index.html, cached for a year (immutable)
 //   dist/js/, dist/css/, dist/images/  plain copies for files loaded at runtime (revalidated)
+//   dist/privacy.html, terms.html, dpa.html, dmca.html  legal documents from legal/*.md
 //   dist/_headers              cache rules for Cloudflare Pages
 const fs = require('fs');
 const path = require('path');
@@ -58,6 +59,10 @@ if (!html.includes('window.SMARTFLOW_API_BASE')) {
 html = html.replace('</title>', `</title>\n  <link rel="preconnect" href="${apiUrl}" crossorigin>`);
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 
+// Legal documents: dist/privacy.html → techsmartflow.com/privacy (and /terms, /dpa, /dmca)
+const legalDocs = require('../server/services/legal-docs');
+for (const { slug, html: legalHtml } of legalDocs.allPages()) fs.writeFileSync(path.join(DIST, `${slug}.html`), legalHtml);
+
 fs.writeFileSync(path.join(DIST, '_headers'), `/assets/*
   Cache-Control: public, max-age=31536000, immutable
 
@@ -70,6 +75,15 @@ fs.writeFileSync(path.join(DIST, '_headers'), `/assets/*
 /sw.js
   Cache-Control: no-cache
   Service-Worker-Allowed: /
+
+/privacy
+  Cache-Control: no-cache
+
+/terms
+  Cache-Control: no-cache
+
+/dpa
+  Cache-Control: no-cache
 
 /manifest.webmanifest
   Cache-Control: no-cache
