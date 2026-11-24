@@ -3978,7 +3978,16 @@ async function runAllTests() {
       const inquiry = await db.get(`SELECT * FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id]);
       assert(inquiry && inquiry.reason.includes('можно ли беременным'), 'The expert gets the question');
       const lead = await db.get('SELECT * FROM clients WHERE project_id = ?', [seller.id]);
-      assert.strictEqual(lead.responsible_type, 'human', 'The client waits for a person');
+      assert.strictEqual(lead.responsible_type, 'si', 'The SI keeps talking (owner’s decision 24 Nov.)');
+      assert.strictEqual(lead.funnel_status, 'waiting_human', '«Ждут человека» — the question waits for the expert');
+      // The next unknown question joins the waiting one: no new request, no second notification
+      const notes = await db.get('SELECT COUNT(*) AS n FROM notifications');
+      const again = await api('POST', `/api/chat/${slug}/messages`, client, { text: 'А кормящим?' });
+      assert(again.body.reply, 'The SI answers again');
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).n), 1);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM notifications')).n), Number(notes.n), 'No second notification');
+      assert((await db.get(`SELECT reason FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).reason.split('\n').length, 2);
+      assert(system.includes('ТОЛЬКО когда сам не смог ответить'), 'The SI hands over only what it could not answer');
 
       // Templates: the niche from the list, the FAQ on the page
       const prof = (await api('GET', '/api/me/profile', ex)).body.user.profile;

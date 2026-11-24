@@ -304,7 +304,7 @@
     'Заполните карточку SI-продавца: оффер, цену и свою ссылку на оплату. Потом отправьте его ссылку клиентам.': 'Fill in your SI-seller’s card: offer, price and your payment link. Then send its link to your clients.',
     'Заполните профиль, чтобы посетители вам доверяли. Покажу, что поднимет доверие быстрее всего.': 'Fill in your profile so visitors trust you. I will show what raises trust fastest.',
     'К профилю': 'To profile',
-    'Всё готово: SI-продавец работает, профиль заполнен. Скоро здесь появится Инкубатор — группы с целью и серией дней.': 'All set: your SI-seller works and your profile is filled in. The Incubator — groups with a goal and a series of days — is coming soon.',
+    'Всё готово: SI-продавец работает, профиль заполнен. Загляните в Комьюнити — там сообщества экспертов.': 'All set: your SI-seller works and your profile is filled in. Have a look at Community — expert communities are there.',
     'На сегодня сообщения Бадди закончились — продолжим завтра': 'Buddy’s messages for today are used up — let’s continue tomorrow',
     'Месяц': 'Month', 'Сегодня': 'Today', 'Завтра': 'Tomorrow', 'Открыть месяц': 'Open the month', 'Все планы дня': 'All plans of the day',
     'Прошлый месяц': 'Previous month', 'Следующий месяц': 'Next month',
