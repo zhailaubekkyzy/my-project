@@ -103,9 +103,10 @@ const emailRoute = (fn) => async (req, res, next) => {
   }
 };
 
-/** POST /api/auth/email/start { email } — a letter with a 6-digit code */
+/** POST /api/auth/email/start { email, lang } — a letter with a 6-digit code (lang: 'en' — the letter in English) */
 router.post('/email/start', emailRoute(async (req, res) => {
-  const result = await emailLogin.start((req.body || {}).email, clientIp(req));
+  const body = req.body || {};
+  const result = await emailLogin.start(body.email, clientIp(req), body.lang === 'en' ? 'en' : 'ru');
   analytics.capture('email_code_requested', null); // no e-mail in the numbers: anonymous
   res.json(result);
 }));

@@ -4304,6 +4304,28 @@ async function runAllTests() {
     assert.strictEqual((await api('POST', '/api/buddy/welcome', null)).status, 401);
   });
 
+  await test('87. Язык с главной страницы: письмо с кодом и язык нового аккаунта', async () => {
+    const emailLogin = require('../server/services/email-login');
+    const en = emailLogin.letter('123456', 'en');
+    assert(/your SmartFlow sign-in code/.test(en.subject) && /valid for/.test(en.text) && !/[А-Яа-я]/.test(en.text));
+    assert(/код для входа/.test(emailLogin.letter('123456').subject), 'Russian by default');
+    // The page asks for an English letter; anything else — Russian
+    const start = await api('POST', '/api/auth/email/start', null, { email: 'lang.en@example.com', lang: 'en' });
+    assert.strictEqual(start.status, 200);
+    const odd = await api('POST', '/api/auth/email/start', null, { email: 'lang.odd@example.com', lang: '<script>' });
+    assert.strictEqual(odd.status, 200);
+    // A new browser account keeps its language: Buddy's welcome comes in English
+    const res = (await api('POST', '/api/auth/email/verify', null, { email: 'lang.en@example.com', code: start.body.devCode })).body;
+    assert.strictEqual(res.signedUp, true);
+    assert.strictEqual(res.user.langChosen, false);
+    assert.strictEqual((await api('PUT', '/api/me/lang', res.token, { lang: 'en' })).body.lang, 'en');
+    const welcome = require('../server/services/welcome-service');
+    await api('POST', '/api/buddy/welcome', res.token);
+    await welcome.runWelcomes(new Date(Date.now() + 2 * 60 * 1000));
+    const sent = await db.get('SELECT text FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [res.user.id]);
+    assert.strictEqual(sent.text, welcome.TEXT.en);
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

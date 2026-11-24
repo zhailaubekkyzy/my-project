@@ -20,6 +20,11 @@ const TABS = [
 // (сервер, welcome-service.js). Пришёл по ссылке (SI-продавец, карточка, приглашение…) — ссылка решает сама.
 const startParamNow = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
 function afterSignIn(res) {
+  // Signed up in the browser (from the home page with ?lang=, or by this device's choice): the server keeps that
+  // language, so Buddy's welcome and notifications come in it too. In Telegram, Telegram's language decides.
+  if (res && res.signedUp && !SF.inTelegram() && !(res.user && res.user.langChosen)) {
+    window.smartFlowApi.setLanguage(SF.lang()).catch(() => {});
+  }
   if (!res || !res.signedUp || startParamNow()) return false;
   SF.go('marketplace');
   window.smartFlowApi.buddyWelcome().catch(() => {});

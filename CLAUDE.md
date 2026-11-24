@@ -29,7 +29,7 @@ Telegram → Cloudflare Worker (фронтенд, статика) → Railway (�
 | База | Supabase `smartflow-eu`, проект `wmvwrekcabyuqsegjhgq`, Франкфурт (`eu-central-1`), подключение через Session pooler. Переехали 17 окт. (`pingMs` 180 → 10); старая в Сиднее `bcaipxnztlusjpppkhpj` — на паузу, удалить через 1–2 недели |
 | Тестовая копия | бот `@<тестовый>_bot` → `test.techsmartflow.com` (Worker `my-project-staging`, ветка `staging`) → Railway окружение `staging` (`APP_ENV=staging`) → Supabase `smartflow-test`; полоска «ТЕСТ» — `docs/STAGING.md`, часть Б |
 | Бот | @smartflow_ai_support_bot, Mini App `t.me/smartflow_ai_support_bot/app` (Web App URL в BotFather = https://app.techsmartflow.com) |
-| Домен | `techsmartflow.com` куплен в Cloudflare; `app.` — приложение; корень — главная страница (лендинг; основной язык английский, русский — `/ru/`): отдельный Worker `smartflow-landing` из папки `landing/`, подключение — `docs/LANDING.md` |
+| Домен | `techsmartflow.com` куплен в Cloudflare; `app.` — приложение; корень и `www.` — главная страница (лендинг; основной язык английский, русский — `/ru/`; подключена 24 нояб.): отдельный Worker `smartflow-landing` из папки `landing/`, подключение — `docs/LANDING.md`. Кнопки ведут на `app.techsmartflow.com/?lang=en|ru` — приложение берёт язык страницы (`js/i18n.js`, запоминается на устройстве), письмо с кодом на нём же, новый браузерный аккаунт сохраняет его на сервере (`users.lang`) |
 | Репозиторий | github.com/zhailaubekkyzy/my-project |
 
 ## Переменные окружения (только имена)
