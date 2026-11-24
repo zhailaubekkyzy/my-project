@@ -3978,7 +3978,16 @@ async function runAllTests() {
       const inquiry = await db.get(`SELECT * FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id]);
       assert(inquiry && inquiry.reason.includes('можно ли беременным'), 'The expert gets the question');
       const lead = await db.get('SELECT * FROM clients WHERE project_id = ?', [seller.id]);
-      assert.strictEqual(lead.responsible_type, 'human', 'The client waits for a person');
+      assert.strictEqual(lead.responsible_type, 'si', 'The SI keeps talking (owner’s decision 24 Nov.)');
+      assert.strictEqual(lead.funnel_status, 'waiting_human', '«Ждут человека» — the question waits for the expert');
+      // The next unknown question joins the waiting one: no new request, no second notification
+      const notes = await db.get('SELECT COUNT(*) AS n FROM notifications');
+      const again = await api('POST', `/api/chat/${slug}/messages`, client, { text: 'А кормящим?' });
+      assert(again.body.reply, 'The SI answers again');
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).n), 1);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM notifications')).n), Number(notes.n), 'No second notification');
+      assert((await db.get(`SELECT reason FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).reason.split('\n').length, 2);
+      assert(system.includes('ТОЛЬКО когда сам не смог ответить'), 'The SI hands over only what it could not answer');
 
       // Templates: the niche from the list, the FAQ on the page
       const prof = (await api('GET', '/api/me/profile', ex)).body.user.profile;
@@ -4302,6 +4311,71 @@ async function runAllTests() {
     await db.run('UPDATE users SET created_at = ? WHERE id = ?', ['2020-01-01 00:00:00', old.user.id]);
     assert.strictEqual((await api('POST', '/api/buddy/welcome', old.token)).body.scheduled, false);
     assert.strictEqual((await api('POST', '/api/buddy/welcome', null)).status, 401);
+  });
+
+  await test('87. Язык с главной страницы: письмо с кодом и язык нового аккаунта', async () => {
+    const emailLogin = require('../server/services/email-login');
+    const en = emailLogin.letter('123456', 'en');
+    assert(/your SmartFlow sign-in code/.test(en.subject) && /valid for/.test(en.text) && !/[А-Яа-я]/.test(en.text));
+    assert(/код для входа/.test(emailLogin.letter('123456').subject), 'Russian by default');
+    // The page asks for an English letter; anything else — Russian
+    const start = await api('POST', '/api/auth/email/start', null, { email: 'lang.en@example.com', lang: 'en' });
+    assert.strictEqual(start.status, 200);
+    const odd = await api('POST', '/api/auth/email/start', null, { email: 'lang.odd@example.com', lang: '<script>' });
+    assert.strictEqual(odd.status, 200);
+    // A new browser account keeps its language: Buddy's welcome comes in English
+    const res = (await api('POST', '/api/auth/email/verify', null, { email: 'lang.en@example.com', code: start.body.devCode })).body;
+    assert.strictEqual(res.signedUp, true);
+    assert.strictEqual(res.user.langChosen, false);
+    assert.strictEqual((await api('PUT', '/api/me/lang', res.token, { lang: 'en' })).body.lang, 'en');
+    const welcome = require('../server/services/welcome-service');
+    await api('POST', '/api/buddy/welcome', res.token);
+    await welcome.runWelcomes(new Date(Date.now() + 2 * 60 * 1000));
+    const sent = await db.get('SELECT text FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [res.user.id]);
+    assert.strictEqual(sent.text, welcome.TEXT.en);
+  });
+
+  await test('88. Пауза SI: значок в «Мне написали», эксперт отвечает, «Продолжить с SI» — SI видит его ответ', async () => {
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    try {
+      const ex = await tokenFor({ id: 880001, first_name: 'Эксперт', last_name: 'Пауза' });
+      const cl = await tokenFor({ id: 880002, first_name: 'Клиент', last_name: 'Пауза' });
+      const seller = (await api('POST', '/api/projects', ex, { name: 'Продавец паузы' })).body;
+      const slug = seller.slug;
+      // The client asks for a person: the SI pauses, «Мне написали» shows it
+      assert.strictEqual((await api('POST', `/api/chat/${slug}/human`, cl, {})).status < 300, true);
+      let list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(list.length, 1);
+      assert.strictEqual(Number(list[0].si_paused), 1, 'The pause mark');
+      const clientId = list[0].client_id;
+      // The expert answers personally, then presses «Продолжить с SI»
+      await api('POST', `/api/projects/${seller.id}/conversations/${clientId}/messages`, ex, { text: 'Здравствуйте! Есть рассрочка на 3 месяца.' });
+      assert.strictEqual(Number((await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body[0].si_paused), 1, 'Still paused until the expert decides');
+      await api('POST', `/api/projects/${seller.id}/clients/${clientId}/si`, ex, { enabled: true });
+      list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(Number(list[0].si_paused), 0);
+      // The SI answers again and sees the expert's words
+      let sent = null;
+      config.openaiApiKey = 'sk-test-not-real';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          const body = JSON.parse(options.body);
+          if (body.response_format) return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 });
+          sent = body.messages;
+          return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, рассрочка на 3 месяца — оформить?' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      const reply = await api('POST', `/api/chat/${slug}/messages`, cl, { text: 'А как оформить рассрочку?' });
+      assert.strictEqual(reply.body.reply.text, 'Да, рассрочка на 3 месяца — оформить?');
+      assert(sent.some(m => m.role === 'system' && m.content === 'Эксперт лично написал(а) клиенту в этом чате: «Здравствуйте! Есть рассрочка на 3 месяца.»'), 'The expert’s answer is in the SI’s context, not as the SI’s own words');
+      assert(sent[0].content.includes('Ты не эксперт и не пишешь от его имени'));
+      assert(sent[0].content.includes('не здоровайся заново'));
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
   });
 
   await new Promise(resolve => httpServer.close(resolve));

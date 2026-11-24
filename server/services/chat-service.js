@@ -254,11 +254,10 @@ async function handleClientMessage(project, lead, text, voice = null) {
   const asked = siEngine.takeAskExpert(result.text);
   const reply = await saveMessage(lead, SI, asked.text || result.text);
   await applyAnalysis(project, lead, analysis, text);
+  // The SI keeps talking (price, objections, the next step) while the expert answers this one question
+  // (owner's decision 24 Nov.: before, the SI fell silent after the first such question and the client waited).
   if (asked.question && !project.demo) {
-    await createHumanRequest(project, lead, {
-      reason: `SI не знает ответа: ${asked.question}. Вопрос клиента: «${String(text).slice(0, 500)}»`,
-      notice: `❓ ${lead.name || 'Клиент'} спросил то, чего нет в карточке и сведениях SI: «${String(text).slice(0, 300)}».\nSI-продавец: «${project.name}». Ответьте в чате — клиент ждёт. Ответ можно сразу добавить в «Вопросы и ответы» карточки.`
-    });
+    await askExpert(project, lead, asked.question, text);
   }
   return { message, reply, source: result.source, askedExpert: Boolean(asked.question && !project.demo) };
 }
@@ -498,7 +497,31 @@ async function startConversation(project, lead) {
  * "Связаться с человеком": a request in "Мне написали", the owner becomes responsible for the
  * dialog (SI pauses), the owner and the assistant get a bot message with a button to the request.
  */
-async function createHumanRequest(project, lead, { reason, leadName, leadUsername, notice } = {}) {
+/**
+ * A question the SI could not answer goes to «Мне написали» — the SI is NOT paused (owner's decision 24 Nov.).
+ * One waiting question per client: the next ones are added to it, without a new notification.
+ */
+async function askExpert(project, lead, question, clientText) {
+  const line = `SI не знает ответа: ${question}. Вопрос клиента: «${String(clientText).slice(0, 500)}»`;
+  const open = await db.get(
+    `SELECT id, reason FROM direct_inquiries WHERE client_id = ? AND status = 'waiting' ORDER BY created_at DESC LIMIT 1`,
+    [lead.id]
+  );
+  if (open) {
+    await db.run(
+      'UPDATE direct_inquiries SET reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [`${open.reason}\n${line}`.slice(-1000), open.id]
+    );
+    return { inquiryId: open.id, notified: false };
+  }
+  return createHumanRequest(project, lead, {
+    reason: line,
+    pauseSi: false,
+    notice: `❓ ${lead.name || 'Клиент'} спросил то, чего нет в карточке и сведениях SI: «${String(clientText).slice(0, 300)}».\nSI-продавец: «${project.name}». Ответьте в чате — SI продолжает разговор, а на этот вопрос клиент ждёт вас. Ответ можно сразу добавить в «Вопросы и ответы» карточки.`
+  });
+}
+
+async function createHumanRequest(project, lead, { reason, leadName, leadUsername, notice, pauseSi = true } = {}) {
   const inquiryId = newId('inq');
   const text = (reason || 'Клиент нажал «Связаться с человеком»').slice(0, 1000);
   await db.run(
@@ -506,7 +529,7 @@ async function createHumanRequest(project, lead, { reason, leadName, leadUsernam
      VALUES (?, ?, ?, ?, ?, ?, ?, 'urgent', 'waiting', 0)`,
     [inquiryId, project.id, lead.id, lead.business_id || null, leadName || lead.name || 'Клиент Telegram', leadUsername || lead.username || null, text]
   );
-  if (!isSiPaused(lead)) await setResponsible(lead, { type: 'human', userId: project.owner_id });
+  if (pauseSi && !isSiPaused(lead)) await setResponsible(lead, { type: 'human', userId: project.owner_id });
   await funnelService.recordEvent(lead, 'handed_to_human', CLIENT);
 
   const people = lead.business_id ? await businessService.activeMemberIds(lead.business_id) : [];
