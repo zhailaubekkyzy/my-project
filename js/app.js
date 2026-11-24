@@ -98,7 +98,8 @@ const GOOGLE_KEY = 'sf_google_login';
 SF.actions.loginGoogle = () => {
   if (!login.google) return;
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
-  const pending = { nonce: rnd(), state: rnd() };
+  // The link the person came by (?startapp=…) survives the trip to Google and back
+  const pending = { nonce: rnd(), state: rnd(), startapp: startParamNow() || null };
   try { sessionStorage.setItem(GOOGLE_KEY, JSON.stringify(pending)); } catch (e) { /* the check below will fail honestly */ }
   const params = new URLSearchParams({
     client_id: login.google,
@@ -124,8 +125,11 @@ async function finishGoogleLogin() {
   }
   try {
     const res = await window.smartFlowApi.googleLogin(hash.get('id_token'), pending.nonce);
+    if (pending.startapp && /^[A-Za-z0-9_-]{1,64}$/.test(pending.startapp)) {
+      history.replaceState(null, '', `${location.pathname}?startapp=${encodeURIComponent(pending.startapp)}`);
+    }
     window.funnelStore.setAuth(res);
-    afterSignIn(res);
+    if (!afterSignIn(res) && startParamNow()) handleStartParam();
     SF.webPush.sync();
     return true;
   } catch (err) {
