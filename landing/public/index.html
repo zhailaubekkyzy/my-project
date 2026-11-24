@@ -1,205 +1,43 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SmartFlow — SI-продавец для экспертов</title>
-<meta name="description" content="SmartFlow: SI-продавец ведёт переписку с вашими клиентами днём и ночью — тепло, спокойно и по вашей методологии. Вы занимаетесь экспертизой. From idea to selling. Faster.">
+<title>SmartFlow — an SI seller for experts</title>
+<meta name="description" content="SmartFlow: an SI seller talks to your clients day and night — warmly, calmly and by your own method. You focus on your expertise. From idea to selling. Faster.">
 <meta name="theme-color" content="#0d9488">
 <link rel="icon" type="image/png" href="/images/icon-192.png">
 <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
 <meta property="og:type" content="website">
-<meta property="og:title" content="SmartFlow — SI-продавец для экспертов">
-<meta property="og:description" content="SI-продавец отвечает вашим клиентам 24/7 и ведёт к покупке. Вы занимаетесь экспертизой.">
+<meta property="og:title" content="SmartFlow — an SI seller for experts">
+<meta property="og:description" content="An SI seller answers your clients 24/7 and guides them to a purchase. You focus on your expertise.">
 <meta property="og:url" content="https://techsmartflow.com/">
+<meta property="og:locale" content="en_US">
+<link rel="canonical" href="https://techsmartflow.com/">
+<link rel="alternate" hreflang="en" href="https://techsmartflow.com/">
+<link rel="alternate" hreflang="ru" href="https://techsmartflow.com/ru/">
+<link rel="alternate" hreflang="x-default" href="https://techsmartflow.com/">
 <meta property="og:image" content="https://techsmartflow.com/images/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<style>
-  :root {
-    --page: #f6f9fa; --card: #ffffff; --sunken: #eef5f7;
-    --ink: #12202d; --ink-2: #334759; --muted: #5c6f80;
-    --line: #e0e9ee;
-    --brand: #0d8078; --brand-deep: #0d9488; --tiffany: #81d8d0; --brand-soft: #e9f8f6;
-    --si: #d03a34; --si-soft: #fff3f1; --si-line: #fbd5d0;
-    --shadow: 0 2px 4px rgb(18 32 45 / .05), 0 16px 36px -14px rgb(18 32 45 / .22);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --page: #0d151c; --card: #15212b; --sunken: #1b2a35;
-      --ink: #eef4f7; --ink-2: #c7d5de; --muted: #93a6b4;
-      --line: #243641;
-      --brand: #5fd0c6; --brand-deep: #2bb3a6; --brand-soft: #143331;
-      --si: #ff7a6e; --si-soft: #2d1b1a; --si-line: #5a2c28;
-      --shadow: 0 2px 4px rgb(0 0 0 / .2), 0 16px 36px -14px rgb(0 0 0 / .6);
-    }
-  }
-  :root[data-theme="dark"] {
-    --page: #0d151c; --card: #15212b; --sunken: #1b2a35;
-    --ink: #eef4f7; --ink-2: #c7d5de; --muted: #93a6b4;
-    --line: #243641;
-    --brand: #5fd0c6; --brand-deep: #2bb3a6; --brand-soft: #143331;
-    --si: #ff7a6e; --si-soft: #2d1b1a; --si-line: #5a2c28;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0; background: var(--page); color: var(--ink);
-    font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden;
-  }
-  a { color: inherit; }
-  img { max-width: 100%; display: block; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
-  @media (min-width: 720px) { .wrap { padding: 0 28px; } }
-
-  /* header */
-  header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--page) 88%, transparent);
-    backdrop-filter: saturate(160%) blur(12px); -webkit-backdrop-filter: saturate(160%) blur(12px); border-bottom: 1px solid var(--line); }
-  .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 12px; }
-  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-size: 19px; letter-spacing: -.01em; }
-  .logo img { width: 34px; height: 34px; }
-  .nav { display: none; gap: 26px; font-size: 15px; font-weight: 600; color: var(--muted); }
-  .nav a { text-decoration: none; }
-  .nav a:hover { color: var(--ink); }
-  @media (min-width: 900px) { .nav { display: flex; } }
-
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px;
-    border-radius: 14px; font-weight: 700; font-size: 16px; text-decoration: none; border: 1px solid transparent;
-    transition: transform .15s ease, box-shadow .15s ease, background .15s ease; white-space: nowrap; }
-  .btn:active { transform: scale(.98); }
-  .btn-primary { background: var(--brand-deep); color: #fff; box-shadow: 0 8px 20px -8px rgb(13 148 136 / .7); }
-  .btn-primary:hover { background: #0b7f75; }
-  .btn-ghost { background: var(--card); color: var(--ink); border-color: var(--line); }
-  .btn-ghost:hover { border-color: var(--brand); }
-  .btn-sm { min-height: 40px; padding: 0 16px; font-size: 15px; border-radius: 12px; }
-  .btn svg { width: 20px; height: 20px; flex: none; }
-
-  /* hero */
-  .hero { padding: 48px 0 32px; position: relative; }
-  .hero::before { content: ""; position: absolute; inset: -40px 0 auto 0; height: 520px; z-index: -1;
-    background: radial-gradient(600px 300px at 15% 10%, color-mix(in srgb, var(--tiffany) 28%, transparent), transparent 70%),
-                radial-gradient(420px 260px at 90% 30%, color-mix(in srgb, var(--si) 10%, transparent), transparent 70%); }
-  .hero-grid { display: grid; gap: 40px; align-items: center; }
-  @media (min-width: 900px) { .hero { padding: 80px 0 56px; } .hero-grid { grid-template-columns: 1.1fr .9fr; gap: 56px; } }
-  .tagline { font-family: "Caveat", cursive; font-size: 28px; color: var(--brand); line-height: 1; margin: 0 0 14px; }
-  h1 { font-size: clamp(34px, 6.2vw, 58px); line-height: 1.06; letter-spacing: -.03em; margin: 0 0 20px; font-weight: 800; }
-  h1 .si { color: var(--si); }
-  .lead { font-size: clamp(17px, 2.2vw, 20px); color: var(--ink-2); margin: 0 0 28px; max-width: 34em; }
-  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
-  .cta-row .btn { flex: 1 1 220px; }
-  @media (min-width: 560px) { .cta-row .btn { flex: 0 0 auto; } }
-  .cta-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
-
-  /* chat mock */
-  .phone { background: var(--card); border: 1px solid var(--line); border-radius: 28px; box-shadow: var(--shadow);
-    padding: 16px; max-width: 420px; width: 100%; margin: 0 auto; }
-  .phone-head { display: flex; align-items: center; gap: 12px; padding: 4px 4px 14px; border-bottom: 1px solid var(--line); }
-  .ava { width: 44px; height: 44px; border-radius: 50%; background: var(--si-soft); position: relative; flex: none; }
-  .ava img { width: 44px; height: 44px; border-radius: 50%; }
-  .ava::after { content: ""; position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border-radius: 50%;
-    background: var(--si); border: 2px solid var(--card); }
-  .phone-head b { display: block; font-size: 15px; }
-  .phone-head span { font-size: 12px; color: var(--si); font-weight: 600; }
-  .msgs { display: flex; flex-direction: column; gap: 10px; padding: 16px 2px 4px; font-size: 15px; line-height: 1.45; }
-  .m { max-width: 85%; padding: 10px 14px; border-radius: 18px; }
-  .m-si { background: var(--si-soft); border: 1px solid var(--si-line); border-bottom-left-radius: 6px; align-self: flex-start; }
-  .m-me { background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--tiffany) 55%, transparent); border-bottom-right-radius: 6px; align-self: flex-end; }
-  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--si-soft); border: 1px solid var(--si-line); border-radius: 18px; border-bottom-left-radius: 6px; }
-  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--si); opacity: .5; animation: blink 1.2s infinite; }
-  .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
-  @keyframes blink { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: .9; transform: translateY(-3px); } }
-  .mock-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; }
-  @media (prefers-reduced-motion: reduce) { .typing i { animation: none; } html { scroll-behavior: auto; } }
-
-  /* sections */
-  section { padding: 56px 0; }
-  @media (min-width: 900px) { section { padding: 88px 0; } }
-  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); margin: 0 0 10px; }
-  h2 { font-size: clamp(28px, 4.4vw, 42px); line-height: 1.12; letter-spacing: -.025em; margin: 0 0 14px; font-weight: 800; }
-  .sub { color: var(--ink-2); max-width: 40em; margin: 0 0 36px; font-size: 18px; }
-  .alt { background: var(--card); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-
-  .pain { display: grid; gap: 14px; }
-  @media (min-width: 720px) { .pain { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
-  .pain div { padding: 20px; border-radius: 18px; background: var(--sunken); border: 1px solid var(--line); }
-  .pain b { display: block; font-size: 17px; margin-bottom: 6px; }
-  .pain p { margin: 0; color: var(--muted); font-size: 15px; }
-
-  .steps { display: grid; gap: 16px; counter-reset: s; }
-  @media (min-width: 900px) { .steps { grid-template-columns: repeat(3, 1fr); gap: 24px; } }
-  .step { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 26px; position: relative; }
-  .alt .step { background: var(--page); }
-  .step::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 38px; height: 38px;
-    border-radius: 12px; background: var(--brand-soft); color: var(--brand); font-weight: 800; margin-bottom: 16px; }
-  .step h3 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.01em; }
-  .step p { margin: 0; color: var(--ink-2); font-size: 16px; }
-
-  .feats { display: grid; gap: 14px; }
-  @media (min-width: 640px) { .feats { grid-template-columns: repeat(2, 1fr); } }
-  @media (min-width: 1000px) { .feats { grid-template-columns: repeat(3, 1fr); gap: 18px; } }
-  .feat { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
-  .alt .feat { background: var(--page); }
-  .ico { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 14px; background: var(--brand-soft); color: var(--brand); }
-  .ico.red { background: var(--si-soft); color: var(--si); }
-  .ico svg { width: 22px; height: 22px; }
-  .feat h3 { margin: 0 0 6px; font-size: 18px; }
-  .feat p { margin: 0; color: var(--muted); font-size: 15px; }
-
-  .who { display: grid; gap: 18px; }
-  @media (min-width: 900px) { .who { grid-template-columns: repeat(3, 1fr); gap: 22px; } }
-  .who-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 26px; display: flex; flex-direction: column; }
-  .who-card img { width: 84px; height: 84px; margin: -6px 0 12px -6px; }
-  .who-card h3 { margin: 0 0 8px; font-size: 21px; }
-  .who-card ul { margin: 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 15px; }
-  .who-card li { padding: 6px 0 6px 26px; position: relative; }
-  .who-card li::before { content: ""; position: absolute; left: 4px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--tiffany); }
-
-  .honest { display: grid; gap: 14px; }
-  @media (min-width: 720px) { .honest { grid-template-columns: repeat(2, 1fr); gap: 18px; } }
-  .honest > div { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border-radius: 18px; background: var(--page); border: 1px solid var(--line); }
-  .honest svg { width: 24px; height: 24px; flex: none; color: var(--brand); margin-top: 2px; }
-  .honest b { display: block; margin-bottom: 4px; }
-  .honest p { margin: 0; color: var(--muted); font-size: 15px; }
-
-  details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 0 20px; margin-bottom: 10px; }
-  summary { cursor: pointer; list-style: none; padding: 18px 28px 18px 0; font-weight: 700; position: relative; }
-  summary::-webkit-details-marker { display: none; }
-  summary::after { content: "+"; position: absolute; right: 0; top: 14px; font-size: 24px; font-weight: 500; color: var(--brand); transition: transform .2s; }
-  details[open] summary::after { transform: rotate(45deg); }
-  details p { margin: 0 0 18px; color: var(--ink-2); font-size: 16px; }
-  .faq { max-width: 800px; }
-
-  .final { text-align: center; }
-  .final-box { background: linear-gradient(135deg, var(--brand-deep), #0b6e67); color: #fff; border-radius: 30px; padding: 48px 22px; position: relative; overflow: hidden; }
-  .final-box img { width: 96px; height: 96px; margin: 0 auto 10px; }
-  .final-box h2 { color: #fff; }
-  .final-box p { color: rgb(255 255 255 / .85); max-width: 32em; margin: 0 auto 28px; font-size: 18px; }
-  .final-box .cta-row { justify-content: center; }
-  .final-box .btn-primary { background: #fff; color: #0b6e67; box-shadow: none; }
-  .final-box .btn-primary:hover { background: #f0fbfa; }
-  .final-box .btn-ghost { background: transparent; color: #fff; border-color: rgb(255 255 255 / .45); }
-
-  footer { padding: 36px 0 48px; color: var(--muted); font-size: 14px; }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; justify-content: space-between; }
-  footer a { text-decoration: none; }
-  footer a:hover { color: var(--ink); }
-  footer .links { display: flex; flex-wrap: wrap; gap: 10px 22px; }
-</style>
+<link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
     <a class="logo" href="/"><img src="/images/logo-mark.webp" alt="" width="34" height="34">SmartFlow</a>
-    <nav class="nav" aria-label="Разделы">
-      <a href="#how">Как это работает</a>
-      <a href="#features">Возможности</a>
-      <a href="#who">Для кого</a>
-      <a href="#faq">Вопросы</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#who">Who it’s for</a>
+      <a href="#faq">FAQ</a>
     </nav>
-    <a class="btn btn-primary btn-sm" href="https://app.techsmartflow.com/">Войти</a>
+    <div class="top-right">
+      <div class="lang" aria-label="Language"><a href="/" aria-current="true">EN</a><a href="/ru/" lang="ru" hreflang="ru">RU</a></div>
+      <a class="btn btn-primary btn-sm" href="https://app.techsmartflow.com/">Sign in</a>
+    </div>
   </div>
 </header>
 
@@ -209,30 +47,30 @@
     <div class="wrap hero-grid">
       <div>
         <p class="tagline">From idea to selling. Faster.</p>
-        <h1>Вы — эксперт.<br><span class="si">SI-продавец</span> ведёт разговоры с клиентами.</h1>
-        <p class="lead">SmartFlow отвечает вашим клиентам днём и ночью: тепло, спокойно и по вашей методологии. Объясняет, снимает сомнения и мягко ведёт к покупке — а вы занимаетесь своим делом.</p>
+        <h1>You’re the expert.<br>Your <span class="si">SI seller</span> talks to clients.</h1>
+        <p class="lead">SmartFlow answers your clients day and night — warmly, calmly and by your own method. It explains, eases doubts and gently guides people to buy, while you focus on your work.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://app.techsmartflow.com/">Начать бесплатно</a>
+          <a class="btn btn-primary" href="https://app.techsmartflow.com/">Start for free</a>
           <a class="btn btn-ghost" href="https://t.me/smartflow_ai_support_bot/app">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13 1.4 11.5c-1-.3-1.1-1 .2-1.5L20.6 2.7c.9-.3 1.6.2 1.3 1.6z"/></svg>
-            Открыть в Telegram
+            Open in Telegram
           </a>
         </div>
-        <p class="cta-note">Вход по почте или через Google — за минуту. Без карты.</p>
+        <p class="cta-note">Sign up with e-mail or Google in a minute. No card needed.</p>
       </div>
 
-      <div class="phone" aria-label="Пример переписки клиента с SI-продавцом">
+      <div class="phone" aria-label="Example chat between a client and an SI seller">
         <div class="phone-head">
           <div class="ava"><img src="/images/si-consultant.webp" alt="" width="44" height="44"></div>
-          <div><b>Ваш SI-продавец</b><span>SI-консультант</span></div>
+          <div><b>Your SI seller</b><span>SI consultant</span></div>
         </div>
         <div class="msgs">
-          <div class="m m-si">Здравствуйте! Я помогу разобраться в программе и подобрать удобный формат. Что для вас сейчас важнее всего?</div>
-          <div class="m m-me">Хочу понять, подойдёт ли мне, если времени совсем мало</div>
-          <div class="m m-si">Понимаю, это частый вопрос. Расскажу, как устроены занятия и сколько времени они занимают — и вы сами решите, удобно ли это вам.</div>
+          <div class="m m-si">Hi! I’ll help you understand the program and pick a format that suits you. What matters most to you right now?</div>
+          <div class="m m-me">I want to know if it works for me — I have very little time</div>
+          <div class="m m-si">I understand, that’s a common question. Let me tell you how the sessions work and how much time they take — then you can decide if it fits.</div>
           <div class="typing" aria-hidden="true"><i></i><i></i><i></i></div>
         </div>
-        <p class="mock-note">Пример переписки</p>
+        <p class="mock-note">Example chat</p>
       </div>
     </div>
   </div>
@@ -240,13 +78,13 @@
   <!-- 2. Проблема -->
   <section>
     <div class="wrap">
-      <p class="eyebrow">Знакомо?</p>
-      <h2>Клиенты пишут, а ответить некогда</h2>
-      <p class="sub">Эксперт тратит часы на одни и те же вопросы, а заявки остывают, пока он ведёт консультации или спит.</p>
+      <p class="eyebrow">Sound familiar?</p>
+      <h2>Clients write, but there’s no time to reply</h2>
+      <p class="sub">Experts spend hours on the same questions, and leads go cold while they’re busy with sessions or asleep.</p>
       <div class="pain">
-        <div><b>Одни и те же вопросы</b><p>«Сколько стоит?», «Мне подойдёт?», «Когда старт?» — каждый день, по кругу.</p></div>
-        <div><b>Заявки остывают</b><p>Человек написал вечером, ответ пришёл утром — интерес уже пропал.</p></div>
-        <div><b>Продавать неловко</b><p>Хочется делиться пользой, а не уговаривать и не дожимать.</p></div>
+        <div><b>The same questions</b><p>“How much is it?”, “Is it right for me?”, “When does it start?” — every day, over and over.</p></div>
+        <div><b>Leads go cold</b><p>Someone writes in the evening, the reply comes in the morning — and the interest is gone.</p></div>
+        <div><b>Selling feels awkward</b><p>You want to share value, not persuade and push.</p></div>
       </div>
     </div>
   </section>
@@ -254,13 +92,13 @@
   <!-- 3. Как работает -->
   <section class="alt" id="how">
     <div class="wrap">
-      <p class="eyebrow">Как это работает</p>
-      <h2>Три шага до первого разговора</h2>
-      <p class="sub">Не нужно разбираться в технологиях: всё настраивается словами, как в переписке.</p>
+      <p class="eyebrow">How it works</p>
+      <h2>Three steps to your first conversation</h2>
+      <p class="sub">No tech skills needed: you set everything up in plain words, like in a chat.</p>
       <div class="steps">
-        <div class="step"><h3>Расскажите о себе</h3><p>Ответьте на несколько вопросов о вашем деле и продукте, загрузите материалы — PDF, Word или просто текст. Это «Мозг» вашего бизнеса.</p></div>
-        <div class="step"><h3>Получите SI-продавца</h3><p>Выберите цель — консультация, продажа, заявки или бесплатный материал — и SI-продавец готов. Проверьте его сами, поговорив как клиент.</p></div>
-        <div class="step"><h3>Поделитесь ссылкой</h3><p>Поставьте ссылку в соцсети или в шапку профиля. SI-продавец пишет первым, отвечает, записывает на встречу — а вы подключаетесь, когда нужен человек.</p></div>
+        <div class="step"><h3>Tell us about yourself</h3><p>Answer a few questions about your work and product, and upload materials — PDF, Word or plain text. This becomes your business “Brain”.</p></div>
+        <div class="step"><h3>Get your SI seller</h3><p>Choose a goal — a consultation, a sale, leads or a free resource — and your SI seller is ready. Test it yourself by chatting as a client.</p></div>
+        <div class="step"><h3>Share your link</h3><p>Add the link to your social media or bio. Your SI seller writes first, answers and books meetings — and you step in when a human is needed.</p></div>
       </div>
     </div>
   </section>
@@ -268,19 +106,19 @@
   <!-- 4. Возможности -->
   <section id="features">
     <div class="wrap">
-      <p class="eyebrow">Возможности</p>
-      <h2>Всё для продаж в одном месте</h2>
-      <p class="sub">SmartFlow — не просто чат-бот. Это рабочее место эксперта, где SI-продавец работает вместе с вами.</p>
+      <p class="eyebrow">Features</p>
+      <h2>Everything for sales in one place</h2>
+      <p class="sub">SmartFlow is more than a chatbot. It’s an expert’s workspace where your SI seller works alongside you.</p>
       <div class="feats">
-        <div class="feat"><div class="ico red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></div><h3>Отвечает 24/7</h3><p>Тёплым, человеческим языком, на языке клиента. На прямой вопрос честно говорит, кто он.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/></svg></div><h3>Знает ваш продукт</h3><p>Отвечает по вашим материалам и вопросам-ответам. Чего не знает — передаёт вам, а не выдумывает.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></div><h3>Воронка и сценарии</h3><p>Путь клиента по шагам и условия «если…, то…»: что сказать, когда клиент сомневается или замолчал.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><h3>Запись на встречи</h3><p>Клиент сам выбирает свободное время в вашем календаре, обоим приходит напоминание.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><h3>«Клиент ждёт человека»</h3><p>Когда нужен живой ответ, вы сразу получаете уведомление и продолжаете разговор сами.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div><h3>Рассылки</h3><p>Опишите словами, кому и что сообщить, — SI подготовит текст, а вы подтвердите отправку.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>Комьюнити</h3><p>Своё сообщество с лентой, анонсами и платным входом по вашей ссылке.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg></div><h3>Маркетплейс</h3><p>Ваша карточка с ценой и оффером — клиенты находят вас сами внутри SmartFlow.</p></div>
-        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><h3>Помощник</h3><p>Подключите своего помощника: он видит переписки и календарь, но не ваши деньги и настройки.</p></div>
+        <div class="feat"><div class="ico red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></div><h3>Replies 24/7</h3><p>In warm, human words and in the client’s language. Asked directly, it honestly says what it is.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/></svg></div><h3>Knows your product</h3><p>Answers from your materials and FAQ. What it doesn’t know, it passes to you instead of making it up.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></div><h3>Funnel and scenarios</h3><p>A step-by-step client journey and “if…, then…” rules: what to say when a client hesitates or goes quiet.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><h3>Meeting booking</h3><p>Clients pick a free slot in your calendar themselves, and you both get a reminder.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><h3>“Client is waiting for you”</h3><p>When a human answer is needed, you get notified right away and take over the conversation.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div><h3>Broadcasts</h3><p>Describe in words who to tell and what — SI drafts the message, and you confirm before it’s sent.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>Community</h3><p>Your own community with a feed, announcements and paid access via your link.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg></div><h3>Marketplace</h3><p>Your card with a price and offer — clients find you on their own inside SmartFlow.</p></div>
+        <div class="feat"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div><h3>Assistant</h3><p>Add your assistant: they see chats and the calendar, but not your payments or settings.</p></div>
       </div>
     </div>
   </section>
@@ -288,35 +126,35 @@
   <!-- 5. Для кого -->
   <section class="alt" id="who">
     <div class="wrap">
-      <p class="eyebrow">Для кого</p>
-      <h2>Экосистема, где каждый находит своё</h2>
-      <p class="sub">Эксперты продают через SI-продавцов, маркетологи делятся готовыми сценариями, а клиенты каждый день возвращаются к своему Бадди.</p>
+      <p class="eyebrow">Who it’s for</p>
+      <h2>An ecosystem with something for everyone</h2>
+      <p class="sub">Experts sell through SI sellers, marketers share ready-made templates, and clients come back to their Buddy every day.</p>
       <div class="who">
         <div class="who-card">
           <img src="/images/si-consultant.webp" alt="" width="84" height="84">
-          <h3>Экспертам</h3>
+          <h3>Experts</h3>
           <ul>
-            <li>коучи, психологи, нутрициологи, наставники</li>
-            <li>преподаватели, мастера, консультанты</li>
-            <li>все, кто продаёт свои знания и услуги</li>
+            <li>coaches, psychologists, nutritionists, mentors</li>
+            <li>teachers, craftspeople, consultants</li>
+            <li>anyone who sells their knowledge and services</li>
           </ul>
         </div>
         <div class="who-card">
           <img src="/images/si-assistant.webp" alt="" width="84" height="84">
-          <h3>Маркетологам</h3>
+          <h3>Marketers</h3>
           <ul>
-            <li>соберите шаблон SI-продавца под нишу</li>
-            <li>опубликуйте его в Маркетплейсе</li>
-            <li>продавайте шаблон экспертам по своей цене</li>
+            <li>build an SI seller template for a niche</li>
+            <li>publish it in the Marketplace</li>
+            <li>sell it to experts at your own price</li>
           </ul>
         </div>
         <div class="who-card">
           <img src="/images/si-buddy.webp" alt="" width="84" height="84">
-          <h3>Клиентам</h3>
+          <h3>Clients</h3>
           <ul>
-            <li>Бадди — личный помощник на каждый день</li>
-            <li>планы и напоминания словами, даже голосом</li>
-            <li>эксперты и сообщества в одном приложении</li>
+            <li>Buddy — a personal everyday assistant</li>
+            <li>plans and reminders in words, even by voice</li>
+            <li>experts and communities in one app</li>
           </ul>
         </div>
       </div>
@@ -326,14 +164,14 @@
   <!-- 6. Честно -->
   <section>
     <div class="wrap">
-      <p class="eyebrow">Честно и просто</p>
-      <h2>Без подвохов</h2>
-      <p class="sub">Мы строим SmartFlow так, чтобы им было приятно пользоваться и экспертам, и их клиентам.</p>
+      <p class="eyebrow">Honest and simple</p>
+      <h2>No catches</h2>
+      <p class="sub">We build SmartFlow to be pleasant for both experts and their clients.</p>
       <div class="honest">
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Бизнес-профиль — бесплатно</b><p>Включается в настройках в пару касаний. Вернуться к личному можно в любой момент.</p></div></div>
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Оплата — напрямую вам</b><p>Клиент платит по вашей ссылке, деньги идут сразу вам, без посредников.</p></div></div>
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>SI не давит</b><p>Тёплый и спокойный тон, без навязчивых «дожимов». Оплату подтверждаете только вы.</p></div></div>
-        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Работает где удобно</b><p>В Telegram, в браузере на телефоне и компьютере. Можно установить на экран как приложение.</p></div></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Business profile is free</b><p>Turn it on in settings in a couple of taps. Switch back to personal any time.</p></div></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Payments go straight to you</b><p>Clients pay via your own link, and the money goes directly to you — no middleman.</p></div></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>SI never pushes</b><p>A warm, calm tone without pushy closing. Only you confirm payments.</p></div></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Works where you are</b><p>In Telegram and in the browser on phone or computer. Add it to your home screen like an app.</p></div></div>
       </div>
     </div>
   </section>
@@ -341,14 +179,14 @@
   <!-- 7. Вопросы -->
   <section class="alt" id="faq">
     <div class="wrap faq">
-      <p class="eyebrow">Вопросы</p>
-      <h2>Частые вопросы</h2>
-      <details><summary>Что такое SI-продавец?</summary><p>SI — Super Intelligence. Это ваш продавец на основе искусственного интеллекта: он ведёт переписку с клиентами по вашим материалам и вашей методологии, а когда нужен живой человек — зовёт вас.</p></details>
-      <details><summary>Нужно ли уметь программировать?</summary><p>Нет. Всё настраивается словами: вы отвечаете на вопросы о своём деле, а SmartFlow собирает SI-продавца сам. Править можно в любой момент.</p></details>
-      <details><summary>Не будет ли SI выдумывать?</summary><p>SI отвечает по вашим материалам и вопросам-ответам. Если чего-то не знает — не угадывает, а передаёт вопрос вам, и клиент ждёт вашего ответа.</p></details>
-      <details><summary>Как клиенты попадут к моему SI-продавцу?</summary><p>По вашей ссылке — из соцсетей, сторис, шапки профиля — или через Маркетплейс SmartFlow. Можно сделать несколько ссылок и видеть, откуда пришло больше клиентов.</p></details>
-      <details><summary>Как я узнаю, что клиент хочет поговорить со мной?</summary><p>Вам придёт уведомление на телефон или в Telegram, а клиент появится в разделе «Мне написали». Вы продолжаете разговор сами, SI в это время молчит.</p></details>
-      <details><summary>Как зарегистрироваться?</summary><p>Нажмите «Начать бесплатно» и войдите по почте (придёт код из 6 цифр) или через Google. Если вам удобнее Telegram — откройте SmartFlow в Telegram.</p></details>
+      <p class="eyebrow">FAQ</p>
+      <h2>Frequently asked questions</h2>
+      <details><summary>What is an SI seller?</summary><p>SI stands for Super Intelligence. It’s your AI-powered seller: it chats with clients using your materials and your method, and calls you when a real person is needed.</p></details>
+      <details><summary>Do I need to know how to code?</summary><p>No. Everything is set up in plain words: you answer questions about your work, and SmartFlow builds the SI seller for you. You can edit it any time.</p></details>
+      <details><summary>Won’t SI make things up?</summary><p>SI answers from your materials and FAQ. If it doesn’t know something, it doesn’t guess — it passes the question to you, and the client waits for your reply.</p></details>
+      <details><summary>How will clients reach my SI seller?</summary><p>Through your link — from social media, stories or your bio — or via the SmartFlow Marketplace. You can create several links and see which one brings more clients.</p></details>
+      <details><summary>How will I know a client wants to talk to me?</summary><p>You’ll get a notification on your phone or in Telegram, and the client appears in your inbox. You continue the conversation yourself while SI stays quiet.</p></details>
+      <details><summary>How do I sign up?</summary><p>Tap “Start for free” and sign in with your e-mail (you’ll get a 6-digit code) or with Google. If you prefer Telegram, open SmartFlow in Telegram.</p></details>
     </div>
   </section>
 
@@ -357,11 +195,11 @@
     <div class="wrap">
       <div class="final-box">
         <img src="/images/si-consultant.webp" alt="" width="96" height="96">
-        <h2>Пусть разговоры с клиентами<br>идут без вас</h2>
-        <p>Начните сегодня — первый SI-продавец будет готов за несколько минут.</p>
+        <h2>Let client conversations<br>run without you</h2>
+        <p>Start today — your first SI seller will be ready in a few minutes.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://app.techsmartflow.com/">Начать бесплатно</a>
-          <a class="btn btn-ghost" href="https://t.me/smartflow_ai_support_bot/app">Открыть в Telegram</a>
+          <a class="btn btn-primary" href="https://app.techsmartflow.com/">Start for free</a>
+          <a class="btn btn-ghost" href="https://t.me/smartflow_ai_support_bot/app">Open in Telegram</a>
         </div>
       </div>
     </div>
@@ -372,9 +210,9 @@
   <div class="wrap">
     <a class="logo" href="/"><img src="/images/logo-mark.webp" alt="" width="28" height="28">SmartFlow</a>
     <div class="links">
-      <a href="https://app.techsmartflow.com/">Войти</a>
+      <a href="https://app.techsmartflow.com/">Sign in</a>
       <a href="https://t.me/smartflow_ai_support_bot/app">Telegram</a>
-      <a href="https://t.me/smartflow_ai_support_bot/app?startapp=S_support">Поддержка</a>
+      <a href="https://t.me/smartflow_ai_support_bot/app?startapp=S_support">Support</a>
     </div>
     <span>© <span id="y">2026</span> SmartFlow</span>
   </div>
