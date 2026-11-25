@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Палитра Smartflow</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#161213}a:hover{color:#E3121F}
+</style>
+</helmet>
+<div style="width: 1000px; height: 560px; box-sizing: border-box; padding: 44px; background: #FFFFFF; font-family: Montserrat, sans-serif; color: #161213; display: flex; gap: 44px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 22px">
+<h1 style="margin: 0; font-size: 34px; font-weight: 900; letter-spacing: -0.03em">Одна палитра на всё</h1>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 84px; border-radius: 12px; background: #E3121F"></div><span style="font-size: 13px; font-weight: 700">Красный</span><span style="font-size: 12px; color: #6A6262">#E3121F</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 84px; border-radius: 12px; background: #1BC6B4"></div><span style="font-size: 13px; font-weight: 700">Бирюза</span><span style="font-size: 12px; color: #6A6262">#1BC6B4</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 84px; border-radius: 12px; background: #161213"></div><span style="font-size: 13px; font-weight: 700">Чернила</span><span style="font-size: 12px; color: #6A6262">#161213</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 84px; border-radius: 12px; background: #F2F0EF"></div><span style="font-size: 13px; font-weight: 700">Туман</span><span style="font-size: 12px; color: #6A6262">#F2F0EF</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 84px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DCD7D5"></div><span style="font-size: 13px; font-weight: 700">Белый</span><span style="font-size: 12px; color: #6A6262">#FFFFFF</span></div>
+</div>
+<div style="display: flex; height: 22px; border-radius: 6px; overflow: hidden"><div style="flex: 60; background: #FFFFFF; border: 1px solid #DCD7D5; border-right: none"></div><div style="flex: 25; background: #161213"></div><div style="flex: 10; background: #E3121F"></div><div style="flex: 5; background: #1BC6B4"></div></div>
+<div style="display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<span><b>Красный</b> — только то, что важно сейчас: клиенты ждут, главная кнопка, Buddy.</span>
+<span><b>Бирюза</b> — хорошие новости: купили, оплачено, цель достигнута.</span>
+<span><b>Чернила и туман</b> — всё остальное. Чем спокойнее фон, тем громче красный.</span>
+<span style="color: #6A6262">Белый текст на красном проходит контраст. На бирюзе — только чёрный текст.</span>
+</div>
+</div>
+<div style="width: 300px; background: #F2F0EF; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; box-sizing: border-box">
+<div style="display: flex; align-items: flex-end; gap: 4px">
+<img src="/_blob/ec26cb1b4fedfaa1685b721840dd2029" alt="Buddy с планшетом" style="width: 80px; height: 88px; object-fit: contain">
+<img src="/_blob/47dbfa7dede37e9428a1714f916737e0" alt="Buddy с шарфом" style="width: 110px; height: 102px; object-fit: contain">
+<img src="/_blob/2799a8ceda1b8c060738557d4f80143c" alt="Buddy машет" style="width: 80px; height: 72px; object-fit: contain">
+</div>
+<span style="font-size: 15px; font-weight: 800">Buddy остаётся как есть</span>
+<span style="font-size: 13px; color: #6A6262; text-align: center; line-height: 1.4">Персонаж — единственное «объёмное» в интерфейсе. Всё вокруг плоское, чтобы он выделялся.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":560}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

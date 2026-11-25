@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Анатомия карточки и токены</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#161213}a:hover{color:#E3121F}
+</style>
+</helmet>
+<div style="width: 900px; height: 1000px; box-sizing: border-box; background: #FFFFFF; font-family: 'Golos Text', sans-serif; color: #161213; padding: 40px; display: flex; flex-direction: column; gap: 28px; font-variant-numeric: tabular-nums">
+<div style="display: flex; flex-direction: column; gap: 4px"><h1 style="margin: 0; font-size: 28px; font-weight: 800">Карточка воронки: анатомия</h1><span style="font-size: 15px; color: #6A6262">Почему каждый элемент там, где он есть</span></div>
+
+<div style="display: flex; gap: 40px; align-items: flex-start">
+<div style="width: 380px; flex-shrink: 0; background: #F2F0EF; border-radius: 20px; padding: 36px 24px; box-sizing: border-box; position: relative">
+<div style="background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; gap: 12px; position: relative">
+<div style="width: 84px; height: 96px; flex-shrink: 0; border-radius: 10px; background: #FDECEC; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; justify-content: flex-end"><div style="height: 8px; width: 70%; border-radius: 4px; background: #FFFFFF"></div><div style="height: 8px; width: 55%; border-radius: 4px; background: #E3121F; align-self: flex-end"></div><div style="height: 8px; width: 80%; border-radius: 4px; background: #FFFFFF"></div><span style="font-size: 11px; font-weight: 700; color: #8A0B14">5 шагов</span></div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 15px; font-weight: 700; line-height: 1.25">Курс через бесплатный урок и рассрочку</span>
+<span style="font-size: 13px; color: #6A6262">Ерлан Т. ✓ · ★ 4,8 (212)</span>
+<div style="display: flex; gap: 6px; margin-top: 2px"><span style="font-size: 12px; font-weight: 700; color: #0B5A52; background: #DDF6F3; border-radius: 6px; padding: 3px 6px">7,4% в покупку</span><span style="font-size: 12px; font-weight: 600; background: #F2F0EF; border-radius: 6px; padding: 3px 6px">% от продаж</span></div>
+<span style="font-size: 12px; color: #6A6262">Подключили 128 экспертов</span>
+</div>
+<div style="position: absolute; left: 98px; top: 30px; width: 12px; height: 1px; background: #E3121F"></div>
+<span style="position: absolute; left: 92px; top: 14px; font-size: 10px; font-weight: 700; color: #C20F1A">12</span>
+</div>
+<span style="position: absolute; left: 8px; top: 58px; width: 22px; height: 22px; border-radius: 11px; background: #E3121F; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center">1</span>
+<span style="position: absolute; right: 6px; top: 46px; width: 22px; height: 22px; border-radius: 11px; background: #E3121F; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center">2</span>
+<span style="position: absolute; right: 6px; top: 92px; width: 22px; height: 22px; border-radius: 11px; background: #E3121F; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center">3</span>
+<span style="position: absolute; right: 6px; top: 120px; width: 22px; height: 22px; border-radius: 11px; background: #E3121F; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center">4</span>
+<span style="position: absolute; right: 6px; top: 148px; width: 22px; height: 22px; border-radius: 11px; background: #E3121F; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center">5</span>
+</div>
+
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 14px; line-height: 1.45">
+<li style="display: flex; gap: 10px"><b style="color: #C20F1A; width: 14px">1</b><span><b>Превью шагов.</b> Покупатель сразу видит длину воронки и где в ней продажа — без перехода в карточку.</span></li>
+<li style="display: flex; gap: 10px"><b style="color: #C20F1A; width: 14px">2</b><span><b>Название = результат.</b> Не больше 2 строк, дальше обрезка. Пишется языком эксперта, не маркетолога.</span></li>
+<li style="display: flex; gap: 10px"><b style="color: #C20F1A; width: 14px">3</b><span><b>Доверие.</b> Автор, отметка проверки и рейтинг всегда с числом отзывов: «4,8» без «(212)» ничего не значит.</span></li>
+<li style="display: flex; gap: 10px"><b style="color: #C20F1A; width: 14px">4</b><span><b>Конверсия</b> — главная метрика маркета. Бирюзой показываем только при 30+ диалогах, иначе серое «мало данных».</span></li>
+<li style="display: flex; gap: 10px"><b style="color: #C20F1A; width: 14px">5</b><span><b>Сколько людей подключили</b> — соцдоказательство мельче всего: оно помогает, но не решает.</span></li>
+</ol>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; border-top: 1px solid #E6E1DF; padding-top: 24px">
+<div style="display: flex; flex-direction: column; gap: 10px"><span style="font-size: 13px; font-weight: 700; color: #6A6262">Отступы (кратно 4)</span>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 4px; height: 12px; background: #E3121F"></span>4 — внутри бейджа</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 8px; height: 12px; background: #E3121F"></span>8 — между бейджами</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 12px; height: 12px; background: #E3121F"></span>12 — превью ↔ текст</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 16px; height: 12px; background: #E3121F"></span>16 — край экрана</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 24px; height: 12px; background: #E3121F"></span>24 — между секциями</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 700; color: #6A6262">Шрифт Golos Text</span>
+<span style="font-size: 24px; font-weight: 800; line-height: 1.2">24 · Экран</span>
+<span style="font-size: 17px; font-weight: 800">17 · Секция</span>
+<span style="font-size: 15px; font-weight: 700">15 · Карточка</span>
+<span style="font-size: 13px; font-weight: 500">13 · Мета</span>
+<span style="font-size: 12px; font-weight: 600">12 · Бейдж — минимум</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px"><span style="font-size: 13px; font-weight: 700; color: #6A6262">Бейджи результата</span>
+<span style="align-self: flex-start; font-size: 12px; font-weight: 700; color: #0B5A52; background: #DDF6F3; border-radius: 6px; padding: 3px 6px">7,4% в покупку</span>
+<span style="align-self: flex-start; font-size: 12px; font-weight: 600; color: #6A6262; background: #F2F0EF; border-radius: 6px; padding: 3px 6px">мало данных</span>
+<span style="align-self: flex-start; font-size: 12px; font-weight: 700; color: #FFFFFF; background: #161213; border-radius: 6px; padding: 3px 6px">новинка</span>
+<span style="align-self: flex-start; font-size: 12px; font-weight: 700; color: #8A0B14; background: #FDECEC; border-radius: 6px; padding: 3px 6px">падает 3 недели</span>
+<span style="font-size: 12px; color: #6A6262; line-height: 1.4">Красный бейдж — только предупреждение, не реклама.</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":900,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
