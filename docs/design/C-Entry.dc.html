@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Клиент — первое касание</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0B5A52}a:hover{color:#161213}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #FFFFFF; font-family: 'Golos Text', sans-serif; color: #161213; position: relative; overflow: hidden; font-variant-numeric: tabular-nums">
+<div style="padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #E6E1DF">
+<span style="width: 44px; height: 44px; border-radius: 22px; background: #1BC6B4; color: #0B2E2A; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">А</span>
+<span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 700">Алия · помощница Анны</span><span style="font-size: 12px; color: #6A6262">ИИ-консультант · отвечает сразу</span></span>
+<button style="height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid #161213; background: #FFFFFF; font-size: 13px; font-weight: 700; color: #161213">Позвать Анну</button>
+</div>
+<div style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="border: 1px solid #E6E1DF; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 40px; height: 40px; border-radius: 20px; background: #161213; color: #FFFFFF; font-weight: 700; display: flex; align-items: center; justify-content: center">АН</span><span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 700">Анна Н. · нутрициолог</span><span style="font-size: 12px; color: #6A6262">[опыт и число учениц]</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; color: #4A4343">
+<span>• Алия — ИИ-помощница Анны, отвечает в любое время</span>
+<span>• Анна подключится сама, если вы попросите</span>
+<span>• Спрашивать можно бесплатно и без регистрации</span>
+</div>
+</div>
+<div style="align-self: flex-start; max-width: 84%; background: #F2F0EF; border-radius: 18px 18px 18px 4px; padding: 10px 13px; font-size: 15px; line-height: 1.45">Здравствуйте! Я Алия. Помогу понять, подойдёт ли вам курс Анны. Что для вас сейчас важнее всего?</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding-left: 8px">
+<button style="min-height: 46px; padding: 0 14px; border-radius: 12px; border: 2px solid #0B5A52; background: #DDF6F3; font-weight: 700; color: #161213; font-size: 15px; text-align: left">Перестать срываться по вечерам</button>
+<button style="min-height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid #9FD9D1; background: #FFFFFF; font-weight: 500; color: #161213; font-size: 15px; text-align: left">Похудеть без жёстких диет</button>
+<button style="min-height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid #9FD9D1; background: #FFFFFF; font-weight: 500; color: #161213; font-size: 15px; text-align: left">Наладить питание для всей семьи</button>
+</div>
+</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 14px 26px; border-top: 1px solid #E6E1DF; display: flex; gap: 10px; align-items: center; background: #FFFFFF">
+<label style="flex: 1; height: 46px; border-radius: 23px; background: #F2F0EF; display: flex; align-items: center; padding: 0 16px"><input aria-label="Сообщение" placeholder="Или напишите своими словами" style="flex: 1; border: none; background: none; font-size: 15px; font-family: inherit; outline: none"></label>
+<button aria-label="Голосовое сообщение" style="width: 46px; height: 46px; border-radius: 23px; border: none; background: #1BC6B4; color: #0B2E2A; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
+</div>
+<span style="position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 11px; color: #6A6262">работает на Smartflow</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
