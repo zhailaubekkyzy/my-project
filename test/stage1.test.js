@@ -4943,11 +4943,11 @@ async function runAllTests() {
     noRawHtml(al);
     assert.ok(ds.focusCard({ title: 't', bars: [{ value: 50 }, { value: 20, loss: true }] }).includes('ds-bar-loss'));
     const ab = ds.actionBar({ price: 'N%', sub: 'с каждой продажи', button: { text: 'Подключить' } });
-    assert.ok(ab.includes('ds-actionbar') && ab.includes('ds-btn-primary'));
+    assert.ok(ab.includes('ds-actionbar') && ab.includes('ds-btn-good'));
     const sh = ds.sheet({ title: 'Подключить шаблон', body: 'x', onclose: 'close()' });
     assert.ok(sh.includes('role="dialog"') && sh.includes('aria-label="Закрыть"') && sh.includes('close()'));
     const of = ds.offerCard({ title: evil, options: [{ id: 'o', label: 'Сразу', price: '[цена]' }], selected: 'o', button: { text: 'Перейти к оплате' }, fineprint: 'Деньги идут эксперту напрямую' });
-    assert.ok(of.includes('ds-offer') && of.includes('aria-checked="true"') && of.includes('ds-btn-primary') && of.includes('ds-fineprint'));
+    assert.ok(of.includes('ds-offer') && of.includes('aria-checked="true"') && of.includes('ds-btn-good') && of.includes('ds-fineprint'));
     noRawHtml(of);
     assert.ok(ds.giftCard({ title: 'g', button: { text: 'Записать' } }).includes('ds-btn-good'), '«Записать» is turquoise');
     assert.ok(ds.composer().includes('ds-mic') && ds.composer().includes('работает на SmartFlow'));
@@ -4987,9 +4987,15 @@ async function runAllTests() {
     has('expert', ['ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb', 'ds-tabbar', 'ds-head', 'ds-stats', 'ds-step-sale', 'ds-actionbar', 'ds-sheet', 'ds-choice', 'ds-alert', 'ds-btn-reason']);
     has('marketer', ['ds-progress', 'ds-pill', 'ds-tiles', 'ds-segmented', 'ds-steps-edit', 'ds-step-mine', 'ds-step-warn', 'ds-cond', 'ds-toggle', 'ds-checklist', 'ds-check-todo', 'ds-big', 'ds-focus', 'ds-bars']);
     has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
-    // «Опубликовать» is turquoise like «Записать» (owner's decision 27 Nov.)
-    for (const m of pages.marketer.matchAll(/<button[^>]*class="([^"]*)"[^>]*>Опубликовать</g)) assert.ok(m[1].includes('ds-btn-good'), m[1]);
-    assert.ok(/ds-btn-good[^>]*>Опубликовать/.test(pages.marketer));
+    // Every positive action is turquoise (owner's decision 27 Nov.); red only for the urgent
+    const all = Object.values(pages).join('');
+    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать']) {
+      const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(?:<i[^>]*><\/i>)?([^<]*)</g)].filter(m => m[2] === label);
+      assert.ok(found.length, label);
+      for (const m of found) assert.ok(m[1].includes('ds-btn-good'), `${label}: ${m[1]}`);
+    }
+    assert.ok(beta.ds.button({ text: 'x' }).includes('ds-btn-good'), 'a button is positive (turquoise) by default');
+    assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{ background: var\(--ds-teal\)/.test(designCss()));
     // The owner's rules in the paths: no «SI-», no review before publishing, the client's role starts with «ИИ-»
     for (const html of Object.values(pages)) {
       assert.ok(!/SI-|на проверку|без регистрации|Позвать/.test(html));

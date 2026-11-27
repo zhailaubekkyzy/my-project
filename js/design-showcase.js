@@ -193,8 +193,9 @@
       ${section('Шрифт Golos Text', `<span class="ds-h1">24 · Экран</span><span class="ds-h2">17 · Секция</span><span class="ds-h3">15 · Карточка</span><span class="ds-meta">13 · Подпись</span><span style="font-size:12px;font-weight:600">12 · Бейдж</span><span class="ds-num">1 111 · 8 808</span>`)}
       ${section('Отступы и радиусы', `<div class="ds-stack">${[[1, 4], [2, 8], [3, 12], [4, 16], [6, 24]].map(([k, px]) => `<div class="ds-row" style="gap:10px;font-size:13px"><span class="ds-space-bar" style="width:var(--ds-space-${k})"></span>${px}</div>`).join('')}</div>
         <div class="ds-row" style="gap:16px">${['xs', 'sm', 'md', 'lg', 'xl'].map(k => `<span class="ds-radius-box" style="border-radius:var(--ds-radius-${k})"></span>`).join('')}</div>`)}
-      ${section('Кнопки', `${d.button({ text: 'Главная кнопка', size: 'lg', block: true })}
-        <div class="ds-row">${d.button({ text: 'Дальше', variant: 'dark' })}${d.button({ text: 'Обводка', variant: 'outline' })}${d.button({ text: 'Тихая', variant: 'quiet' })}${d.button({ text: 'Записать', variant: 'good' })}</div>
+      ${section('Кнопки', `${d.button({ text: 'Перейти к оплате', size: 'lg', block: true })}
+        <div class="ds-row">${d.button({ text: 'Дальше', variant: 'dark' })}${d.button({ text: 'Обводка', variant: 'outline' })}${d.button({ text: 'Тихая', variant: 'quiet' })}</div>
+        ${d.button({ text: 'Ответить: клиент ждёт', variant: 'primary', block: true })}
         ${d.button({ text: 'Опубликовать', variant: 'good', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}`)}
       ${section('Поля', `${d.search({ placeholder: 'Ниша, продукт или цель' })}
         ${d.field({ label: 'Название', placeholder: '[название]', hint: 'Это увидят клиенты' })}

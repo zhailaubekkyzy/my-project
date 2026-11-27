@@ -56,10 +56,10 @@
 
   // ---------------- Components ----------------
 
-  // variant: primary (red, one per screen) · dark · outline · quiet · good (turquoise: «Записать», «Опубликовать» —
-  // owner's decisions 27 Nov.)
+  // variant: good (turquoise, the default) — every positive action: «Перейти к оплате», «Подключить», «Опубликовать»,
+  // «Записать» (owner's decision 27 Nov.) · primary (red) — urgent only · dark · outline · quiet.
   // A disabled button always says why: pass `reason`.
-  function button({ text, variant = 'primary', size = '', block = false, onclick = '', disabled = false, reason = '', icon = '', type = 'button', label = '' } = {}) {
+  function button({ text, variant = 'good', size = '', block = false, onclick = '', disabled = false, reason = '', icon = '', type = 'button', label = '' } = {}) {
     const cls = ['ds-btn', `ds-btn-${variant}`, size === 'lg' ? 'ds-btn-lg' : '', block ? 'ds-btn-block' : ''].filter(Boolean).join(' ');
     const btn = `<button type="${type === 'submit' ? 'submit' : 'button'}" class="${cls}"${handler(disabled ? '' : onclick)}${disabled ? ' disabled' : ''}${label ? ` aria-label="${esc(label)}"` : ''}>${iconTag(icon, 'w-5 h-5')}${esc(text)}</button>`;
     if (!disabled) return btn;
@@ -377,7 +377,7 @@
     return `
       <div class="ds-actionbar">
         ${price || sub ? `<span class="ds-actionbar-price"><b>${esc(price)}</b><span>${esc(sub)}</span></span>` : ''}
-        ${btn ? button({ variant: 'primary', size: 'lg', block: true, ...btn }) : ''}
+        ${btn ? button({ variant: 'good', size: 'lg', block: true, ...btn }) : ''}
       </div>`;
   }
 
@@ -398,7 +398,7 @@
   const dateLine = (text) => `<span class="ds-date">${esc(text)}</span>`;
 
   // Chat: the offer — what the client gets, ways to pay, the pay button, the small print under it.
-  // options: [{ id, label, price }]; the button is red (main), unless variant says otherwise
+  // options: [{ id, label, price }]; the pay button is turquoise (a positive action)
   function offerCard({ title = '', meta = '', points = [], options = [], selected = '', onpick = '', button: btn = null, fineprint = '' } = {}) {
     return `
       <div class="ds-offer">
@@ -411,7 +411,7 @@
           <button type="button" class="ds-option" role="radio" aria-checked="${o.id === selected}"${handler(onpick ? onpick.replace('$id', o.id) : '')}>
             <span class="ds-radio" aria-hidden="true"></span><span>${esc(o.label)}</span><span class="ds-choice-right">${esc(o.price)}</span>
           </button>`).join('')}</div>` : ''}
-        ${btn || fineprint ? `<div class="ds-offer-foot">${btn ? button({ variant: 'primary', size: 'lg', block: true, ...btn }) : ''}${fineprint ? `<span class="ds-fineprint">${esc(fineprint)}</span>` : ''}</div>` : ''}
+        ${btn || fineprint ? `<div class="ds-offer-foot">${btn ? button({ variant: 'good', size: 'lg', block: true, ...btn }) : ''}${fineprint ? `<span class="ds-fineprint">${esc(fineprint)}</span>` : ''}</div>` : ''}
       </div>`;
   }
 

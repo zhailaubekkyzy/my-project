@@ -1,7 +1,7 @@
 /* design.css - SmartFlow design system (макеты 25 нояб., docs/design/; decision 27 Nov.).
  *
- * Colors: red = what matters now (urgent + the main button), turquoise = good news
- * (bought, paid, goal reached), ink and fog = everything else. White text on red, only dark text on turquoise.
+ * Colors: red = what matters now (urgent: a client is waiting, something is missing), turquoise = good news and
+ * every positive action (pay, connect, publish, sign up — owner's decision 27 Nov.), ink and fog = everything else. White text on red, only dark text on turquoise.
  * Font Golos Text, spacing in steps of 4 (4/8/12/16/24), numbers tabular.
  * Dark theme is ours (the mockups have none): <html data-theme="dark">, or .ds-theme-dark on a block for a preview.
  *
@@ -159,11 +159,11 @@
 .ds-btn:disabled { background: var(--ds-fog); color: var(--ds-muted); border-color: transparent; cursor: not-allowed; } /* gray, as in the mockups */
 .ds-btn-lg { min-height: 52px; font-size: 16px; }
 .ds-btn-block { display: flex; width: 100%; }
-.ds-btn-primary { background: var(--ds-red); color: var(--ds-on-red); }   /* one per screen */
+.ds-btn-primary { background: var(--ds-red); color: var(--ds-on-red); }   /* urgent only */
 .ds-btn-dark { background: var(--ds-ink); color: var(--ds-on-ink); }
 .ds-btn-outline { background: var(--ds-surface); color: var(--ds-ink); border-color: var(--ds-ink); }
 .ds-btn-quiet { background: transparent; color: var(--ds-ink); }
-.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }
+.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }   /* every positive action */
 .ds-btn-reason { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
 
 /* ---------- Field ---------- */
@@ -369,11 +369,12 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 .ds-icon-btn svg, .ds-icon-btn i { width: 20px; height: 20px; }
 .ds-phone { border: 1px solid var(--ds-line); border-radius: var(--ds-radius-xl); overflow: hidden; background: var(--ds-page); }
 
-/* ---------- Old parts of the screens in the new look (flag design-v2): flat, no shadows, no Tiffany ---------- */
+/* ---------- Old parts of the screens in the new look (flag design-v2): flat, no shadows; the old Tiffany buttons
+   (positive actions) become the new turquoise ---------- */
 [data-design="v2"] .glass-card-3d { border-radius: var(--ds-radius-lg); border-color: rgb(var(--c-line)); box-shadow: none; }
 [data-design="v2"] .glass-card-3d:hover { box-shadow: none; }
 [data-design="v2"] .tg-header { background: var(--ds-surface); backdrop-filter: none; }
-[data-design="v2"] .btn-3d-tiffany { background: var(--ds-ink); color: var(--ds-on-ink); border: 1px solid var(--ds-ink); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-tiffany { background: var(--ds-teal); color: var(--ds-teal-ink); border: 1px solid var(--ds-teal); border-radius: var(--ds-radius-md); box-shadow: none; }
 [data-design="v2"] .btn-3d-tiffany:active { transform: scale(0.98); box-shadow: none; }
 [data-design="v2"] .btn-3d-red { background: var(--ds-red); color: var(--ds-on-red); border: 1px solid var(--ds-red); border-radius: var(--ds-radius-md); box-shadow: none; }
 [data-design="v2"] .btn-3d-red:active { transform: scale(0.98); box-shadow: none; }
