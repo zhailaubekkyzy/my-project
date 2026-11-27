@@ -4843,6 +4843,10 @@ async function runAllTests() {
     assert.ok(/\.ds-btn \{[^}]*min-height: 46px/.test(css));
     assert.ok(/\.ds-input \{[^}]*font-size: 16px/.test(css));
     assert.ok(/prefers-reduced-motion/.test(css));
+    // As in the mockups: white page, flat cards and buttons without shadows (only in the new look)
+    assert.ok(/:root\[data-design="v2"\] \{[^}]*--c-page: 255 255 255/.test(css));
+    assert.ok(/\[data-design="v2"\] \.glass-card-3d \{[^}]*box-shadow: none/.test(css));
+    assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{[^}]*box-shadow: none/.test(css));
   });
 
   await test('98. Дизайн-система: базовые компоненты рисуются, текст людей экранируется', async () => {
@@ -4894,6 +4898,15 @@ async function runAllTests() {
     const em = ds.empty({ title: 'Пусто', text: evil, button: { text: 'Действие', onclick: 'x()' } });
     assert.strictEqual((em.match(/<button/g) || []).length, 1, 'one button on an empty screen');
     noRawHtml(em);
+    // Catalog parts from MK-Catalog: tabs with an underline, black chosen chip, step preview, list row (2 lines, ✓, badges)
+    const tb = ds.tabs([{ id: 'a', label: 'Шаблоны', num: 'N' }, { id: 'b', label: evil }], 'a');
+    assert.ok(tb.includes('aria-selected="true"') && tb.includes('ds-tab-num'));
+    noRawHtml(tb);
+    assert.ok(ds.chips([{ id: 'a', label: 'Раздел' }], 'a').includes('aria-pressed="true"'));
+    assert.ok(ds.thumb({ steps: 5 }).includes('5 шагов') && ds.thumb({ steps: 3, tone: 'teal' }).includes('3 шага') && ds.thumb({ steps: 1 }).includes('1 шаг<'));
+    const it = ds.item({ title: evil, meta: 'Автор', verified: true, badges: [{ text: 'N% в покупку', tone: 'good' }], preview: ds.thumb({ steps: 5 }) });
+    assert.ok(it.includes('ds-item-title') && it.includes('badge-check') && it.includes('ds-badge-good') && it.includes('ds-thumb'));
+    noRawHtml(it);
     const er = ds.error({ text: 'Нет интернета', retry: 'reload()', code: 'K7P2' });
     assert.ok(er.includes('role="alert"') && er.includes('Повторить') && er.includes('reload()') && er.includes('K7P2'));
   });
@@ -4917,7 +4930,7 @@ async function runAllTests() {
     // The showcase holds every base component
     const page = beta.ds.renderShowcase();
     for (const cls of ['ds-btn-primary', 'ds-input', 'ds-card', 'ds-badge', 'ds-status', 'ds-bubble-mine', 'ds-bubble-in', 'ds-role',
-      'ds-reply', 'ds-tabbar', 'ds-skel', 'ds-empty', 'ds-error', 'ds-swatch', 'ds-btn-reason']) assert.ok(page.includes(cls), cls);
+      'ds-reply', 'ds-tabbar', 'ds-skel', 'ds-empty', 'ds-error', 'ds-swatch', 'ds-btn-reason', 'ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb']) assert.ok(page.includes(cls), cls);
     assert.ok(page.includes('data-no-tr'));
     // Settings show the showcase row and screen only with the flag
     const profile = fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8');

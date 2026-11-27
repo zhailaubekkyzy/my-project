@@ -93,7 +93,7 @@
 
 /* ---------- New look for the whole app (flag design-v2) ---------- */
 :root[data-design="v2"] {
-  --c-page: 242 240 239;   /* fog */
+  --c-page: 255 255 255;   /* white, as in the mockups; fog is for fills */
   --c-card: 255 255 255;
   --c-sunken: 242 240 239;
   --c-raised: 236 232 231;
@@ -306,8 +306,62 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 .ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--ds-space-3); }
 .ds-space-bar { display: inline-block; height: 12px; background: var(--ds-red); }
 .ds-radius-box { width: 44px; height: 44px; background: var(--ds-fog-2); border: 1px solid var(--ds-line-2); }
-.ds-showcase { background: var(--ds-page); color: var(--ds-ink); display: flex; flex-direction: column; gap: var(--ds-space-6); padding: var(--ds-space-4); border-radius: var(--ds-radius-xl); }
+.ds-showcase { background: var(--ds-page); color: var(--ds-ink); display: flex; flex-direction: column; gap: 32px; padding: var(--ds-space-2) 0; }
 .ds-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-radius-md); background: var(--ds-fog); }
 .ds-switch button { min-height: 38px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 600; cursor: pointer; }
 .ds-switch button[aria-pressed="true"] { background: var(--ds-surface); color: var(--ds-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 .ds-tab > span:not(.ds-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Tabs, filter chips, list rows, catalog card (MK-Catalog, MK-Components) ---------- */
+.ds-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--ds-line); overflow-x: auto; scrollbar-width: none; }
+.ds-tabs::-webkit-scrollbar { display: none; }
+.ds-tabs button {
+  height: var(--ds-tap); padding: 0; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none;
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 500; color: var(--ds-muted); white-space: nowrap; cursor: pointer;
+}
+.ds-tabs button[aria-selected="true"] { color: var(--ds-ink); font-weight: 700; border-bottom-color: var(--ds-ink); }
+.ds-tabs .ds-tab-num { margin-left: 4px; color: var(--ds-muted); font-weight: 500; }
+.ds-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ds-chips::-webkit-scrollbar { display: none; }
+.ds-chip {
+  height: 34px; min-height: 34px; padding: 0 12px; border-radius: var(--ds-radius-sm); border: 1px solid var(--ds-line);
+  background: var(--ds-surface); color: var(--ds-ink); font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.ds-chip[aria-pressed="true"] { background: var(--ds-ink); color: var(--ds-on-ink); border-color: var(--ds-ink); font-weight: 600; }
+.ds-list > * + * { border-top: 1px solid var(--ds-line); }
+.ds-item { display: flex; gap: var(--ds-space-3); padding: 14px 0; color: var(--ds-ink); text-decoration: none; cursor: pointer; }
+.ds-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ds-item-title { font-size: var(--ds-text-card); font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ds-item-meta { font-size: var(--ds-text-meta); color: var(--ds-muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ds-item-meta svg, .ds-item-meta i { width: 13px; height: 13px; color: var(--ds-teal); }
+.ds-item-foot { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-thumb {
+  width: 84px; height: 96px; flex-shrink: 0; box-sizing: border-box; border-radius: 10px; padding: 8px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; background: var(--ds-fog);
+}
+.ds-thumb > i { display: block; height: 8px; border-radius: 4px; background: var(--ds-surface); }
+.ds-thumb > i.ds-thumb-sale { background: var(--ds-red); align-self: flex-end; }
+.ds-thumb > span { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--ds-ink); }
+.ds-thumb-red { background: var(--ds-red-tint); }
+.ds-thumb-red > span { color: var(--ds-red-deep); }
+.ds-thumb-teal { background: var(--ds-teal-tint); }
+.ds-thumb-teal > span { color: var(--ds-teal-text); }
+.ds-thumb-teal > i.ds-thumb-sale { background: var(--ds-ink); }
+.ds-hint-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--ds-radius-md); background: var(--ds-fog); font-size: var(--ds-text-meta); line-height: 1.35; }
+.ds-hint-card img { width: 34px; height: 34px; object-fit: contain; }
+.ds-link-red { border: none; background: none; padding: 0 4px; min-height: var(--ds-tap); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 700; color: var(--ds-red-ink); cursor: pointer; }
+.ds-icon-btn { width: var(--ds-tap); height: var(--ds-tap); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ds-radius-md); border: 1px solid var(--ds-line); background: var(--ds-surface); color: var(--ds-ink); cursor: pointer; }
+.ds-icon-btn svg, .ds-icon-btn i { width: 20px; height: 20px; }
+.ds-phone { border: 1px solid var(--ds-line); border-radius: var(--ds-radius-xl); overflow: hidden; background: var(--ds-page); }
+
+/* ---------- Old parts of the screens in the new look (flag design-v2): flat, no shadows, no Tiffany ---------- */
+[data-design="v2"] .glass-card-3d { border-radius: var(--ds-radius-lg); border-color: rgb(var(--c-line)); box-shadow: none; }
+[data-design="v2"] .glass-card-3d:hover { box-shadow: none; }
+[data-design="v2"] .tg-header { background: var(--ds-surface); backdrop-filter: none; }
+[data-design="v2"] .btn-3d-tiffany { background: var(--ds-ink); color: var(--ds-on-ink); border: 1px solid var(--ds-ink); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-tiffany:active { transform: scale(0.98); box-shadow: none; }
+[data-design="v2"] .btn-3d-red { background: var(--ds-red); color: var(--ds-on-red); border: 1px solid var(--ds-red); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-red:active { transform: scale(0.98); box-shadow: none; }
+[data-design="v2"] .btn-3d-dark { background: var(--ds-surface); color: var(--ds-ink); border: 1px solid var(--ds-line); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-dark:hover { border-color: var(--ds-ink); color: var(--ds-ink); }
+[data-design="v2"] .hero-tiffany-banner { background: var(--ds-fog); color: var(--ds-ink); box-shadow: none; border-radius: var(--ds-radius-lg); }

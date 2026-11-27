@@ -196,6 +196,41 @@
       </div>`;
   }
 
+  // Tabs with an underline (MK-Catalog): [{ id, label, num }]
+  function tabs(list = [], active = '', { onclick = '' } = {}) {
+    return `<div class="ds-tabs" role="tablist">${list.map(t =>
+      `<button type="button" role="tab" aria-selected="${t.id === active}"${handler(onclick ? onclick.replace('$id', t.id) : '')}>${esc(t.label)}${t.num != null && t.num !== '' ? `<span class="ds-tab-num">${esc(t.num)}</span>` : ''}</button>`).join('')}</div>`;
+  }
+
+  // Filter chips: the chosen one is black
+  function chips(list = [], active = '', { onclick = '' } = {}) {
+    return `<div class="ds-chips">${list.map(c =>
+      `<button type="button" class="ds-chip" aria-pressed="${c.id === active}"${handler(onclick ? onclick.replace('$id', c.id) : '')}>${esc(c.label)}</button>`).join('')}</div>`;
+  }
+
+  // Step preview on a catalog card: how long the path is and where the sale is (tone: red · teal · fog)
+  function thumb({ steps = 0, sale = 0, tone = 'red' } = {}) {
+    const n = Math.max(0, Math.floor(Number(steps) || 0));
+    const bars = [70, 55, 80].map((w, i) => `<i${i === 1 ? ' class="ds-thumb-sale"' : ''} style="width:${w}%"></i>`).join('');
+    const word = n % 10 === 1 && n % 100 !== 11 ? 'шаг' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'шага' : 'шагов');
+    return `<div class="ds-thumb${['red', 'teal'].includes(tone) ? ` ds-thumb-${tone}` : ''}" aria-hidden="true">${bars}${n ? `<span>${n} ${word}</span>` : ''}</div>`;
+  }
+
+  // A row of a list / catalog (MK-Components «анатомия»): preview · title (2 lines max) · author ✓ · badges · small social proof
+  function item({ title = '', meta = '', verified = false, badges = [], foot = '', preview = '', onclick = '' } = {}) {
+    return `
+      <div class="ds-item"${onclick ? ` role="button" tabindex="0"${handler(onclick)}` : ''}>
+        ${preview}
+        <div class="ds-item-body">
+          <span class="ds-item-title">${esc(title)}</span>
+          ${meta ? `<span class="ds-item-meta">${esc(meta)}${verified ? iconTag('badge-check') : ''}</span>` : ''}
+          ${badges.length ? `<div class="ds-row" style="gap:6px;margin-top:2px">${badges.map(b => badge(b.text, b.tone)).join('')}</div>` : ''}
+          ${foot ? `<span class="ds-item-foot">${esc(foot)}</span>` : ''}
+        </div>
+      </div>`;
+  }
+  const list = (items) => `<div class="ds-list">${items.join('')}</div>`;
+
   // ---------------- Showcase: Настройки → «Дизайн-система» (only with the flag) ----------------
   // Sample texts only: no invented people, ratings or numbers.
   const PALETTE = [
@@ -225,7 +260,7 @@
       .map(([k, px, use]) => `<div class="ds-row" style="gap:10px;font-size:13px"><span class="ds-space-bar" style="width:var(--ds-space-${k})"></span>${px} — ${esc(use)}</div>`).join('');
     const radii = [['xs', 6, 'бейдж'], ['sm', 8, 'фильтр'], ['md', 12, 'кнопка, поле'], ['lg', 16, 'карточка'], ['xl', 20, 'панель']]
       .map(([k, px, use]) => `<div class="ds-stack" style="align-items:center;gap:4px"><span class="ds-radius-box" style="border-radius:var(--ds-radius-${k})"></span><span class="ds-small">${px} · ${esc(use)}</span></div>`).join('');
-    const tabs = [
+    const tabs_ = [
       { id: 'community', label: 'Комьюнити', icon: 'users' },
       { id: 'marketplace', label: 'Маркетплейс', icon: 'store' },
       { id: 'buddy', label: 'Бадди', buddy: true },
@@ -243,6 +278,31 @@
               `<button type="button" aria-pressed="${preview === id}" onclick="SF.actions.dsPreview('${id}')">${esc(label)}</button>`).join('')}
           </div>
         </div>
+
+        ${section('Пример экрана: каталог', `
+          <div class="ds-phone">
+            <div class="ds-stack" style="gap:12px;padding:12px 16px 0">
+              <div class="ds-row" style="flex-wrap:nowrap">
+                <div style="flex:1">${search({ placeholder: 'Ниша, продукт или цель' })}</div>
+                <button type="button" class="ds-icon-btn" aria-label="Избранное"><i data-lucide="bookmark" aria-hidden="true"></i></button>
+              </div>
+              ${tabs([{ id: 't', label: 'Шаблоны', num: 'N' }, { id: 's', label: 'Специалисты' }], 't')}
+              ${chips([{ id: 'a', label: 'Раздел 1' }, { id: 'b', label: 'Раздел 2' }, { id: 'c', label: 'Раздел 3' }], 'a')}
+              <div class="ds-hint-card"><img src="images/mascots/si-buddy.webp" alt="" /><span style="flex:1">Подсказка Бадди в одну-две строки</span><button type="button" class="ds-link-red">Изменить</button></div>
+            </div>
+            <div style="padding:0 16px">
+              ${list([
+                item({ title: 'Название шаблона = результат для клиента', meta: 'Имя автора', verified: true, preview: thumb({ steps: 5, tone: 'red' }),
+                  badges: [{ text: 'N% в покупку', tone: 'good' }, { text: '% от продаж', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
+                item({ title: 'Второй шаблон: диагностика → консультация', meta: 'Имя автора', preview: thumb({ steps: 3, tone: 'teal' }),
+                  badges: [{ text: 'N% в запись', tone: 'good' }, { text: 'Бесплатно', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
+                item({ title: 'Третий шаблон, пока без цифр', meta: 'Имя автора · новинка', preview: thumb({ steps: 7, tone: 'fog' }),
+                  badges: [{ text: 'мало данных', tone: 'neutral' }, { text: 'Разово · [цена]', tone: 'neutral' }] })
+              ])}
+            </div>
+            ${tabbar(tabs_, 'marketplace')}
+          </div>
+          <span class="ds-small">Собрано из деталей ниже, как в макете MK-Catalog. Тексты и N — места для настоящих данных.</span>`)}
 
         ${section('Палитра', `
           <div class="ds-grid">${swatches}</div>
@@ -311,7 +371,7 @@
           </div>
           <span class="ds-small">Роль «ИИ-…» — бледно-серым под именем. Готовый ответ = сообщение клиента.</span>`)}
 
-        ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs, 'marketplace')}</div>`)}
+        ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs_, 'marketplace')}</div>`)}
 
         ${section('Четыре состояния экрана', `
           <span class="ds-meta">Загрузка — скелет в форме настоящих карточек</span>
@@ -333,6 +393,6 @@
   SF.ds = {
     FLAG, on, apply,
     button, field, search, card, badge, count, status, STATUSES, chatHead, bubble, replies, typing, tabbar,
-    skeleton, empty, error, renderShowcase
+    skeleton, empty, error, tabs, chips, thumb, item, list, renderShowcase
   };
 })(window);
