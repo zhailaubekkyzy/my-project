@@ -72,6 +72,7 @@
       ${group([
         SF.data.signedIn() ? row({ icon: 'gift', label: 'Пригласить друзей', onclick: "SF.push('invite')" }) : '',
         row({ icon: 'life-buoy', label: 'Поддержка', onclick: 'SF.actions.openSupport()' }),
+        row({ icon: 'scale', label: 'Правовая информация', onclick: "SF.push('legal')" }),
         me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : ''
       ])}
       ${SF.inTelegram && !SF.inTelegram() ? group([
@@ -519,12 +520,24 @@
     }
   };
 
+  // ---------------- Правовая информация: the documents open as web pages ----------------
+  const LEGAL_LINKS = [
+    ['privacy', 'Privacy Policy'],
+    ['terms', 'Terms of Service'],
+    ['dpa', 'Data Processing Addendum'],
+    ['dmca', 'Copyright (DMCA)']
+  ];
+  function renderLegal() {
+    return group(LEGAL_LINKS.map(([slug, label]) =>
+      row({ icon: 'file-text', label, onclick: `SF.openLink(SF.legalUrl('${slug}'))` })));
+  }
+
   // ---------------- Screen ----------------
   // Support panel screens (route.screen 'admin…') are in js/screens/admin.js
   const isAdmin = (route) => route.screen.startsWith('admin');
   // The Office opens inside Settings (owner's decision 23 Nov.): its screens are in js/screens/office.js
   const isOffice = (route) => route.screen.startsWith('office');
-  const TITLES = { view: 'Настройки', me: 'Мой профиль', edit: 'Редактировать профиль', invite: 'Пригласить друзей' };
+  const TITLES = { view: 'Настройки', me: 'Мой профиль', edit: 'Редактировать профиль', invite: 'Пригласить друзей', legal: 'Правовая информация' };
   SF.screens.profile = {
     title(route, state) {
       if (isAdmin(route)) return SF.admin.title(route, state);
@@ -537,6 +550,7 @@
       if (route.screen === 'edit') return renderEdit(state);
       if (route.screen === 'me') return renderView(state);
       if (route.screen === 'invite') return renderInvite(state);
+      if (route.screen === 'legal') return renderLegal();
       return renderSettings(state);
     },
     afterRender(route, state) {

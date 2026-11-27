@@ -220,6 +220,11 @@
     }
   }
 
+  // Legal documents (legal/*.md): pages on the same address as the app — /privacy, /terms, /dpa, /dmca
+  function legalUrl(slug) {
+    return `${location.origin}/${slug}`;
+  }
+
   function copyText(text, okMessage = 'Ссылка скопирована') {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => showToast(okMessage)).catch(() => showToast(text));
@@ -308,6 +313,7 @@
     isPartner,
     closeModal,
     openLink,
+    legalUrl,
     copyText,
     withErrorCode,
     scrollToBottom
