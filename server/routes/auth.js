@@ -81,7 +81,8 @@ router.post('/telegram', async (req, res, next) => {
       user: { ...(await supportService.sessionUser(user)), telegramId: user.telegramId },
       app: await appInfo.forUser(user.id),
       projects,
-      subscription
+      subscription,
+      signedUp: !knownBefore // первый вход: без ссылки телефон открывает Маркетплейс
     });
   } catch (err) {
     next(err);
@@ -102,9 +103,10 @@ const emailRoute = (fn) => async (req, res, next) => {
   }
 };
 
-/** POST /api/auth/email/start { email } — a letter with a 6-digit code */
+/** POST /api/auth/email/start { email, lang } — a letter with a 6-digit code (lang: 'en' — the letter in English) */
 router.post('/email/start', emailRoute(async (req, res) => {
-  const result = await emailLogin.start((req.body || {}).email, clientIp(req));
+  const body = req.body || {};
+  const result = await emailLogin.start(body.email, clientIp(req), body.lang === 'en' ? 'en' : 'ru');
   analytics.capture('email_code_requested', null); // no e-mail in the numbers: anonymous
   res.json(result);
 }));
@@ -124,7 +126,8 @@ router.post('/email/verify', emailRoute(async (req, res) => {
     user: await supportService.sessionUser(user),
     app: await appInfo.forUser(user.id),
     projects: await projectService.getUserProjects(user.id),
-    subscription: await subscriptionService.getPlatformSubscription(user.id)
+    subscription: await subscriptionService.getPlatformSubscription(user.id),
+    signedUp: Boolean(user.created)
   });
 }));
 
@@ -152,7 +155,8 @@ router.post('/google', async (req, res, next) => {
       user: await supportService.sessionUser(user),
       app: await appInfo.forUser(user.id),
       projects: await projectService.getUserProjects(user.id),
-      subscription: await subscriptionService.getPlatformSubscription(user.id)
+      subscription: await subscriptionService.getPlatformSubscription(user.id),
+      signedUp: Boolean(user.created)
     });
   } catch (err) {
     if (err instanceof googleLogin.GoogleLoginError) return res.status(err.status).json({ error: 'bad_request', code: err.code, message: err.message });

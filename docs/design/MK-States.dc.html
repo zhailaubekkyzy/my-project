@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Маркет — состояния экрана</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#161213}a:hover{color:#E3121F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1000px; height: 844px; box-sizing: border-box; background: #F2F0EF; font-family: 'Golos Text', sans-serif; color: #161213; padding: 32px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><h1 style="margin: 0; font-size: 26px; font-weight: 800">Каталог: не только «всё хорошо»</h1><span style="font-size: 14px; color: #6A6262">Каждый экран рисуется минимум в 4 состояниях</span></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; flex: 1">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 700; color: #6A6262">A · Загрузка</span>
+<div style="flex: 1; background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="height: 40px; border-radius: 10px; background: #F2F0EF"></div>
+<div style="display: flex; gap: 6px"><div style="height: 30px; width: 90px; border-radius: 8px; background: #F2F0EF"></div><div style="height: 30px; width: 70px; border-radius: 8px; background: #F2F0EF"></div><div style="height: 30px; width: 80px; border-radius: 8px; background: #F2F0EF"></div></div>
+<div style="display: flex; gap: 12px"><div style="width: 72px; height: 84px; border-radius: 10px; background: #ECE8E7"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"><div style="height: 12px; width: 90%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 12px; width: 60%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 10px; width: 40%; border-radius: 4px; background: #F2F0EF"></div></div></div>
+<div style="display: flex; gap: 12px"><div style="width: 72px; height: 84px; border-radius: 10px; background: #ECE8E7"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"><div style="height: 12px; width: 80%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 12px; width: 50%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 10px; width: 45%; border-radius: 4px; background: #F2F0EF"></div></div></div>
+<div style="display: flex; gap: 12px"><div style="width: 72px; height: 84px; border-radius: 10px; background: #ECE8E7"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"><div style="height: 12px; width: 85%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 12px; width: 55%; border-radius: 4px; background: #ECE8E7"></div><div style="height: 10px; width: 35%; border-radius: 4px; background: #F2F0EF"></div></div></div>
+</div>
+<span style="font-size: 13px; line-height: 1.4; color: #4A4343">Скелет повторяет форму настоящей карточки — экран не «прыгает», когда данные приходят.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 700; color: #6A6262">B · Ничего не нашлось</span>
+<div style="flex: 1; background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="height: 40px; border-radius: 10px; background: #F2F0EF; display: flex; align-items: center; padding: 0 12px; font-size: 14px">йога для беременных</div>
+<img src="/_blob/ec26cb1b4fedfaa1685b721840dd2029" alt="Buddy с планшетом" style="width: 100px; height: 110px; object-fit: contain; align-self: center; margin-top: 10px">
+<span style="font-size: 17px; font-weight: 800; text-align: center; line-height: 1.3">Таких воронок ещё нет</span>
+<span style="font-size: 14px; color: #6A6262; text-align: center; line-height: 1.4">Можем попросить маркетологов сделать её. Вы узнаете первой.</span>
+<button style="height: 46px; border: none; border-radius: 12px; background: #161213; color: #FFFFFF; font-size: 15px; font-weight: 700">Заказать воронку</button>
+<span style="font-size: 13px; font-weight: 700; color: #6A6262; margin-top: 4px">Похожие ниши</span>
+<div style="display: flex; gap: 6px; flex-wrap: wrap"><span style="font-size: 13px; border: 1px solid #E6E1DF; border-radius: 8px; padding: 6px 10px">Фитнес · 42</span><span style="font-size: 13px; border: 1px solid #E6E1DF; border-radius: 8px; padding: 6px 10px">Нутрициология · 18</span></div>
+</div>
+<span style="font-size: 13px; line-height: 1.4; color: #4A4343">Пустой экран превращается в спрос: заявки показывают маркетологам, какие воронки нужны.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 13px; font-weight: 700; color: #6A6262">C · Нет сети</span>
+<div style="flex: 1; background: #FFFFFF; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column">
+<div style="background: #161213; color: #FFFFFF; padding: 12px 16px; display: flex; align-items: center; gap: 10px"><span style="flex: 1; font-size: 13px; line-height: 1.35">Нет интернета. Показываем то, что сохранили</span><button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #FFFFFF; background: none; color: #FFFFFF; font-size: 13px; font-weight: 700">Обновить</button></div>
+<div style="padding: 16px; display: flex; flex-direction: column; gap: 14px; opacity: .55">
+<div style="display: flex; gap: 12px"><div style="width: 72px; height: 84px; border-radius: 10px; background: #FDECEC"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; font-weight: 700">Курс через бесплатный урок</span><span style="font-size: 12px; color: #6A6262">Ерлан Т. · ★ 4,8</span></div></div>
+<div style="display: flex; gap: 12px"><div style="width: 72px; height: 84px; border-radius: 10px; background: #DDF6F3"></div><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 14px; font-weight: 700">Диагностика → консультация</span><span style="font-size: 12px; color: #6A6262">Smartflow · ★ 4,6</span></div></div>
+</div>
+<div style="margin: auto 16px 16px; border: 1px dashed #DCD7D5; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.4; color: #4A4343">Кнопка «Подключить» скрыта, пока нет связи — чтобы не было «вечной» загрузки после нажатия.</div>
+</div>
+<span style="font-size: 13px; line-height: 1.4; color: #4A4343">Ошибка не блокирует экран: пользователь всё ещё видит каталог.</span>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

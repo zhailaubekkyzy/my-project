@@ -35,20 +35,25 @@ function normalizeEmail(raw) {
 
 const hashOf = (email, code) => crypto.createHash('sha256').update(`${config.jwtSecret}|${email}|${code}`).digest('hex');
 
-function letter(code) {
-  const text = `Ваш код для входа в SmartFlow: ${code}\n\nКод действует ${CODE_MINUTES} минут. Если вы не входили в SmartFlow, просто не отвечайте на это письмо.`;
+function letter(code, lang = 'ru') {
+  const en = lang === 'en';
+  const intro = en ? 'Your SmartFlow sign-in code:' : 'Ваш код для входа в SmartFlow:';
+  const note = en
+    ? `The code is valid for ${CODE_MINUTES} minutes. If you did not try to sign in to SmartFlow, just ignore this e-mail.`
+    : `Код действует ${CODE_MINUTES} минут. Если вы не входили в SmartFlow, просто не отвечайте на это письмо.`;
+  const text = `${intro} ${code}\n\n${note}`;
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a">
-    <p>Ваш код для входа в SmartFlow:</p>
+    <p>${intro}</p>
     <p style="font-size:30px;font-weight:bold;letter-spacing:6px;color:#0d9488">${code}</p>
-    <p style="color:#64748b">Код действует ${CODE_MINUTES} минут. Если вы не входили в SmartFlow, просто не отвечайте на это письмо.</p>
+    <p style="color:#64748b">${note}</p>
   </div>`;
-  return { subject: `${code} — код для входа в SmartFlow`, text, html };
+  return { subject: en ? `${code} — your SmartFlow sign-in code` : `${code} — код для входа в SmartFlow`, text, html };
 }
 
 /**
  * Sends a code. Returns { sent: true, seconds } (and devCode on a developer's computer without Resend, for tests).
  */
-async function start(rawEmail, ip = '') {
+async function start(rawEmail, ip = '', lang = 'ru') {
   const email = normalizeEmail(rawEmail);
   const now = new Date();
   const hourAgo = sqlTime(new Date(now.getTime() - 3600 * 1000));
@@ -75,7 +80,7 @@ async function start(rawEmail, ip = '') {
     console.log(`[SmartFlow Mail] (на компьютере разработчика, без Resend) код для ${email}: ${code}`);
     return { sent: true, seconds: RESEND_SECONDS, devCode: code };
   }
-  const ok = await mail.send({ to: email, ...letter(code) });
+  const ok = await mail.send({ to: email, ...letter(code, lang) });
   if (!ok) throw new EmailLoginError('Не получилось отправить письмо. Проверьте почту и попробуйте ещё раз', 502, 'MAIL_FAILED');
   return { sent: true, seconds: RESEND_SECONDS };
 }
@@ -101,4 +106,4 @@ async function verify(rawEmail, rawCode) {
   return require('./auth-service').findOrCreateEmailUser(email);
 }
 
-module.exports = { EmailLoginError, normalizeEmail, start, verify, CODE_MINUTES, MAX_ATTEMPTS };
+module.exports = { letter, EmailLoginError, normalizeEmail, start, verify, CODE_MINUTES, MAX_ATTEMPTS };

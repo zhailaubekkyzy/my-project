@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Три слоя платформы</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#161213}a:hover{color:#E3121F}
+</style>
+</helmet>
+<div style="width: 1400px; height: 680px; box-sizing: border-box; background: #FFFFFF; font-family: 'Golos Text', sans-serif; color: #161213; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><h1 style="margin: 0; font-size: 26px; font-weight: 800">Маркетолог даёт логику, эксперт — смысл, клиент видит одно целое</h1></div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1.15fr); align-items: stretch">
+<div style="background: #F2F0EF; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 800; color: #6A6262">СЛОЙ 1 · МАРКЕТОЛОГ</span><span style="font-size: 18px; font-weight: 800">Скелет воронки</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">1 · Приветствие + вопрос о цели</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">2 · Урок-прогрев</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px; border-left: 3px solid #161213">3 · «Дорого» → {рассрочка}</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">4 · Оплата</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">5 · Дожим через 24 ч</span>
+<span style="font-size: 13px; color: #4A4343; margin-top: 4px">Порядок, условия, приёмы продаж. Не знает продукт.</span>
+</div>
+<div style="display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; color: #6A6262" aria-hidden="true">+</div>
+<div style="background: #DDF6F3; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 800; color: #0B5A52">СЛОЙ 2 · ЭКСПЕРТ</span><span style="font-size: 18px; font-weight: 800">Мозг бизнеса</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">Курс «Питание без срывов», 4 недели</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px; border-left: 3px solid #1BC6B4">Рассрочка: 3 платежа без переплаты</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">Тон: на «вы», тепло, без давления</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">3 отзыва, ссылка на оплату</span>
+<span style="font-size: 14px; background: #FFFFFF; border-radius: 8px; padding: 8px 10px">Консультант: «Алия»</span>
+<span style="font-size: 13px; color: #0B4A44; margin-top: 4px">Факты о продукте. Не трогает логику воронки.</span>
+</div>
+<div style="display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; color: #6A6262" aria-hidden="true">=</div>
+<div style="background: #161213; color: #FFFFFF; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; font-weight: 800; color: #A39C9C">СЛОЙ 3 · КЛИЕНТ ВИДИТ</span><span style="font-size: 18px; font-weight: 800">Один живой разговор</span>
+<span style="align-self: flex-end; background: #E3121F; border-radius: 14px 14px 4px 14px; padding: 9px 12px; font-size: 14px">Звучит классно, но дорого</span>
+<span style="align-self: flex-start; max-width: 92%; background: #FFFFFF; color: #161213; border-radius: 14px 14px 14px 4px; padding: 10px 12px; font-size: 14px; line-height: 1.5"><span style="border-bottom: 2px solid #161213">Понимаю, Динара, сразу всю сумму отдать непросто.</span> <span style="background: #DDF6F3; border-radius: 3px; padding: 0 2px">«Питание без срывов» можно оплатить в 3 платежа без переплаты.</span></span>
+<span style="font-size: 13px; color: #A39C9C; line-height: 1.45">Подчёркнуто — приём маркетолога. Бирюзой — факты эксперта. Клиент видит только эксперта и его консультанта: бренд Smartflow — мелко внизу.</span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid #E6E1DF; padding-top: 16px; font-size: 14px; line-height: 1.45">
+<span><b>Маркетолог обновил скелет</b> → эксперт видит «Доступна версия 2: что изменилось» и сам решает, принять ли. Работающая воронка не меняется без спроса.</span>
+<span><b>Эксперт сменил цену</b> → меняется только в его воронках. Скелет и другие эксперты не затронуты.</span>
+<span><b>Smartflow отвечает за</b> пометку «это ИИ-помощник», кнопку «позвать человека» и данные клиентов. Ни один слой это не отключает.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":680}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

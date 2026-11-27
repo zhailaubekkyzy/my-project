@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Маркет — веб-каталог</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#161213}a:hover{color:#E3121F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 1000px; background: #FFFFFF; font-family: 'Golos Text', sans-serif; color: #161213; font-variant-numeric: tabular-nums; position: relative">
+<header style="border-bottom: 1px solid #E6E1DF">
+<div style="max-width: 1360px; margin: 0 auto; padding: 14px 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px">
+<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #E3121F"></span>smartflow</span>
+<nav style="display: flex; gap: 20px; font-size: 15px; font-weight: 600"><a href="#" style="text-decoration: none; color: #161213; border-bottom: 2px solid #E3121F; padding-bottom: 2px">Маркет</a><a href="#" style="text-decoration: none; color: #6A6262">Офис</a><a href="#" style="text-decoration: none; color: #6A6262">Сообщество</a></nav>
+<label style="flex: 1 1 320px; height: 44px; border-radius: 12px; background: #F2F0EF; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: #6A6262"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input aria-label="Поиск" value="онлайн-курс" style="flex: 1; border: none; background: none; font-size: 15px; font-family: inherit; outline: none; color: #161213"></label>
+<a href="#" style="font-size: 15px; font-weight: 700; color: #C20F1A; text-decoration: none">Продать свою воронку</a>
+<span style="width: 40px; height: 40px; border-radius: 20px; background: #161213; color: #FFFFFF; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center">А</span>
+</div>
+</header>
+
+<div style="max-width: 1360px; margin: 0 auto; padding: 24px 32px 120px; display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+<aside style="flex: 1 1 240px; max-width: 260px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 17px; font-weight: 800">Фильтры</span><button style="border: none; background: none; font-size: 14px; font-weight: 600; color: #C20F1A; height: 32px">Сбросить</button></div>
+<fieldset style="border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px"><legend style="font-size: 13px; font-weight: 700; color: #6A6262; padding: 0; margin-bottom: 10px">Цель воронки</legend>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #161213">Продажа <span style="margin-left: auto; color: #6A6262; font-size: 13px">64</span></label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #161213">Запись на приём <span style="margin-left: auto; color: #6A6262; font-size: 13px">15</span></label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #161213">Сбор заявок <span style="margin-left: auto; color: #6A6262; font-size: 13px">7</span></label>
+</fieldset>
+<fieldset style="border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px"><legend style="font-size: 13px; font-weight: 700; color: #6A6262; padding: 0; margin-bottom: 10px">Модель оплаты</legend>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #161213">% от продаж</label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #161213">Подписка</label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #161213">Разово</label>
+</fieldset>
+<div style="display: flex; flex-direction: column; gap: 10px"><span style="font-size: 13px; font-weight: 700; color: #6A6262">Конверсия в покупку</span><div style="display: flex; gap: 6px"><button style="flex: 1; height: 36px; border-radius: 8px; border: 1px solid #E6E1DF; background: #FFFFFF; font-size: 14px">любая</button><button style="flex: 1; height: 36px; border-radius: 8px; border: 2px solid #161213; background: #FFFFFF; font-size: 14px; font-weight: 700">от 5%</button><button style="flex: 1; height: 36px; border-radius: 8px; border: 1px solid #E6E1DF; background: #FFFFFF; font-size: 14px">от 10%</button></div></div>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #161213">Только проверенные авторы</label>
+</aside>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px"><h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em">Воронки для онлайн-курсов</h1><span style="font-size: 14px; color: #6A6262">Найдено 64 · фильтров: 3</span></div>
+<div style="display: flex; gap: 6px; font-size: 14px"><button style="height: 36px; padding: 0 12px; border-radius: 8px; border: none; background: #161213; color: #FFFFFF; font-weight: 600">По конверсии</button><button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #E6E1DF; background: #FFFFFF; color: #161213">Популярные</button><button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #E6E1DF; background: #FFFFFF; color: #161213">Новые</button></div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px">
+
+<article style="border: 2px solid #161213; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 112px; background: #FDECEC; padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px"><div style="display: flex; gap: 4px"><span style="height: 8px; flex: 1; border-radius: 4px; background: #E3121F"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #E3121F"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #E3121F"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #F5B7BB"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #F5B7BB"></span></div><span style="font-size: 12px; font-weight: 700; color: #8A0B14">5 шагов · покупка на 3-м</span></div>
+<div style="padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1"><span style="font-size: 16px; font-weight: 700; line-height: 1.25">Курс через бесплатный урок и рассрочку</span><span style="font-size: 13px; color: #6A6262">Ерлан Т. · ★ 4,8 (212)</span><div style="display: flex; gap: 6px; margin-top: 4px"><span style="font-size: 12px; font-weight: 700; color: #0B5A52; background: #DDF6F3; border-radius: 6px; padding: 3px 6px">7,4% в покупку</span><span style="font-size: 12px; font-weight: 600; background: #F2F0EF; border-radius: 6px; padding: 3px 6px">10% от продаж</span></div></div>
+<label style="border-top: 1px solid #E6E1DF; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #E3121F">В сравнении</label>
+</article>
+
+<article style="border: 1px solid #E6E1DF; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 112px; background: #DDF6F3; padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px"><div style="display: flex; gap: 4px"><span style="height: 8px; flex: 1; border-radius: 4px; background: #0B5A52"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #0B5A52"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #9FE3DA"></span></div><span style="font-size: 12px; font-weight: 700; color: #0B5A52">3 шага · запись на 2-м</span></div>
+<div style="padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1"><span style="font-size: 16px; font-weight: 700; line-height: 1.25">Диагностика → консультация → программа</span><span style="font-size: 13px; color: #6A6262">Smartflow · ★ 4,6 (89)</span><div style="display: flex; gap: 6px; margin-top: 4px"><span style="font-size: 12px; font-weight: 700; color: #0B5A52; background: #DDF6F3; border-radius: 6px; padding: 3px 6px">12% в запись</span><span style="font-size: 12px; font-weight: 600; background: #F2F0EF; border-radius: 6px; padding: 3px 6px">Бесплатно</span></div></div>
+<label style="border-top: 1px solid #E6E1DF; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #4A4343"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #E3121F">Сравнить</label>
+</article>
+
+<article style="border: 2px solid #161213; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 112px; background: #F2F0EF; padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px"><div style="display: flex; gap: 4px"><span style="height: 8px; flex: 1; border-radius: 4px; background: #161213"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #161213"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #161213"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #161213"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #E3121F"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #CFC9C7"></span><span style="height: 8px; flex: 1; border-radius: 4px; background: #CFC9C7"></span></div><span style="font-size: 12px; font-weight: 700; color: #4A4343">7 шагов · марафон</span></div>
+<div style="padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1"><span style="font-size: 16px; font-weight: 700; line-height: 1.25">Марафон на 5 дней с продажей в конце</span><span style="font-size: 13px; color: #6A6262">Айжан К. · ★ 4,9 (64)</span><div style="display: flex; gap: 6px; margin-top: 4px"><span style="font-size: 12px; font-weight: 700; color: #0B5A52; background: #DDF6F3; border-radius: 6px; padding: 3px 6px">9,1% в покупку</span><span style="font-size: 12px; font-weight: 600; background: #F2F0EF; border-radius: 6px; padding: 3px 6px">[ЦЕНА]/мес</span></div></div>
+<label style="border-top: 1px solid #E6E1DF; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #E3121F">В сравнении</label>
+</article>
+
+</div>
+</main>
+</div>
+
+<div style="position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); background: #161213; color: #FFFFFF; border-radius: 16px; padding: 10px 10px 10px 20px; display: flex; align-items: center; gap: 20px; box-shadow: 0 12px 30px rgba(22,18,19,.25); white-space: nowrap">
+<span style="font-size: 15px; font-weight: 600">2 воронки в сравнении</span>
+<button style="height: 44px; padding: 0 20px; border-radius: 10px; border: none; background: #E3121F; color: #FFFFFF; font-size: 15px; font-weight: 700">Сравнить</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -3978,7 +3978,16 @@ async function runAllTests() {
       const inquiry = await db.get(`SELECT * FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id]);
       assert(inquiry && inquiry.reason.includes('можно ли беременным'), 'The expert gets the question');
       const lead = await db.get('SELECT * FROM clients WHERE project_id = ?', [seller.id]);
-      assert.strictEqual(lead.responsible_type, 'human', 'The client waits for a person');
+      assert.strictEqual(lead.responsible_type, 'si', 'The SI keeps talking (owner’s decision 24 Nov.)');
+      assert.strictEqual(lead.funnel_status, 'waiting_human', '«Ждут человека» — the question waits for the expert');
+      // The next unknown question joins the waiting one: no new request, no second notification
+      const notes = await db.get('SELECT COUNT(*) AS n FROM notifications');
+      const again = await api('POST', `/api/chat/${slug}/messages`, client, { text: 'А кормящим?' });
+      assert(again.body.reply, 'The SI answers again');
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).n), 1);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM notifications')).n), Number(notes.n), 'No second notification');
+      assert((await db.get(`SELECT reason FROM direct_inquiries WHERE project_id = ? AND status = 'waiting'`, [seller.id])).reason.split('\n').length, 2);
+      assert(system.includes('ТОЛЬКО когда сам не смог ответить'), 'The SI hands over only what it could not answer');
 
       // Templates: the niche from the list, the FAQ on the page
       const prof = (await api('GET', '/api/me/profile', ex)).body.user.profile;
@@ -4269,7 +4278,276 @@ async function runAllTests() {
     }
   });
 
-  await test('86. Юридические документы: /privacy, /terms, /dpa, /dmca с версией и датой, раздел DMCA по якорю', async () => {
+  await test('86. Новичок без ссылки: Маркетплейс, а Бадди пишет через минуту — один раз и только новичку', async () => {
+    const welcome = require('../server/services/welcome-service');
+    const scheduler = require('../server/services/scheduler-service');
+    const signIn = async (email) => {
+      const code = await api('POST', '/api/auth/email/start', null, { email });
+      return (await api('POST', '/api/auth/email/verify', null, { email, code: code.body.devCode })).body;
+    };
+    const fresh = await signIn('welcome.new@example.com');
+    assert.strictEqual(fresh.signedUp, true, 'The first sign-in is a sign-up');
+    await db.run(`UPDATE email_codes SET created_at = ? WHERE email = 'welcome.new@example.com'`, ['2020-01-01 00:00:00']);
+    assert.strictEqual((await signIn('welcome.new@example.com')).signedUp, false, 'The next sign-in is not');
+
+    const ask = () => api('POST', '/api/buddy/welcome', fresh.token);
+    assert.strictEqual((await ask()).body.scheduled, true);
+    assert.strictEqual((await ask()).body.scheduled, false, 'Only once');
+    const count = async () => Number((await db.get(
+      'SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND text = ?', [fresh.user.id, welcome.TEXT.ru])).n);
+    // Not before the minute
+    assert.strictEqual((await welcome.runWelcomes(new Date(Date.now() + 20 * 1000))).sent, 0);
+    assert.strictEqual(await count(), 0);
+    // After the minute — through the server's alarm clock, to Buddy
+    const run = (await scheduler.tick(new Date(Date.now() + 2 * 60 * 1000))).find(r => r.name === 'buddy-welcome');
+    assert(run && run.result && run.result.sent === 1, 'The alarm clock sends it');
+    assert.strictEqual(await count(), 1);
+    assert.strictEqual((await welcome.runWelcomes(new Date(Date.now() + 5 * 60 * 1000))).sent, 0, 'Never again');
+    assert.strictEqual(await count(), 1);
+    assert.strictEqual((await ask()).body.scheduled, false);
+
+    // An old account gets nothing, even if the phone asks
+    const old = await signIn('welcome.old@example.com');
+    await db.run('UPDATE users SET created_at = ? WHERE id = ?', ['2020-01-01 00:00:00', old.user.id]);
+    assert.strictEqual((await api('POST', '/api/buddy/welcome', old.token)).body.scheduled, false);
+    assert.strictEqual((await api('POST', '/api/buddy/welcome', null)).status, 401);
+  });
+
+  await test('87. Язык с главной страницы: письмо с кодом и язык нового аккаунта', async () => {
+    const emailLogin = require('../server/services/email-login');
+    const en = emailLogin.letter('123456', 'en');
+    assert(/your SmartFlow sign-in code/.test(en.subject) && /valid for/.test(en.text) && !/[А-Яа-я]/.test(en.text));
+    assert(/код для входа/.test(emailLogin.letter('123456').subject), 'Russian by default');
+    // The page asks for an English letter; anything else — Russian
+    const start = await api('POST', '/api/auth/email/start', null, { email: 'lang.en@example.com', lang: 'en' });
+    assert.strictEqual(start.status, 200);
+    const odd = await api('POST', '/api/auth/email/start', null, { email: 'lang.odd@example.com', lang: '<script>' });
+    assert.strictEqual(odd.status, 200);
+    // A new browser account keeps its language: Buddy's welcome comes in English
+    const res = (await api('POST', '/api/auth/email/verify', null, { email: 'lang.en@example.com', code: start.body.devCode })).body;
+    assert.strictEqual(res.signedUp, true);
+    assert.strictEqual(res.user.langChosen, false);
+    assert.strictEqual((await api('PUT', '/api/me/lang', res.token, { lang: 'en' })).body.lang, 'en');
+    const welcome = require('../server/services/welcome-service');
+    await api('POST', '/api/buddy/welcome', res.token);
+    await welcome.runWelcomes(new Date(Date.now() + 2 * 60 * 1000));
+    const sent = await db.get('SELECT text FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [res.user.id]);
+    assert.strictEqual(sent.text, welcome.TEXT.en);
+  });
+
+  await test('88. Пауза SI: значок в «Мне написали», эксперт отвечает, «Продолжить с SI» — SI видит его ответ', async () => {
+    const realFetch = global.fetch;
+    const originalKey = config.openaiApiKey;
+    try {
+      const ex = await tokenFor({ id: 880001, first_name: 'Эксперт', last_name: 'Пауза' });
+      const cl = await tokenFor({ id: 880002, first_name: 'Клиент', last_name: 'Пауза' });
+      const seller = (await api('POST', '/api/projects', ex, { name: 'Продавец паузы' })).body;
+      const slug = seller.slug;
+      // The client asks for a person: the SI pauses, «Мне написали» shows it
+      assert.strictEqual((await api('POST', `/api/chat/${slug}/human`, cl, {})).status < 300, true);
+      let list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(list.length, 1);
+      assert.strictEqual(Number(list[0].si_paused), 1, 'The pause mark');
+      const clientId = list[0].client_id;
+      // The expert answers personally, then presses «Продолжить с SI»
+      await api('POST', `/api/projects/${seller.id}/conversations/${clientId}/messages`, ex, { text: 'Здравствуйте! Есть рассрочка на 3 месяца.' });
+      assert.strictEqual(Number((await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body[0].si_paused), 1, 'Still paused until the expert decides');
+      await api('POST', `/api/projects/${seller.id}/clients/${clientId}/si`, ex, { enabled: true });
+      list = (await api('GET', `/api/projects/${seller.id}/clients/inquiries/list`, ex)).body;
+      assert.strictEqual(Number(list[0].si_paused), 0);
+      // The SI answers again and sees the expert's words
+      let sent = null;
+      config.openaiApiKey = 'sk-test-not-real';
+      global.fetch = async (url, options) => {
+        if (String(url).startsWith('https://api.openai.com/')) {
+          const body = JSON.parse(options.body);
+          if (body.response_format) return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 });
+          sent = body.messages;
+          return new Response(JSON.stringify({ choices: [{ message: { content: 'Да, рассрочка на 3 месяца — оформить?' } }] }), { status: 200 });
+        }
+        return realFetch(url, options);
+      };
+      const reply = await api('POST', `/api/chat/${slug}/messages`, cl, { text: 'А как оформить рассрочку?' });
+      assert.strictEqual(reply.body.reply.text, 'Да, рассрочка на 3 месяца — оформить?');
+      assert(sent.some(m => m.role === 'system' && m.content === 'Эксперт лично написал(а) клиенту в этом чате: «Здравствуйте! Есть рассрочка на 3 месяца.»'), 'The expert’s answer is in the SI’s context, not as the SI’s own words');
+      assert(sent[0].content.includes('Ты не эксперт и не пишешь от его имени'));
+      assert(sent[0].content.includes('не здоровайся заново'));
+    } finally {
+      global.fetch = realFetch;
+      config.openaiApiKey = originalKey;
+    }
+  });
+
+  await test('89. Оплаты: настройки Whop — без явного WHOP_ENV оплаты выключены, тестовая копия не берёт боевой режим', async () => {
+    const { resolvePaymentSettings, percentToBps } = require('../server/services/payments/settings');
+    let s = resolvePaymentSettings({});
+    assert.strictEqual(s.whop.env, null);
+    assert.strictEqual(s.whop.apiBase, null);
+    assert.strictEqual(s.whop.envProblem, null, 'Nothing set — nothing to complain about');
+    s = resolvePaymentSettings({ WHOP_API_KEY: 'k_not_real' });
+    assert.strictEqual(s.whop.env, null, 'A key without WHOP_ENV does not start payments');
+    assert(/WHOP_ENV/.test(s.whop.envProblem));
+    s = resolvePaymentSettings({ WHOP_ENV: ' Sandbox ' });
+    assert.strictEqual(s.whop.env, 'sandbox');
+    assert.strictEqual(s.whop.apiBase, 'https://sandbox-api.whop.com/api/v1');
+    s = resolvePaymentSettings({ WHOP_ENV: 'production' });
+    assert.strictEqual(s.whop.apiBase, 'https://api.whop.com/api/v1');
+    s = resolvePaymentSettings({ WHOP_ENV: 'production' }, { appEnv: 'staging' });
+    assert.strictEqual(s.whop.env, null, 'The test copy never runs real payments');
+    s = resolvePaymentSettings({ WHOP_ENV: 'prod' });
+    assert.strictEqual(s.whop.env, null, 'Only the exact words');
+    assert(s.whop.envProblem.includes('prod'));
+    // Percentages are settings, not numbers in the code: not set = null
+    assert.strictEqual(s.platformFeeBps, null);
+    assert.strictEqual(s.marketerFeeBps, null);
+    assert.strictEqual(percentToBps('10'), 1000);
+    assert.strictEqual(percentToBps('7,5'), 750);
+    assert.strictEqual(percentToBps('abc'), null);
+    assert.strictEqual(percentToBps('150'), null);
+    assert.strictEqual(s.reserveBps, 1000);
+    assert.strictEqual(s.reserveDays, 90);
+    // The real config is built the same way; in the tests WHOP_ENV is not set
+    assert.strictEqual(require('../server/config').payments.whop.env, null);
+    for (const table of ['payment_accounts', 'payment_orders', 'payment_charges', 'payment_shares', 'payment_payouts', 'payment_reserves', 'payment_events']) {
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM ${table}`)).n), 0, table);
+    }
+  });
+
+  await test('90. Оплаты: вебхук Whop — без подписи и с неверной подписью 401, верный принят один раз', async () => {
+    const config = require('../server/config');
+    const payments = require('../server/services/payments');
+    const whop = require('../server/services/payments/whop');
+    const original = config.payments.whop;
+    const send = (body, headers = {}) => fetch(baseUrl + '/api/payments/webhooks/whop', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body
+    });
+    try {
+      // Payments not set up: nothing is accepted
+      assert.strictEqual((await send('{}')).status, 503);
+
+      config.payments.whop = { ...original, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: 'whop_test_key_not_real_123456', webhookSecret: 'ws_test_secret_not_real_abcdef', companyId: 'biz_test', envProblem: null };
+      const body = JSON.stringify({ type: 'payment.succeeded', data: { id: 'pay_test_1', total: { amount: '10.00', decimals: 2, currency: 'usd' } } });
+      const ts = String(Math.floor(Date.now() / 1000));
+      const good = { 'webhook-id': 'msg_test_1', 'webhook-timestamp': ts, 'webhook-signature': whop.signWebhook(body, { id: 'msg_test_1', timestamp: ts }) };
+
+      assert.strictEqual((await send(body)).status, 401, 'No signature');
+      assert.strictEqual((await send(body, { ...good, 'webhook-signature': 'v1,' + Buffer.alloc(32, 1).toString('base64') })).status, 401, 'Wrong signature');
+      assert.strictEqual((await send(body.replace('10.00', '99.00'), good)).status, 401, 'Changed body');
+      const otherSecret = whop.signWebhook(body, { id: 'msg_test_1', timestamp: ts, secret: 'ws_someone_else' });
+      assert.strictEqual((await send(body, { ...good, 'webhook-signature': otherSecret })).status, 401, 'Signed with another secret (e.g. the real Whop instead of the sandbox)');
+      const oldTs = String(Math.floor(Date.now() / 1000) - 10 * 60);
+      assert.strictEqual((await send(body, { 'webhook-id': 'msg_test_1', 'webhook-timestamp': oldTs, 'webhook-signature': whop.signWebhook(body, { id: 'msg_test_1', timestamp: oldTs }) })).status, 401, 'Old timestamp (a replayed webhook)');
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM payment_events')).n), 0, 'Nothing rejected is stored');
+
+      // Several signatures in one header (secret rotation): one valid is enough
+      const res = await send(body, { ...good, 'webhook-signature': `v1,${Buffer.alloc(32, 2).toString('base64')} ${good['webhook-signature']}` });
+      assert.strictEqual(res.status, 200);
+      const row = await db.get("SELECT * FROM payment_events WHERE event_id = 'msg_test_1'");
+      assert.strictEqual(row.provider, 'whop');
+      assert.strictEqual(row.provider_env, 'sandbox');
+      assert.strictEqual(row.type, 'payment.succeeded');
+      assert.strictEqual(row.status, 'ignored', 'Step 0: no handler yet');
+      const again = await send(body, good);
+      assert.strictEqual(again.status, 200);
+      assert.strictEqual((await again.json()).duplicate, true, 'The same webhook twice — processed once');
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM payment_events')).n), 1);
+
+      // A handler failed → 500, Whop sends it again → processed again
+      let fail = true;
+      let calls = 0;
+      payments.onEvent('membership.activated', async (event) => {
+        if (event.objectId !== 'mem_test_1') return;
+        calls++;
+        if (fail) throw new Error('boom with whop_test_key_not_real_123456');
+      });
+      const mBody = JSON.stringify({ type: 'membership.activated', data: { id: 'mem_test_1' } });
+      const mHeaders = { 'webhook-id': 'msg_test_2', 'webhook-timestamp': ts, 'webhook-signature': whop.signWebhook(mBody, { id: 'msg_test_2', timestamp: ts }) };
+      assert.strictEqual((await send(mBody, mHeaders)).status, 500);
+      const failed = await db.get("SELECT status, error FROM payment_events WHERE event_id = 'msg_test_2'");
+      assert.strictEqual(failed.status, 'failed');
+      assert(!failed.error.includes('whop_test_key_not_real_123456'), 'The key never lands in the database');
+      fail = false;
+      assert.strictEqual((await send(mBody, mHeaders)).status, 200);
+      assert.strictEqual((await db.get("SELECT status FROM payment_events WHERE event_id = 'msg_test_2'")).status, 'processed');
+      assert.strictEqual(calls, 2);
+
+      // /api/health tells the mode and «set / not set» — never the key or the secret
+      const healthText = await (await fetch(baseUrl + '/api/health')).text();
+      const health = JSON.parse(healthText);
+      assert.strictEqual(health.payments.whop.env, 'sandbox');
+      assert.strictEqual(health.payments.whop.configured, true);
+      assert(!healthText.includes('whop_test_key_not_real') && !healthText.includes('ws_test_secret_not_real'));
+    } finally {
+      config.payments.whop = original;
+    }
+  });
+
+  await test('91. Оплаты: запрос к Whop — адрес песочницы, ключ только в заголовке, в ошибках его нет', async () => {
+    const config = require('../server/config');
+    const whop = require('../server/services/payments/whop');
+    const original = config.payments.whop;
+    const realFetch = global.fetch;
+    try {
+      await assert.rejects(whop.request('GET', '/companies/biz_test'), /WHOP_ENV/, 'No mode — no requests at all');
+      const key = 'whop_test_key_not_real_987654';
+      config.payments.whop = { ...original, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: key, webhookSecret: 'ws_x_not_real', envProblem: null };
+      let seen = null;
+      global.fetch = async (url, options) => {
+        seen = { url: String(url), auth: options.headers.Authorization };
+        return new Response(JSON.stringify({ error: { message: `Invalid key ${key}` } }), { status: 401 });
+      };
+      const err = await whop.request('GET', '/companies/biz_test').then(() => null, e => e);
+      assert(err, 'An error answer becomes an error');
+      assert.strictEqual(seen.url, 'https://sandbox-api.whop.com/api/v1/companies/biz_test');
+      assert.strictEqual(seen.auth, `Bearer ${key}`);
+      assert.strictEqual(err.providerStatus, 401);
+      assert(!err.message.includes(key), 'The key is hidden in the error');
+      assert(err.message.includes('[скрыто]'));
+      global.fetch = async () => new Response(JSON.stringify({ id: 'biz_test' }), { status: 200 });
+      assert.strictEqual((await whop.request('GET', '/companies/biz_test')).id, 'biz_test');
+    } finally {
+      global.fetch = realFetch;
+      config.payments.whop = original;
+    }
+  });
+
+  await test('92. Оплаты: учёт в центах без дробей, доли сходятся до цента, Whop — только по флагу payments_whop', async () => {
+    const config = require('../server/config');
+    const payments = require('../server/services/payments');
+    const { moneyToMinor, splitCharge } = payments.ledger;
+    assert.strictEqual(moneyToMinor({ amount: '10.00', decimals: 2 }), 1000);
+    assert.strictEqual(moneyToMinor({ amount: '10.5', decimals: 2 }), 1050);
+    assert.strictEqual(moneyToMinor({ amount: '1500', decimals: 0 }), 1500);
+    assert.strictEqual(moneyToMinor({ amount: '0.29', decimals: 2 }), 29, 'No float: 0.29 * 100 = 28.999…');
+    assert.strictEqual(moneyToMinor({ amount: '1.005', decimals: 2 }), null, 'More digits than the currency has');
+    assert.strictEqual(moneyToMinor({ amount: 'abc', decimals: 2 }), null);
+    for (const amount of [0, 1, 99, 1000, 4999, 123457]) {
+      const s = splitCharge(amount, { platformBps: 1000, marketerBps: 1500 });
+      assert.strictEqual(s.seller + s.platform + s.marketer, amount, `Shares add up for ${amount}`);
+      assert.strictEqual(s.applicationFee, s.platform + s.marketer);
+    }
+    assert.deepStrictEqual(splitCharge(999, { platformBps: 1000 }), { seller: 900, platform: 99, marketer: 0, applicationFee: 99 }, 'Fees round down, the rest is the seller’s');
+    assert.throws(() => splitCharge(100, { platformBps: 6000, marketerBps: 5000 }), /100%/);
+    assert.throws(() => splitCharge(10.5), /integer/);
+
+    // Who sells through Whop: only with the provider set up AND the flag on for this seller
+    const seller = await authService.findOrCreateTelegramUser({ id: 920001, first_name: 'Продавец', last_name: 'Оплаты' }, 'expert');
+    const originalWhop = config.payments.whop;
+    const originalFeatures = config.features;
+    try {
+      config.features = ['payments_whop:all'];
+      assert.strictEqual(await payments.isEnabledForSeller(seller.id), false, 'Not set up — manual mode');
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: 'k_not_real_1', webhookSecret: 's_not_real_1', envProblem: null };
+      assert.strictEqual(await payments.isEnabledForSeller(seller.id), true);
+      config.features = [];
+      assert.strictEqual(await payments.isEnabledForSeller(seller.id), false, 'Flag off — manual mode');
+    } finally {
+      config.payments.whop = originalWhop;
+      config.features = originalFeatures;
+    }
+  });
+
+  await test('93. Юридические документы: /privacy, /terms, /dpa, /dmca с версией и датой, раздел DMCA по якорю', async () => {
     const legalDocs = require('../server/services/legal-docs');
     assert.deepStrictEqual(legalDocs.versions(), { privacy: 'v1.0', terms: 'v1.0', dpa: 'v1.0' });
     for (const [slug, title] of [['privacy', 'Smartflow Privacy Policy'], ['terms', 'Smartflow Terms of Service'], ['dpa', 'Smartflow Data Processing Addendum']]) {
@@ -4292,6 +4570,20 @@ async function runAllTests() {
     assert.ok(dmca.includes('/terms#dmca'));
     // The markdown sources themselves are never served
     assert.strictEqual((await fetch(`${baseUrl}/legal/privacy.md`)).status, 404);
+    // Home page of techsmartflow.com: visible links to every document and the app
+    const home = await (await fetch(`${baseUrl}/home`)).text();
+    for (const href of ['/privacy', '/terms', '/dpa', '/terms#dmca', 'https://app.techsmartflow.com']) assert.ok(home.includes(`href="${href}"`), `home: ${href}`);
+    // Cloudflare worker.js: root domain "/" → the home page, the app address untouched, www → root
+    const worker = (await import(require('url').pathToFileURL(path.join(__dirname, '..', 'worker.js')).href)).default;
+    const seen = [];
+    const env = { ASSETS: { fetch: async (req) => { seen.push(new URL(req.url).href); return new Response('ok'); } } };
+    await worker.fetch(new Request('https://techsmartflow.com/'), env);
+    await worker.fetch(new Request('https://app.techsmartflow.com/'), env);
+    await worker.fetch(new Request('https://techsmartflow.com/privacy'), env);
+    assert.deepStrictEqual(seen, ['https://techsmartflow.com/home', 'https://app.techsmartflow.com/', 'https://techsmartflow.com/privacy']);
+    const www = await worker.fetch(new Request('https://www.techsmartflow.com/'), env);
+    assert.strictEqual(www.status, 301);
+    assert.strictEqual(www.headers.get('location'), 'https://techsmartflow.com/');
   });
 
   await new Promise(resolve => httpServer.close(resolve));

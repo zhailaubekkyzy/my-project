@@ -187,7 +187,8 @@
 
     // Sign-in from a browser / the installed app: a code to the e-mail, then the code (owner's decisions 23 Nov.)
     async emailLoginStart(email) {
-      return await apiFetch('/api/auth/email/start', { method: 'POST', body: JSON.stringify({ email }) });
+      const lang = window.SF && window.SF.lang ? window.SF.lang() : 'ru';
+      return await apiFetch('/api/auth/email/start', { method: 'POST', body: JSON.stringify({ email, lang }) });
     },
     async emailLoginVerify(email, code) {
       const res = await apiFetch('/api/auth/email/verify', { method: 'POST', body: JSON.stringify({ email, code }) });
@@ -862,6 +863,11 @@
 
     async cancelBuddyPlan(id) {
       return await apiFetch(`/api/buddy/plans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    // Новичок без ссылки: Бадди поздоровается через минуту (сервер решает, новичок ли это)
+    async buddyWelcome() {
+      return await apiFetch('/api/buddy/welcome', { method: 'POST' });
     },
 
     async markBuddyRead() {

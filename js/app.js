@@ -16,6 +16,21 @@ const TABS = [
   { id: 'profile', label: 'Настройки', icon: 'settings', enabled: true }
 ];
 
+// Новичок без ссылки (решение владелицы 24 нояб.): первый экран — Маркетплейс, а Бадди пишет через минуту
+// (сервер, welcome-service.js). Пришёл по ссылке (SI-продавец, карточка, приглашение…) — ссылка решает сама.
+const startParamNow = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get('startapp');
+function afterSignIn(res) {
+  // Signed up in the browser (from the home page with ?lang=, or by this device's choice): the server keeps that
+  // language, so Buddy's welcome and notifications come in it too. In Telegram, Telegram's language decides.
+  if (res && res.signedUp && !SF.inTelegram() && !(res.user && res.user.langChosen)) {
+    window.smartFlowApi.setLanguage(SF.lang()).catch(() => {});
+  }
+  if (!res || !res.signedUp || startParamNow()) return false;
+  SF.go('marketplace');
+  window.smartFlowApi.buddyWelcome().catch(() => {});
+  return true;
+}
+
 // -------------------------------------------------------------
 // Login: Telegram inside the Mini App, dev login in a local browser preview
 // -------------------------------------------------------------
@@ -34,6 +49,7 @@ async function initTelegramAuth() {
     try {
       const res = await api.loginWithTelegram(initData, 'expert');
       store.setAuth(res);
+      afterSignIn(res);
       // The language the server knows (chosen in Профиль or Telegram's) wins over this device's guess
       if (res.user && res.user.lang && SF.setLang && res.user.lang !== SF.lang()) {
         SF.setLang(res.user.lang, { remember: Boolean(res.user.langChosen) });
@@ -87,7 +103,8 @@ const GOOGLE_KEY = 'sf_google_login';
 SF.actions.loginGoogle = () => {
   if (!login.google) return;
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
-  const pending = { nonce: rnd(), state: rnd() };
+  // The link the person came by (?startapp=…) survives the trip to Google and back
+  const pending = { nonce: rnd(), state: rnd(), startapp: startParamNow() || null };
   try { sessionStorage.setItem(GOOGLE_KEY, JSON.stringify(pending)); } catch (e) { /* the check below will fail honestly */ }
   const params = new URLSearchParams({
     client_id: login.google,
@@ -113,7 +130,11 @@ async function finishGoogleLogin() {
   }
   try {
     const res = await window.smartFlowApi.googleLogin(hash.get('id_token'), pending.nonce);
+    if (pending.startapp && /^[A-Za-z0-9_-]{1,64}$/.test(pending.startapp)) {
+      history.replaceState(null, '', `${location.pathname}?startapp=${encodeURIComponent(pending.startapp)}`);
+    }
     window.funnelStore.setAuth(res);
+    if (!afterSignIn(res) && startParamNow()) handleStartParam();
     SF.webPush.sync();
     return true;
   } catch (err) {
@@ -198,7 +219,8 @@ SF.actions.loginSubmit = async (e) => {
       login.step = 'email';
       window.funnelStore.setAuth(res);
       SF.webPush.sync();
-      SF.go('buddy');
+      // По ссылке — туда, куда она ведёт; новичок без ссылки — Маркетплейс; иначе Бадди
+      if (!afterSignIn(res)) { if (startParamNow()) handleStartParam(); else SF.go('buddy'); }
       return;
     }
   } catch (err) {
@@ -559,7 +581,7 @@ SF.openIn = (tab, screen, params = {}) => {
 
 // Links shared outside the app: t.me/smartflow_ai_support_bot/app?startapp=<param> (SF.appLink;
 // the test copy has its own bot, the server tells its link at sign-in)
-//   (no param)      → Buddy
+//   (no param)      → Buddy (first sign-up without a link — the Marketplace, Buddy writes a minute later)
 //   C_<projectId>   → consultant card in the Marketplace
 //   P_<userId>      → a person's profile
 //   I_<projectId>   → "Мне написали" in the Office (bot notification button)

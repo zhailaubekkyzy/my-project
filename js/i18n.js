@@ -18,8 +18,28 @@
     return RU_FAMILY.includes(code) ? 'ru' : 'en';
   }
 
+  // ?lang=en|ru — from the SmartFlow home page (techsmartflow.com, owner's decision 24 Nov.): the language the person
+  // read the page in goes on into the app and is remembered on this device; the mark is then removed from the address.
+  function fromAddress() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const value = params.get('lang');
+      if (!value) return null;
+      params.delete('lang');
+      const rest = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash);
+      return value === 'en' || value === 'ru' ? value : null;
+    } catch (e) { return null; }
+  }
+
   let lang = 'ru';
-  try { lang = localStorage.getItem(STORE_KEY) || fromTelegram(); } catch (e) { lang = fromTelegram(); }
+  const fromLink = fromAddress();
+  if (fromLink) {
+    lang = fromLink;
+    try { localStorage.setItem(STORE_KEY, lang); } catch (e) {}
+  } else {
+    try { lang = localStorage.getItem(STORE_KEY) || fromTelegram(); } catch (e) { lang = fromTelegram(); }
+  }
   if (lang !== 'en') lang = 'ru';
 
   // Exact phrases (trimmed). Keys are the Russian text as it appears on the screen.
@@ -36,6 +56,24 @@
     'эксперта': 'the expert', 'Автор': 'Author', 'Фото': 'Photo', 'Чат': 'Chat', 'Переписка': 'Conversation', 'Запись': 'Recording',
     'Бесплатно': 'Free', 'Пожаловаться': 'Report', 'Поддержка': 'Support',
     'ТЕСТ · тестовая копия SmartFlow': 'TEST · SmartFlow test copy',
+
+    // Sign-in outside Telegram (e-mail, Google) — the server's messages too
+    'Проверьте почту — например, name@gmail.com': 'Check the e-mail address — for example, name@gmail.com',
+    'Код уже отправлен — подождите минуту и проверьте почту, в том числе «Спам»': 'The code has already been sent — wait a minute and check your inbox, including Spam',
+    'Слишком много кодов на эту почту. Попробуйте через час': 'Too many codes for this e-mail. Try again in an hour',
+    'Слишком много попыток. Попробуйте через час': 'Too many attempts. Try again in an hour',
+    'Вход по почте скоро заработает — откройте SmartFlow в Telegram': 'E-mail sign-in is coming soon — open SmartFlow in Telegram',
+    'Не получилось отправить письмо. Проверьте почту и попробуйте ещё раз': 'Could not send the e-mail. Check the address and try again',
+    'Код — 6 цифр из письма': 'The code is the 6 digits from the e-mail', 'Код уже использован — запросите новый': 'This code has been used — request a new one',
+    'Код устарел — запросите новый': 'The code has expired — request a new one', 'Слишком много попыток — запросите новый код': 'Too many attempts — request a new code',
+    'Неверный код': 'Wrong code', 'Новый код отправлен': 'New code sent',
+    'Google сейчас не отвечает — попробуйте через минуту': 'Google is not responding — try again in a minute',
+    'Вход через Google скоро заработает — войдите по почте': 'Google sign-in is coming soon — sign in with e-mail',
+    'Google не подтвердил вход — попробуйте ещё раз': 'Google did not confirm the sign-in — please try again',
+    'Вход через Google не совпал — нажмите кнопку ещё раз': 'The Google sign-in did not match — tap the button again',
+    'У этого аккаунта Google не подтверждена почта — войдите по почте': 'This Google account has no confirmed e-mail — sign in with e-mail',
+    'Вход через Google отменён': 'Google sign-in cancelled', 'Вход через Google не получился — попробуйте ещё раз': 'Google sign-in failed — please try again',
+    'Вход через Google не получился': 'Google sign-in failed',
 
     // Groups in «Чаты»
     'Группа': 'Group', 'Новая группа': 'New group', 'Создать группу': 'Create group', 'О группе': 'About the group',
@@ -266,7 +304,7 @@
     'Заполните карточку SI-продавца: оффер, цену и свою ссылку на оплату. Потом отправьте его ссылку клиентам.': 'Fill in your SI-seller’s card: offer, price and your payment link. Then send its link to your clients.',
     'Заполните профиль, чтобы посетители вам доверяли. Покажу, что поднимет доверие быстрее всего.': 'Fill in your profile so visitors trust you. I will show what raises trust fastest.',
     'К профилю': 'To profile',
-    'Всё готово: SI-продавец работает, профиль заполнен. Скоро здесь появится Инкубатор — группы с целью и серией дней.': 'All set: your SI-seller works and your profile is filled in. The Incubator — groups with a goal and a series of days — is coming soon.',
+    'Всё готово: SI-продавец работает, профиль заполнен. Загляните в Комьюнити — там сообщества экспертов.': 'All set: your SI-seller works and your profile is filled in. Have a look at Community — expert communities are there.',
     'На сегодня сообщения Бадди закончились — продолжим завтра': 'Buddy’s messages for today are used up — let’s continue tomorrow',
     'Месяц': 'Month', 'Сегодня': 'Today', 'Завтра': 'Tomorrow', 'Открыть месяц': 'Open the month', 'Все планы дня': 'All plans of the day',
     'Прошлый месяц': 'Previous month', 'Следующий месяц': 'Next month',
@@ -324,6 +362,9 @@
 
   // Phrases with numbers or names inside: [RegExp of the Russian, English with $1…]
   const PATTERNS = [
+    [/^(.+) · эксперт$/, (m) => `${m[1]} · expert`],
+    [/^Помощник · (.+)$/, (m) => `${m[1]}’s assistant`],
+    [/^Код отправлен на (.+)$/, (m) => `Code sent to ${m[1]}`],
     [/^SI-продавцов: (\d+)(?: · ждут ответа: (\d+))?$/, (m) => `SI-sellers: ${m[1]}${m[2] ? ` · waiting for a reply: ${m[2]}` : ''}`],
     [/^(\d+) диалог\.$/, (m) => `${m[1]} conv.`],
     [/^Пробный период (\d+) дн\.$/, (m) => `Trial period ${m[1]} days`],
