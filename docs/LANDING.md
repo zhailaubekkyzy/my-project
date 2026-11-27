@@ -28,3 +28,10 @@
 ## Правки
 Текст — прямо в `landing/public/index.html` и `landing/public/ru/index.html`. После вливания в `main` Cloudflare обновляет страницу сам.
 Никаких выдуманных цифр, отзывов и клиентов — только правда о продукте.
+
+## Юридические документы (27 нояб.)
+В подвале обеих страниц — Privacy Policy, Terms of Service, Data Processing Addendum и DMCA:
+`techsmartflow.com/privacy`, `/terms`, `/dpa`, `/dmca` (последняя ведёт на раздел 14 Terms).
+Файлы `landing/public/privacy.html`, `terms.html`, `dpa.html`, `dmca.html` **не править руками**: их пишет
+`npm run build:legal` из `legal/*.md` (тексты владелицы). Новая версия документа — правка `legal/*.md`, новая
+`version`, затем `npm run build:legal`; тесты падают, если файлы лендинга отстали.

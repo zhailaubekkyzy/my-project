@@ -8,7 +8,8 @@
 //   date: 2026-11-24
 //   ---
 // A new version of a document = edit the file and raise `version` (and `date`). The same pages are built
-// into dist/ for Cloudflare (scripts/build-pages.js) and served by the server (server/index.js).
+// into dist/ for the app (scripts/build-pages.js), served by the server (server/index.js), and written into
+// the landing techsmartflow.com (landing/public/*.html, `npm run build:legal`, committed — the landing has no build).
 //
 // The markdown here is deliberately small: headings (with an optional {#anchor}), paragraphs, "- " and
 // "1. " lists, tables, **bold**, `code`, and e-mail addresses become mailto links.
@@ -127,16 +128,6 @@ header, footer { max-width: 760px; margin: 0 auto; padding: 16px; }
 header a { font-weight: 700; text-decoration: none; color: var(--ink); }
 footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 footer nav { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px; }
-.hero { text-align: center; padding: 24px 0 8px; }
-.hero img { border-radius: 16px; }
-.hero h1 { margin-top: 12px; }
-.slogan { font-size: 18px; font-weight: 600; color: var(--brand); margin: 0 0 12px; }
-.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px; }
-.btn { display: inline-block; padding: 12px 20px; border-radius: 14px; border: 1px solid var(--line); text-decoration: none; font-weight: 700; color: var(--ink); }
-.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
-.docs { padding-left: 20px; }
-.docs li { margin: 6px 0; }
-.ver { color: var(--muted); font-size: 14px; }
 `;
 
 function footerHtml() {
@@ -190,39 +181,12 @@ function renderDmca() {
     '<script>location.replace("/terms#dmca")</script>');
 }
 
-// The home page of techsmartflow.com (the root of the domain; the app itself is app.techsmartflow.com):
-// what Smartflow is, where to open it, and the legal documents — Google sign-in verification asks for a
-// home page with visible links to the Privacy Policy and Terms. Cloudflare shows it on the root domain
-// (worker.js), the server at /home.
-const APP_URL = 'https://app.techsmartflow.com';
-const TELEGRAM_URL = 'https://t.me/smartflow_ai_support_bot/app';
-function renderHome() {
-  const docs = [...DOCS.map(d => [d.slug, readDoc(d).title, readDoc(d).version]), ['terms#dmca', 'Copyright complaints (DMCA)', '']];
-  const content = `
-<div class="hero">
-  <img src="/images/logo-mark.webp" alt="" width="72" height="72">
-  <h1>Smartflow</h1>
-  <p class="slogan">From idea to selling. Faster.</p>
-  <p>Smartflow is a Telegram Mini App and web app where experts and businesses sell through AI sellers, and clients come back every day through their AI buddy.</p>
-  <div class="actions">
-    <a class="btn primary" href="${APP_URL}">Open the app</a>
-    <a class="btn" href="${TELEGRAM_URL}">Open in Telegram</a>
-  </div>
-</div>
-<h2 id="legal">Legal documents</h2>
-<ul class="docs">
-${docs.map(([slug, title, version]) => `  <li><a href="/${slug}">${esc(title)}</a>${version ? ` <span class="ver">${esc(version)}</span>` : ''}</li>`).join('\n')}
-</ul>`;
-  return page('Smartflow', 'Smartflow: experts and businesses sell through AI sellers. From idea to selling. Faster.', content);
-}
-
 // Every page: { slug, html }
 function allPages() {
   return [
     ...DOCS.map(d => ({ slug: d.slug, html: renderDoc(d.slug) })),
-    { slug: 'dmca', html: renderDmca() },
-    { slug: 'home', html: renderHome() }
+    { slug: 'dmca', html: renderDmca() }
   ];
 }
 
-module.exports = { DOCS, versions, renderDoc, renderDmca, renderHome, allPages, markdownToHtml };
+module.exports = { DOCS, versions, renderDoc, renderDmca, allPages, markdownToHtml };

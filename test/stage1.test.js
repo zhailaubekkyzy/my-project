@@ -4570,20 +4570,16 @@ async function runAllTests() {
     assert.ok(dmca.includes('/terms#dmca'));
     // The markdown sources themselves are never served
     assert.strictEqual((await fetch(`${baseUrl}/legal/privacy.md`)).status, 404);
-    // Home page of techsmartflow.com: visible links to every document and the app
-    const home = await (await fetch(`${baseUrl}/home`)).text();
-    for (const href of ['/privacy', '/terms', '/dpa', '/terms#dmca', 'https://app.techsmartflow.com']) assert.ok(home.includes(`href="${href}"`), `home: ${href}`);
-    // Cloudflare worker.js: root domain "/" → the home page, the app address untouched, www → root
-    const worker = (await import(require('url').pathToFileURL(path.join(__dirname, '..', 'worker.js')).href)).default;
-    const seen = [];
-    const env = { ASSETS: { fetch: async (req) => { seen.push(new URL(req.url).href); return new Response('ok'); } } };
-    await worker.fetch(new Request('https://techsmartflow.com/'), env);
-    await worker.fetch(new Request('https://app.techsmartflow.com/'), env);
-    await worker.fetch(new Request('https://techsmartflow.com/privacy'), env);
-    assert.deepStrictEqual(seen, ['https://techsmartflow.com/home', 'https://app.techsmartflow.com/', 'https://techsmartflow.com/privacy']);
-    const www = await worker.fetch(new Request('https://www.techsmartflow.com/'), env);
-    assert.strictEqual(www.status, 301);
-    assert.strictEqual(www.headers.get('location'), 'https://techsmartflow.com/');
+    // The landing techsmartflow.com carries the same pages (landing/public/*.html, npm run build:legal)
+    // and links to every document in the footer of both languages
+    for (const { slug, html } of legalDocs.allPages()) {
+      const file = path.join(__dirname, '..', 'landing', 'public', `${slug}.html`);
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), html, `landing/public/${slug}.html is out of date: run npm run build:legal`);
+    }
+    for (const page of ['index.html', 'ru/index.html']) {
+      const landing = fs.readFileSync(path.join(__dirname, '..', 'landing', 'public', page), 'utf8');
+      for (const href of ['/privacy', '/terms', '/dpa', '/dmca']) assert.ok(landing.includes(`href="${href}"`), `${page}: ${href}`);
+    }
   });
 
   await new Promise(resolve => httpServer.close(resolve));

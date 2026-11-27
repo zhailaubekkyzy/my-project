@@ -192,12 +192,11 @@ app.get('/sw.js', (req, res) => {
   res.type('application/javascript').sendFile(path.join(ROOT_DIR, 'sw.js'));
 });
 
-// Legal documents (legal/*.md): /privacy, /terms, /dpa, /dmca and the home page of the root domain (/home here) —
-// the same pages Cloudflare serves from dist/
+// Legal documents (legal/*.md): /privacy, /terms, /dpa and /dmca — the same pages Cloudflare serves from dist/
 const legalDocs = require('./services/legal-docs');
 for (const { slug } of legalDocs.allPages()) {
   app.get(`/${slug}`, (req, res) => {
-    const html = slug === 'dmca' ? legalDocs.renderDmca() : slug === 'home' ? legalDocs.renderHome() : legalDocs.renderDoc(slug);
+    const html = slug === 'dmca' ? legalDocs.renderDmca() : legalDocs.renderDoc(slug);
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html);
   });
