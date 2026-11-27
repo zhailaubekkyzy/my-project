@@ -1,0 +1,313 @@
+/* design.css - SmartFlow design system (макеты 25 нояб., docs/design/; decision 27 Nov.).
+ *
+ * Colors: red = what matters now (urgent + the main button), turquoise = good news
+ * (bought, paid, goal reached), ink and fog = everything else. White text on red, only dark text on turquoise.
+ * Font Golos Text, spacing in steps of 4 (4/8/12/16/24), numbers tabular.
+ * Dark theme is ours (the mockups have none): <html data-theme="dark">, or .ds-theme-dark on a block for a preview.
+ *
+ * Two layers:
+ *  1. --ds-* tokens and .ds-* components: always available; the showcase (Настройки → «Дизайн-система») uses them.
+ *  2. <html data-design="v2"> (flag `design-v2`, only BETA_USERS for now; js/design.js): the old --c-* tokens get
+ *     the new calm neutrals and the app gets Golos Text. Screens move to the .ds-* components one by one (step 2).
+ * Never write raw colors in screens: use the tokens.
+ */
+
+:root,
+.ds-theme-light {
+  /* Palette (docs/design/README.md) */
+  --ds-red: #E3121F;        /* urgent, the main button */
+  --ds-red-ink: #C20F1A;    /* red text on white */
+  --ds-red-deep: #8A0B14;   /* text on --ds-red-tint */
+  --ds-red-tint: #FDECEC;
+  --ds-on-red: #FFFFFF;
+  --ds-teal: #1BC6B4;       /* good news */
+  --ds-teal-ink: #0B2E2A;   /* the only text on --ds-teal */
+  --ds-teal-text: #0B5A52;  /* turquoise text on white / on --ds-teal-tint */
+  --ds-teal-tint: #DDF6F3;
+  --ds-teal-line: #9FD9D1;
+  --ds-ink: #161213;
+  --ds-ink-2: #4A4343;
+  --ds-muted: #6A6262;
+  --ds-on-ink: #FFFFFF;
+  --ds-fog: #F2F0EF;
+  --ds-fog-2: #ECE8E7;
+  --ds-line: #E6E1DF;
+  --ds-line-2: #DCD7D5;
+  --ds-surface: #FFFFFF;
+  --ds-page: #FFFFFF;
+
+  /* Spacing: multiples of 4 */
+  --ds-space-1: 4px;   /* inside a badge */
+  --ds-space-2: 8px;   /* between badges */
+  --ds-space-3: 12px;  /* preview ↔ text */
+  --ds-space-4: 16px;  /* screen edge */
+  --ds-space-6: 24px;  /* between sections */
+
+  /* Radii */
+  --ds-radius-xs: 6px;    /* badge */
+  --ds-radius-sm: 8px;    /* chip, filter */
+  --ds-radius-md: 12px;   /* button, field */
+  --ds-radius-lg: 16px;   /* card */
+  --ds-radius-xl: 20px;   /* big panel */
+  --ds-radius-bubble: 18px;
+  --ds-radius-pill: 999px;
+
+  /* Type: size / weight */
+  --ds-font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ds-text-screen: 24px;   /* 800 */
+  --ds-text-section: 17px;  /* 800 */
+  --ds-text-card: 15px;     /* 700 */
+  --ds-text-body: 15px;
+  --ds-text-meta: 13px;     /* 500 */
+  --ds-text-badge: 12px;    /* 600, the minimum */
+
+  --ds-tap: 44px;           /* the smallest thing a finger presses */
+}
+
+:root[data-theme="dark"],
+.ds-theme-dark {
+  --ds-red: #E3121F;
+  --ds-red-ink: #FF6B73;
+  --ds-red-deep: #FFB3B7;
+  --ds-red-tint: #3A1316;
+  --ds-on-red: #FFFFFF;
+  --ds-teal: #1BC6B4;
+  --ds-teal-ink: #0B2E2A;
+  --ds-teal-text: #5FE0D2;
+  --ds-teal-tint: #0E3532;
+  --ds-teal-line: #1F6A62;
+  --ds-ink: #F5F2F1;
+  --ds-ink-2: #D3CCCB;
+  --ds-muted: #A69D9C;
+  --ds-on-ink: #161213;
+  --ds-fog: #262021;
+  --ds-fog-2: #2E2728;
+  --ds-line: #342D2E;
+  --ds-line-2: #423A3B;
+  --ds-surface: #1B1718;
+  --ds-page: #0F0C0D;
+}
+
+/* The preview block keeps the light look inside a dark app too (and the other way round) */
+.ds-theme-light, .ds-theme-dark { background: var(--ds-page); color: var(--ds-ink); }
+
+/* ---------- New look for the whole app (flag design-v2) ---------- */
+:root[data-design="v2"] {
+  --c-page: 242 240 239;   /* fog */
+  --c-card: 255 255 255;
+  --c-sunken: 242 240 239;
+  --c-raised: 236 232 231;
+  --c-ink: 22 18 19;
+  --c-ink-2: 74 67 67;
+  --c-muted: 106 98 98;
+  --c-faint: 143 135 134;
+  --c-line: 230 225 223;
+  --c-line-2: 220 215 213;
+  --c-brand: 11 90 82;     /* turquoise text = good news */
+  --c-si: 194 15 26;       /* red text = urgent */
+}
+
+:root[data-design="v2"][data-theme="dark"] {
+  --c-page: 15 12 13;
+  --c-card: 27 23 24;
+  --c-sunken: 38 32 33;
+  --c-raised: 46 39 40;
+  --c-ink: 245 242 241;
+  --c-ink-2: 211 204 203;
+  --c-muted: 166 157 156;
+  --c-faint: 125 116 115;
+  --c-line: 52 45 46;
+  --c-line-2: 66 58 59;
+  --c-brand: 95 224 210;
+  --c-si: 255 107 115;
+}
+
+[data-design="v2"] body,
+[data-design="v2"] .font-sans,
+.ds {
+  font-family: var(--ds-font);
+}
+
+.ds { color: var(--ds-ink); font-variant-numeric: tabular-nums; font-size: var(--ds-text-body); line-height: 1.4; }
+
+/* ---------- Type ---------- */
+.ds-h1 { margin: 0; font-size: var(--ds-text-screen); font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+.ds-h2 { margin: 0; font-size: var(--ds-text-section); font-weight: 800; line-height: 1.3; }
+.ds-h3 { margin: 0; font-size: var(--ds-text-card); font-weight: 700; line-height: 1.25; }
+.ds-meta { font-size: var(--ds-text-meta); font-weight: 500; color: var(--ds-muted); }
+.ds-small { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-num { font-variant-numeric: tabular-nums; }
+
+/* ---------- Button ---------- */
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-space-2);
+  min-height: 46px; min-width: var(--ds-tap); padding: 0 var(--ds-space-4);
+  border: 1px solid transparent; border-radius: var(--ds-radius-md);
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 700; line-height: 1.2;
+  cursor: pointer; text-align: center; text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease, transform .1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ds-btn:active:not(:disabled) { transform: scale(0.98); }
+.ds-btn:focus-visible { outline: 2px solid var(--ds-teal-text); outline-offset: 2px; }
+.ds-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ds-btn-lg { min-height: 52px; font-size: 16px; }
+.ds-btn-block { display: flex; width: 100%; }
+.ds-btn-primary { background: var(--ds-red); color: var(--ds-on-red); }   /* one per screen */
+.ds-btn-dark { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-btn-outline { background: var(--ds-surface); color: var(--ds-ink); border-color: var(--ds-ink); }
+.ds-btn-quiet { background: transparent; color: var(--ds-ink); }
+.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }
+.ds-btn-reason { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
+
+/* ---------- Field ---------- */
+.ds-field { display: flex; flex-direction: column; gap: var(--ds-space-1); }
+.ds-label { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-ink-2); }
+.ds-input {
+  width: 100%; box-sizing: border-box; min-height: 46px; padding: 0 14px;
+  border: 1px solid transparent; border-radius: var(--ds-radius-md);
+  background: var(--ds-fog); color: var(--ds-ink);
+  font-family: inherit; font-size: 16px; /* 16px: iPhone does not zoom into the field */
+  outline: none; transition: border-color .15s ease, background-color .15s ease;
+}
+textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-height: 1.4; resize: vertical; }
+.ds-input::placeholder { color: var(--ds-muted); }
+.ds-input:focus { border-color: var(--ds-teal-text); background: var(--ds-surface); }
+.ds-field-error .ds-input, .ds-input[aria-invalid="true"] { border-color: var(--ds-red-ink); }
+.ds-hint { font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
+.ds-field-error .ds-hint { color: var(--ds-red-ink); }
+.ds-search { position: relative; display: flex; align-items: center; }
+.ds-search > svg, .ds-search > i { position: absolute; left: 12px; width: 18px; height: 18px; color: var(--ds-muted); pointer-events: none; }
+.ds-search .ds-input { padding-left: 38px; }
+
+/* ---------- Card ---------- */
+.ds-card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-radius-lg); padding: var(--ds-space-4); }
+.ds-card-fog { background: var(--ds-fog); border-color: transparent; }
+.ds-card-press { cursor: pointer; transition: border-color .15s ease; }
+.ds-card-press:hover { border-color: var(--ds-line-2); }
+.ds-stack { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-row { display: flex; align-items: center; gap: var(--ds-space-2); flex-wrap: wrap; }
+.ds-section { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+
+/* ---------- Badge and counter ---------- */
+.ds-badge {
+  display: inline-flex; align-items: center; gap: var(--ds-space-1);
+  padding: 3px 6px; border-radius: var(--ds-radius-xs);
+  font-size: var(--ds-text-badge); font-weight: 700; line-height: 1.3; white-space: nowrap;
+}
+.ds-badge-good { color: var(--ds-teal-text); background: var(--ds-teal-tint); }
+.ds-badge-neutral { color: var(--ds-muted); background: var(--ds-fog); font-weight: 600; }
+.ds-badge-new { color: var(--ds-on-ink); background: var(--ds-ink); }
+.ds-badge-warn { color: var(--ds-red-deep); background: var(--ds-red-tint); }  /* a warning only, never an ad */
+.ds-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--ds-radius-pill);
+  background: var(--ds-red); color: var(--ds-on-red); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Client status ---------- */
+.ds-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-ink-2); }
+.ds-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-line-2); flex-shrink: 0; }
+.ds-status-waiting { color: var(--ds-ink); font-weight: 700; }
+.ds-status-waiting::before { background: var(--ds-red); }
+.ds-status-objection::before { background: var(--ds-ink-2); }
+.ds-status-unfinished { color: var(--ds-muted); }
+.ds-status-unfinished::before { background: var(--ds-muted); }
+.ds-status-bought { color: var(--ds-teal-text); }
+.ds-status-bought::before { background: var(--ds-teal); }
+.ds-status-refused { color: var(--ds-muted); font-weight: 500; }
+
+/* ---------- Chat ---------- */
+.ds-chat { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+.ds-chat-head { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px var(--ds-space-4); border-bottom: 1px solid var(--ds-line); }
+.ds-chat-name { font-size: 16px; font-weight: 700; line-height: 1.25; }
+.ds-role { font-size: var(--ds-text-badge); color: var(--ds-muted); font-weight: 400; } /* «ИИ-…» pale gray under the name */
+.ds-bubble { max-width: 84%; padding: 10px 13px; font-size: var(--ds-text-body); line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
+.ds-bubble-in { align-self: flex-start; background: var(--ds-fog); color: var(--ds-ink); border-radius: var(--ds-radius-bubble) var(--ds-radius-bubble) var(--ds-radius-bubble) 4px; }
+.ds-bubble-mine { align-self: flex-end; background: var(--ds-ink); color: var(--ds-on-ink); border-radius: var(--ds-radius-bubble) var(--ds-radius-bubble) 4px var(--ds-radius-bubble); }
+.ds-bubble-author { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-size: var(--ds-text-badge); font-weight: 700; color: var(--ds-ink-2); }
+.ds-bubble-author svg, .ds-bubble-author i { width: 14px; height: 14px; color: var(--ds-teal-text); }
+.ds-bubble-time { display: block; margin-top: 2px; text-align: right; font-size: 11px; opacity: .65; }
+.ds-replies { display: flex; flex-direction: column; gap: var(--ds-space-2); padding-left: var(--ds-space-2); }
+.ds-reply {
+  min-height: 46px; padding: 0 14px; border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-teal-line); background: var(--ds-surface); color: var(--ds-ink);
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 500; text-align: left; cursor: pointer;
+}
+.ds-reply[aria-pressed="true"] { border: 2px solid var(--ds-teal-text); background: var(--ds-teal-tint); font-weight: 700; }
+.ds-typing { display: inline-flex; gap: 4px; align-items: center; }
+.ds-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--ds-muted); animation: ds-typing 1.2s infinite ease-in-out; }
+.ds-typing span:nth-child(2) { animation-delay: .15s; }
+.ds-typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes ds-typing { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* ---------- Bottom menu ---------- */
+.ds-tabbar {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end;
+  background: var(--ds-surface); border-top: 1px solid var(--ds-line);
+  padding: 6px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.ds-tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-height: var(--ds-tap); padding: 6px 2px 0; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 11px; font-weight: 500; color: var(--ds-muted); min-width: 0;
+}
+.ds-tab svg, .ds-tab i { width: 22px; height: 22px; }
+.ds-tab.active { color: var(--ds-ink); font-weight: 700; }
+.ds-tab.active::before { content: ""; position: absolute; top: 0; left: 50%; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--ds-red); }
+.ds-tab .ds-count { position: absolute; top: 0; right: calc(50% - 22px); }
+.ds-tab-buddy img { width: 48px; height: 48px; margin-top: -18px; object-fit: contain; } /* the mascot stays the only "3D" thing */
+
+/* The existing bottom menu in the new look (same buttons, same logic) */
+[data-design="v2"] .tg-nav-bar { background: var(--ds-surface); backdrop-filter: none; border-top-color: var(--ds-line); }
+[data-design="v2"] .tg-nav-item { font-size: 11px; font-weight: 500; color: var(--ds-muted); background: transparent; border-radius: 0; }
+[data-design="v2"] .tg-nav-item.active { color: var(--ds-ink); font-weight: 700; background: transparent; }
+[data-design="v2"] .tg-nav-item.active::before { content: ""; position: absolute; top: -8px; left: 50%; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--ds-red); }
+[data-design="v2"] .buddy-nav-btn { box-shadow: none; border-color: var(--ds-line); background: var(--ds-surface); }
+[data-design="v2"] .buddy-nav-btn.active { border-color: var(--ds-red); }
+
+/* ---------- Skeleton (loading) ---------- */
+.ds-skel {
+  display: block; border-radius: 4px; background: var(--ds-fog-2);
+  background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.35) 50%, transparent 100%);
+  background-size: 200% 100%; background-repeat: no-repeat;
+  animation: ds-shimmer 1.4s infinite linear;
+}
+.ds-theme-dark .ds-skel, :root[data-theme="dark"] .ds-skel { background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.06) 50%, transparent 100%); }
+.ds-skel-line { height: 12px; }
+.ds-skel-line.ds-skel-soft { height: 10px; background-color: var(--ds-fog); }
+.ds-skel-thumb { width: 72px; height: 84px; border-radius: 10px; flex-shrink: 0; }
+.ds-skel-row { display: flex; gap: var(--ds-space-3); }
+.ds-skel-lines { flex: 1; display: flex; flex-direction: column; gap: var(--ds-space-2); padding-top: var(--ds-space-1); }
+@keyframes ds-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ds-skel, .ds-typing span { animation: none; }
+}
+
+/* ---------- Empty state ---------- */
+.ds-empty { display: flex; flex-direction: column; align-items: center; gap: var(--ds-space-3); padding: var(--ds-space-6) var(--ds-space-4); text-align: center; }
+.ds-empty img { width: 100px; height: 110px; object-fit: contain; }
+.ds-empty-title { font-size: var(--ds-text-section); font-weight: 800; line-height: 1.3; }
+.ds-empty-text { font-size: 14px; color: var(--ds-muted); line-height: 1.4; max-width: 320px; }
+.ds-empty .ds-btn { align-self: stretch; max-width: 360px; margin: 0 auto; width: 100%; }
+
+/* ---------- Error (what was loaded stays below) ---------- */
+.ds-error {
+  display: flex; align-items: center; gap: 10px; padding: var(--ds-space-3) var(--ds-space-4);
+  border-radius: var(--ds-radius-md); background: var(--ds-ink); color: var(--ds-on-ink);
+  font-size: var(--ds-text-meta); line-height: 1.35;
+}
+.ds-error-text { flex: 1; }
+.ds-error .ds-btn { min-height: var(--ds-tap); padding: 0 12px; font-size: var(--ds-text-meta); background: transparent; color: var(--ds-on-ink); border-color: var(--ds-on-ink); }
+
+/* ---------- Showcase only ---------- */
+.ds-swatch { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ds-swatch-chip { height: 56px; border-radius: var(--ds-radius-md); border: 1px solid var(--ds-line); }
+.ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--ds-space-3); }
+.ds-space-bar { display: inline-block; height: 12px; background: var(--ds-red); }
+.ds-radius-box { width: 44px; height: 44px; background: var(--ds-fog-2); border: 1px solid var(--ds-line-2); }
+.ds-showcase { background: var(--ds-page); color: var(--ds-ink); display: flex; flex-direction: column; gap: var(--ds-space-6); padding: var(--ds-space-4); border-radius: var(--ds-radius-xl); }
+.ds-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-radius-md); background: var(--ds-fog); }
+.ds-switch button { min-height: 38px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 600; cursor: pointer; }
+.ds-switch button[aria-pressed="true"] { background: var(--ds-surface); color: var(--ds-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.ds-tab > span:not(.ds-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

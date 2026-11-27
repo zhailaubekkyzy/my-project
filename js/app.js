@@ -670,6 +670,9 @@ function renderApp(state) {
     return;
   }
 
+  // The new look (flag design-v2, only BETA_USERS for now): <html data-design="v2">
+  if (SF.ds) SF.ds.apply();
+
   const tab = state.ui.tab;
   const stack = state.ui.routes[tab];
   const route = stack[stack.length - 1];
@@ -805,7 +808,9 @@ function renderBottomNav(state) {
             <i data-lucide="${t.icon}" class="w-5 h-5"></i>
             <span class="truncate max-w-full">${t.label}</span>
             ${!t.enabled ? `<span class="absolute -top-1.5 left-1/2 -translate-x-1/2">${SF.soonBadge()}</span>` : ''}
-            ${badges[t.id] ? `<span class="absolute top-0.5 right-3 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center">${badges[t.id]}</span>` : ''}
+            ${badges[t.id] ? (SF.ds && SF.ds.on()
+              ? `<span class="absolute top-0.5 right-3">${SF.ds.count(badges[t.id])}</span>`
+              : `<span class="absolute top-0.5 right-3 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center">${badges[t.id]}</span>`) : ''}
           </button>`;
       }).join('')}
     </nav>

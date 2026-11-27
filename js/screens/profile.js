@@ -73,7 +73,9 @@
         SF.data.signedIn() ? row({ icon: 'gift', label: 'Пригласить друзей', onclick: "SF.push('invite')" }) : '',
         row({ icon: 'life-buoy', label: 'Поддержка', onclick: 'SF.actions.openSupport()' }),
         row({ icon: 'scale', label: 'Правовая информация', onclick: "SF.push('legal')" }),
-        me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : ''
+        me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : '',
+        // The new look's showcase: only for those who have it (flag design-v2)
+        SF.ds && SF.ds.on() ? row({ icon: 'palette', label: 'Дизайн-система', onclick: "SF.push('design')" }) : ''
       ])}
       ${SF.inTelegram && !SF.inTelegram() ? group([
         SF.canInstall() ? row({ icon: 'smartphone', label: 'Установить на экран', onclick: 'SF.actions.installApp()' }) : '',
@@ -537,7 +539,7 @@
   const isAdmin = (route) => route.screen.startsWith('admin');
   // The Office opens inside Settings (owner's decision 23 Nov.): its screens are in js/screens/office.js
   const isOffice = (route) => route.screen.startsWith('office');
-  const TITLES = { view: 'Настройки', me: 'Мой профиль', edit: 'Редактировать профиль', invite: 'Пригласить друзей', legal: 'Правовая информация' };
+  const TITLES = { view: 'Настройки', me: 'Мой профиль', edit: 'Редактировать профиль', invite: 'Пригласить друзей', legal: 'Правовая информация', design: 'Дизайн-система' };
   SF.screens.profile = {
     title(route, state) {
       if (isAdmin(route)) return SF.admin.title(route, state);
@@ -551,6 +553,7 @@
       if (route.screen === 'me') return renderView(state);
       if (route.screen === 'invite') return renderInvite(state);
       if (route.screen === 'legal') return renderLegal();
+      if (route.screen === 'design' && SF.ds && SF.ds.on()) return SF.ds.renderShowcase();
       return renderSettings(state);
     },
     afterRender(route, state) {
