@@ -1,12 +1,12 @@
 ---
 title: Smartflow Terms of Service
-version: v1.0
-date: 2026-11-24
+version: v1.1
+date: 2026-11-27
 ---
 
 # Smartflow Terms of Service
 
-**Version v1.0 · November 24, 2026**
+**Version v1.1 · November 27, 2026**
 
 ## 1. Agreement
 
@@ -38,11 +38,19 @@ The Services are in early access (beta) for the first 100 users. During beta, Sm
 
 ## 5. Payments between users
 
-Right now Smartflow does not process payments. Clients pay businesses, and businesses pay marketers, directly. Each seller is responsible for its own prices, invoices, taxes, refunds and consumer-law duties. Disputes about these payments are between the users involved.
+**Two ways to get paid.** A seller (a business, expert, marketer or community author) can be paid directly, through its own payment link, or through Smartflow's payment checkout. Payments through Smartflow are processed by our licensed payment provider, Whop, Inc. ("Whop"). Smartflow never sees or stores full card details. Checkout is available only on techsmartflow.com, not inside the Telegram Mini App.
+
+**The seller is the merchant.** When a buyer pays through Smartflow, the money is charged directly to the seller's own Whop account. The seller is the merchant of record: it sells the product or service and is responsible for delivering it, for its prices, invoices, taxes and consumer-law duties, and for refunds and disputes (chargebacks). Smartflow is a platform that connects buyers and sellers. It is not the seller and is not a party to the sale. Checkout shows the seller's name and refund policy before payment.
+
+**Getting paid through Smartflow.** To accept payments through Smartflow, a seller must connect payouts: create a Whop account through Smartflow, pass Whop's identity verification (KYC) and accept Whop's terms. Whop pays the seller out. Each product sold through Smartflow must state a refund policy and an access period.
+
+**Platform fee.** Smartflow keeps a platform fee from each payment that goes through its checkout. The current fee is shown to the seller before it starts selling. A change of the fee applies only to new purchases and new subscriptions, not to ones already made.
+
+**Marketer share.** When an expert sells using a marketer's template with a percentage-of-sales deal, the buyer pays the expert, and the platform fee includes the marketer's share. Smartflow then pays that share to the marketer. Payouts are made weekly, on Mondays, for the previous week. Smartflow may hold a part of each share as a reserve for refunds and disputes, for up to 90 days. The reserve rate and period depend on the marketer's history and are shown in the marketer's payouts settings. If a sale is refunded or disputed, the marketer's share of that sale is canceled, or deducted from the reserve or future payouts. A failed payout is not retried automatically; we will contact the marketer to fix it.
+
+**Direct payments.** When a buyer pays a seller directly, outside Smartflow's checkout, the payment is between them. Smartflow does not hold or pass on that money, and disputes about it are between the users involved.
 
 Marketers may offer templates for a one-time price, a monthly fee or a percentage of sales. The terms shown on the marketplace card form the deal between that marketer and the buyer.
-
-Smartflow does not hold, collect or pass on money between users. If we start processing payments, we will do it only through a licensed payment provider, such as Stripe, and we will update these Terms first.
 
 ## 6. Your content
 
@@ -67,18 +75,21 @@ Smart consultants, the AI buddy and AI generation use third-party AI models. AI 
 You must not:
 
 - send spam or unsolicited mass messages, or send SMS, calls or messages to people without the consent the law requires (including the US TCPA and CAN-SPAM Act);
-- sell illegal, dangerous or deceptive products, or make false claims about results or income;
+- sell illegal, dangerous or deceptive products, or make false claims about results;
+- promise or guarantee income, earnings or profits (for example "you will earn $10,000 a month");
+- sell or promote dietary supplements;
+- give or sell financial, investment or trading advice, signals or managed-money services;
 - collect sensitive data (health, finances, ID numbers) through Smart consultants without a legal basis;
 - harass, impersonate others, or share content that is hateful, sexual or violent;
 - upload content that infringes someone's copyright, trademark or other rights;
 - break, overload, scrape or reverse engineer the Services, or get around limits;
-- break Telegram's, Google's or OpenAI's terms through the Services.
+- break Telegram's, Google's, OpenAI's or Whop's terms through the Services.
 
-We may remove content or suspend accounts that break these rules.
+We may remove content, turn off payments through Smartflow or suspend accounts that break these rules. You can report a breach to our support team from any card, profile or chat.
 
 ## 9. Third-party services
 
-The Services run on Telegram and connect to Google, OpenAI and other providers. Their own terms apply to your use of them, and we are not responsible for their outages or changes.
+The Services run on Telegram and connect to Google, OpenAI, Whop and other providers. Their own terms apply to your use of them, and we are not responsible for their outages or changes.
 
 **Sanctions and export.** You confirm that you are not on a US, EU or UN sanctions list and are not located in a country or region under comprehensive US sanctions. You will not use the Services in a country where a provider we rely on, such as OpenAI, does not offer its services. We may limit access by country to comply with these rules.
 

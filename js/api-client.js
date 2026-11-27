@@ -269,6 +269,19 @@
       return await apiFetch(`/api/business${businessId ? `?businessId=${encodeURIComponent(businessId)}` : ''}`);
     },
 
+    // Выплаты через SmartFlow (Whop, шаг 1): статус, «Подключить выплаты», кабинет выплат
+    async getPayouts() {
+      return await apiFetch('/api/payments/payouts');
+    },
+
+    async connectPayouts(email = '') {
+      return await apiFetch('/api/payments/payouts/connect', { method: 'POST', body: JSON.stringify({ email: email || undefined }) });
+    },
+
+    async payoutsDashboard() {
+      return await apiFetch('/api/payments/payouts/dashboard', { method: 'POST', body: '{}' });
+    },
+
     async addAssistant(supportCode, businessId = '') {
       return await apiFetch('/api/business/assistants', {
         method: 'POST',

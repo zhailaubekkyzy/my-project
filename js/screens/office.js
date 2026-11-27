@@ -16,6 +16,8 @@
     { id: 'team', label: 'Помощник', icon: 'user-plus' }
   ];
   const ASSISTANT_SECTIONS = ['consultants'];
+  // «Выплаты» (оплаты через Whop, шаг 1): только владельцу бизнеса и только с флагом payments_whop
+  const PAYOUTS_SECTION = { id: 'payouts', label: 'Выплаты', icon: 'wallet' };
 
   // Funnel: 5 statuses (names chosen by the owner), colors: waiting — bright, bought — green, refused — gray
   const FUNNEL = [
@@ -147,7 +149,8 @@
   // ---------------- Office home ----------------
   function renderOffice(route, state) {
     if (!store().isBusinessActive() && (!store().isAssistant() || route.next === 'create')) return renderTerms();
-    const sections = assistantOnly() ? SECTIONS.filter(s => ASSISTANT_SECTIONS.includes(s.id)) : SECTIONS;
+    const sections = assistantOnly() ? SECTIONS.filter(s => ASSISTANT_SECTIONS.includes(s.id))
+      : (store().isBusinessActive() && SF.feature('payments_whop') ? [...SECTIONS, PAYOUTS_SECTION] : SECTIONS);
     const section = sections.some(s => s.id === route.section) ? route.section : 'consultants';
     const waitingOf = (ids) => SF.data.waitingInquiries(state).filter(i => ids.has(i.consultant.id)).length;
     const waiting = waitingOf(new Set(store().consultantsOfCurrent().map(c => c.id)));
@@ -155,9 +158,10 @@
     if (section === 'consultants') body = renderConsultantList(state);
     if (section === 'brain') body = renderBrainSection(state);
     if (section === 'team') body = renderTeam(state);
+    if (section === 'payouts') body = renderPayouts(state);
     return `
       ${sections.length > 1 ? `
-        <div class="grid grid-cols-3 gap-1 bg-raised p-1.5 rounded-2xl border border-line">
+        <div class="grid ${sections.length > 3 ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-raised p-1.5 rounded-2xl border border-line">
           ${sections.map(s => `
             <button onclick="SF.patch({ section: '${s.id}' })" class="relative py-2 rounded-xl text-[10px] font-semibold flex flex-col items-center gap-1 ${section === s.id ? 'bg-[#81D8D0] text-[#08302c] shadow' : 'text-muted'}">
               <i data-lucide="${s.icon}" class="w-4 h-4"></i>${s.label}
@@ -876,6 +880,110 @@
           </form>` : ''}
       </div>`;
   }
+
+  // ---------------- Выплаты (оплаты через Whop, шаг 1) ----------------
+  // Подаккаунт продавца у Whop и проверка личности на странице Whop. Четыре состояния экрана:
+  // загрузка (скелет) · ошибка («Повторить», загруженное не пропадает) · пусто (не подключено, одна кнопка) · норма.
+  const PAYOUTS_INFO = 'Чтобы клиенты платили картой через SmartFlow, а деньги приходили вам, подключите выплаты. Whop — платёжная компания SmartFlow — один раз проверит вашу личность: документ, иногда селфи, 5–10 минут. SmartFlow ваши документы не видит.';
+
+  function renderPayouts(state) {
+    const p = state.remote.payouts;
+    const error = state.remote.payoutsError;
+    const link = state.remote.payoutsLink;
+    const errorBox = error ? `
+      <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-ink-2 space-y-2">
+        <div>${SF.esc(error)}</div>
+        <button onclick="SF.actions.reloadPayouts()" class="px-3 py-1.5 rounded-lg btn-3d-dark text-[11px]">Повторить</button>
+      </div>` : '';
+    const title = SF.sectionTitle('wallet', 'Выплаты', p && p.env === 'sandbox' ? '<span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold">Песочница</span>' : '', PAYOUTS_INFO);
+    if (!p) {
+      if (error) return `<div class="glass-card-3d p-4 space-y-3">${title}${errorBox}</div>`;
+      return `
+        <div class="glass-card-3d p-4 space-y-3">
+          ${title}
+          <div class="h-4 w-2/3 rounded bg-sunken animate-pulse"></div>
+          <div class="h-10 w-full rounded-xl bg-sunken animate-pulse"></div>
+        </div>`;
+    }
+    if (p.available === false) {
+      return `
+        <div class="glass-card-3d p-4 space-y-3">
+          ${title}
+          <p class="text-xs text-ink-2 leading-relaxed">${p.reason === 'not_business' ? 'Выплаты подключает владелец бизнеса.' : 'Выплаты через SmartFlow пока не включены. Продажи идут как раньше — по вашей ссылке на оплату.'}</p>
+        </div>`;
+    }
+    const needEmail = state.remote.payoutsNeedEmail;
+    const linkButton = link ? `<button onclick="SF.openLink('${SF.js(link)}')" class="w-full py-2.5 rounded-xl btn-3d-dark text-xs flex items-center justify-center gap-1.5"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>Открыть страницу Whop</button>` : '';
+    const connectForm = (label) => `
+      <form onsubmit="SF.actions.connectPayouts(event)" class="space-y-2">
+        ${needEmail ? `<input name="email" type="email" required maxlength="200" placeholder="Почта для писем о выплатах" class="w-full bg-card border border-line-2 rounded-xl px-3 py-2.5 text-sm text-ink placeholder-faint focus:outline-none focus:border-[#81D8D0]">` : ''}
+        <button type="submit" class="w-full py-3 rounded-xl btn-3d-tiffany text-sm">${label}</button>
+      </form>`;
+    const stateLine = (icon, cls, text) => `<div class="flex items-center gap-2 text-sm font-bold ${cls}">${icon}${text}</div>`;
+    let body = '';
+    if (p.status === 'ready') {
+      body = `
+        ${stateLine('<i data-lucide="badge-check" class="w-4 h-4"></i>', 'text-emerald-500', 'Выплаты подключены')}
+        <button onclick="SF.actions.openPayoutsDashboard()" class="w-full py-3 rounded-xl btn-3d-tiffany text-sm">Мои выплаты в Whop</button>`;
+    } else if (p.status === 'pending') {
+      body = `
+        ${stateLine('<i data-lucide="hourglass" class="w-4 h-4"></i>', 'text-amber-500', 'Whop проверяет ваши данные')}
+        ${connectForm('Продолжить проверку')}
+        <button onclick="SF.actions.reloadPayouts()" class="w-full py-2 text-xs text-muted">Обновить статус</button>`;
+    } else if (p.status === 'rejected') {
+      body = `
+        ${stateLine('<i data-lucide="circle-alert" class="w-4 h-4"></i>', 'text-rose-500', 'Whop не подтвердил данные')}
+        <button onclick="SF.actions.openSupport()" class="w-full py-3 rounded-xl btn-3d-tiffany text-sm">Написать в поддержку</button>`;
+    } else {
+      body = `
+        <p class="text-sm text-ink">Выплаты не подключены</p>
+        ${connectForm(p.connected ? 'Продолжить проверку' : 'Подключить выплаты')}`;
+    }
+    return `
+      <div class="glass-card-3d p-4 space-y-3">
+        ${title}
+        ${errorBox}
+        ${body}
+        ${linkButton}
+      </div>`;
+  }
+
+  SF.actions.reloadPayouts = async () => {
+    SF.data.invalidate('payouts');
+    await SF.data.payouts();
+  };
+
+  SF.actions.connectPayouts = async (e) => {
+    e.preventDefault();
+    if (needServer()) return;
+    const button = e.target.querySelector('button[type=submit]');
+    if (button) button.disabled = true;
+    try {
+      const email = e.target.email ? e.target.email.value.trim() : '';
+      const res = await api().connectPayouts(email);
+      store().setRemote('payoutsNeedEmail', false);
+      // Ссылка одноразовая; если браузер не дал открыть окно сам — кнопка «Открыть страницу Whop»
+      store().setRemote('payoutsLink', res.url);
+      SF.openLink(res.url);
+      SF.actions.reloadPayouts();
+    } catch (err) {
+      if (err.data && (err.data.code === 'EMAIL_REQUIRED' || err.data.code === 'BAD_EMAIL')) store().setRemote('payoutsNeedEmail', true);
+      showToast(SF.withErrorCode(err.message || 'Не удалось подключить выплаты', err));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  };
+
+  SF.actions.openPayoutsDashboard = async () => {
+    if (needServer()) return;
+    try {
+      const res = await api().payoutsDashboard();
+      store().setRemote('payoutsLink', res.url);
+      SF.openLink(res.url);
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не удалось открыть Whop', err));
+    }
+  };
 
   // ---------------- Create a consultant ----------------
   // ---------------- «Быстрый старт» (owner's decision 21 Nov.) ----------------
@@ -3128,6 +3236,7 @@
           if (bid) SF.data.products(bid);
         }
         if (route.section === 'team') SF.data.business(bid || '');
+        if (route.section === 'payouts') SF.data.payouts();
         // The small puzzle bar on each SI-продавец of the open business
         if (!route.section || route.section === 'consultants') store().consultantsOfCurrent().forEach(c => SF.data.puzzle(c.id, 60000));
       } else if (route.screen === 'office-consultant') {

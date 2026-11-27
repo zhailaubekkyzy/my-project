@@ -1,12 +1,12 @@
 ---
 title: Smartflow Data Processing Addendum
-version: v1.0
-date: 2026-11-24
+version: v1.1
+date: 2026-11-27
 ---
 
 # Smartflow Data Processing Addendum
 
-**Version v1.0 · November 24, 2026**
+**Version v1.1 · November 27, 2026**
 
 ## 1. Parties and scope
 
@@ -41,7 +41,7 @@ The Customer has a legal basis for the client data it collects and gives clients
 
 ## 5. Subprocessors
 
-The Customer authorizes Smartflow to use the subprocessors listed in section 5 of the Privacy Policy: Supabase, Railway, OpenAI, PostHog, Amplitude, Resend, [SMS provider], Telegram and Google. Smartflow binds each one to data protection terms no weaker than this Addendum and stays responsible for them. We will announce a new subprocessor at least 14 days in advance. The Customer may object on reasonable grounds and may close its account if we cannot resolve the objection.
+The Customer authorizes Smartflow to use the subprocessors listed in section 5 of the Privacy Policy: Supabase, Railway, OpenAI, PostHog, Amplitude, Resend, [SMS provider], Telegram, Google and Whop. Smartflow binds each one to data protection terms no weaker than this Addendum and stays responsible for them. We will announce a new subprocessor at least 14 days in advance. The Customer may object on reasonable grounds and may close its account if we cannot resolve the objection.
 
 ## 6. Security
 

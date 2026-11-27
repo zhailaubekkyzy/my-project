@@ -127,6 +127,55 @@ const KNOWN_TYPES = new Set([
   'membership.activated', 'membership.deactivated'
 ]);
 
+// ---------------- Подаккаунты продавцов и проверка личности (шаг 1) ----------------
+// Подаккаунт создаётся от аккаунта SmartFlow (ключ API с правом создавать дочерние аккаунты).
+// Повтор с той же почтой и тем же external_id возвращает уже созданный подаккаунт — второй не появится.
+async function createSellerAccount({ email, externalId, title }) {
+  const account = await request('POST', '/accounts', {
+    email,
+    external_id: externalId,
+    title: title || undefined,
+    metadata: { smartflow_user: externalId }
+  });
+  if (!account || !account.id) throw new PaymentProviderError('Whop не вернул номер подаккаунта', { provider: name });
+  return account;
+}
+
+async function getAccount(accountId) {
+  return request('GET', `/accounts/${encodeURIComponent(accountId)}`);
+}
+
+// Одноразовая ссылка на страницу Whop: проверка личности (onboarding) или кабинет выплат (payouts)
+async function accountLink(accountId, { purpose = 'onboarding', returnUrl, refreshUrl }) {
+  const link = await request('POST', '/account_links', {
+    account_id: accountId,
+    use_case: purpose === 'payouts' ? 'payouts_portal' : 'account_onboarding',
+    return_url: returnUrl,
+    refresh_url: refreshUrl || returnUrl
+  });
+  if (!link || !/^https:\/\//.test(String(link.url || ''))) throw new PaymentProviderError('Whop не вернул ссылку', { provider: name });
+  return { url: link.url, expiresAt: link.expires_at || null };
+}
+
+/**
+ * Статус подаккаунта в нашем словаре: not_connected (проверка не начата) · pending (на проверке, в том числе
+ * «нужно что-то дополнить») · ready (готово: можно принимать оплату) · rejected (Whop не подтвердил).
+ * Проверка личности (verification.individual.status): not_started / pending / manual_review / approved / rejected;
+ * готовность к оплатам — по способности принимать карты (capabilities.accept_card_payments = active).
+ */
+function sellerStatus(account) {
+  if (!account) return { status: 'not_connected', detail: null };
+  const verification = account.verification && typeof account.verification === 'object' ? account.verification : {};
+  const individual = verification.individual;
+  const kyc = String((individual && typeof individual === 'object' ? individual.status : individual) || '').toLowerCase();
+  const caps = account.capabilities && typeof account.capabilities === 'object' ? account.capabilities : {};
+  const cards = String(caps.accept_card_payments && typeof caps.accept_card_payments === 'object' ? caps.accept_card_payments.status : caps.accept_card_payments || '').toLowerCase();
+  if (kyc === 'rejected') return { status: 'rejected', detail: kyc };
+  if (cards === 'active' || (kyc === 'approved' && cards !== 'inactive' && cards !== 'pending')) return { status: 'ready', detail: kyc || cards };
+  if (kyc === 'pending' || kyc === 'manual_review' || kyc === 'approved' || cards === 'pending') return { status: 'pending', detail: kyc || cards };
+  return { status: 'not_connected', detail: kyc || null };
+}
+
 // Событие Whop → наш словарь (provider.js, EVENT_TYPES)
 function normalizeEvent(event) {
   const rawType = String(event.type || event.action || '');
@@ -149,5 +198,9 @@ module.exports = {
   verifyWebhook,
   signWebhook,
   normalizeEvent,
+  createSellerAccount,
+  getAccount,
+  accountLink,
+  sellerStatus,
   TIMESTAMP_TOLERANCE_SECONDS
 };

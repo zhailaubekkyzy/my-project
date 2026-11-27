@@ -334,6 +334,7 @@ async function removeAssistant(ownerId, assistantUserId, businessId = null) {
 }
 
 module.exports = {
+  hasBusinessProfile,
   MAX_ASSISTANTS,
   MAX_BUSINESSES,
   businessesOfOwner,
