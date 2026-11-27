@@ -150,7 +150,8 @@
     return '<div class="ds-bubble ds-bubble-in" aria-label="печатает…"><span class="ds-typing"><span></span><span></span><span></span></span></div>';
   }
 
-  // Bottom menu. tabs: [{ id, label, icon, count, buddy }]; the Buddy tab shows the mascot.
+  // Bottom menu: icons only (owner's decision 27 Nov.), the name is read aloud from aria-label.
+  // tabs: [{ id, label, icon, count, buddy }]; the Buddy tab shows the mascot.
   function tabbar(tabs = [], active = '', { onclick = '' } = {}) {
     return `
       <nav class="ds-tabbar" aria-label="Основное меню">
@@ -159,7 +160,7 @@
           const inner = t.buddy
             ? `<img src="images/mascots/si-buddy.webp" alt="" />`
             : iconTag(t.icon);
-          return `<button type="button" class="ds-tab${isActive ? ' active' : ''}${t.buddy ? ' ds-tab-buddy' : ''}"${isActive ? ' aria-current="page"' : ''}${handler(onclick ? onclick.replace('$id', t.id) : '')}>${inner}<span>${esc(t.label)}</span>${count(t.count)}</button>`;
+          return `<button type="button" class="ds-tab${isActive ? ' active' : ''}${t.buddy ? ' ds-tab-buddy' : ''}"${isActive ? ' aria-current="page"' : ''} aria-label="${esc(t.label)}"${handler(onclick ? onclick.replace('$id', t.id) : '')}>${inner}${count(t.count)}</button>`;
         }).join('')}
       </nav>`;
   }

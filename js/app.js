@@ -804,7 +804,7 @@ function renderBottomNav(state) {
             </button>`;
         }
         return `
-          <button onclick="SF.go('${t.id}')" class="tg-nav-item relative ${active ? 'active' : ''} ${t.enabled ? '' : 'opacity-50'}">
+          <button onclick="SF.go('${t.id}')" class="tg-nav-item relative ${active ? 'active' : ''} ${t.enabled ? '' : 'opacity-50'}" aria-label="${t.label}${badges[t.id] ? `: ${badges[t.id]} новых` : ''}"${active ? ' aria-current="page"' : ''}>
             <i data-lucide="${t.icon}" class="w-5 h-5"></i>
             <span class="truncate max-w-full">${t.label}</span>
             ${!t.enabled ? `<span class="absolute -top-1.5 left-1/2 -translate-x-1/2">${SF.soonBadge()}</span>` : ''}

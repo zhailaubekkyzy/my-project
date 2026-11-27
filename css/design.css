@@ -252,7 +252,8 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
   min-height: var(--ds-tap); padding: 6px 2px 0; border: none; background: none; cursor: pointer;
   font-family: inherit; font-size: 11px; font-weight: 500; color: var(--ds-muted); min-width: 0;
 }
-.ds-tab svg, .ds-tab i { width: 22px; height: 22px; }
+.ds-tab svg, .ds-tab i { width: 24px; height: 24px; }
+.ds-tab { justify-content: center; padding: 10px 2px; }
 .ds-tab.active { color: var(--ds-ink); font-weight: 700; }
 .ds-tab.active::before { content: ""; position: absolute; top: 0; left: 50%; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--ds-red); }
 .ds-tab .ds-count { position: absolute; top: 0; right: calc(50% - 22px); }
@@ -365,3 +366,9 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 [data-design="v2"] .btn-3d-dark { background: var(--ds-surface); color: var(--ds-ink); border: 1px solid var(--ds-line); border-radius: var(--ds-radius-md); box-shadow: none; }
 [data-design="v2"] .btn-3d-dark:hover { border-color: var(--ds-ink); color: var(--ds-ink); }
 [data-design="v2"] .hero-tiffany-banner { background: var(--ds-fog); color: var(--ds-ink); box-shadow: none; border-radius: var(--ds-radius-lg); }
+
+/* Bottom menu: icons only, no captions (owner's decision 27 Nov.); the name stays in aria-label */
+[data-design="v2"] .tg-nav-item > span.truncate,
+[data-design="v2"] .tg-nav-bar button > span.text-\[11px\] { display: none; }
+[data-design="v2"] .tg-nav-item { min-height: var(--ds-tap); justify-content: center; }
+[data-design="v2"] .tg-nav-item svg { width: 24px; height: 24px; }
