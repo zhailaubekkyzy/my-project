@@ -4549,14 +4549,14 @@ async function runAllTests() {
 
   await test('93. Юридические документы: /privacy, /terms, /dpa, /dmca с версией и датой, раздел DMCA по якорю', async () => {
     const legalDocs = require('../server/services/legal-docs');
-    assert.deepStrictEqual(legalDocs.versions(), { privacy: 'v1.0', terms: 'v1.0', dpa: 'v1.0' });
+    assert.deepStrictEqual(legalDocs.versions(), { privacy: 'v1.1', terms: 'v1.1', dpa: 'v1.1' });
     for (const [slug, title] of [['privacy', 'Smartflow Privacy Policy'], ['terms', 'Smartflow Terms of Service'], ['dpa', 'Smartflow Data Processing Addendum']]) {
       const res = await fetch(`${baseUrl}/${slug}`);
       assert.strictEqual(res.status, 200, slug);
       assert.ok(/text\/html/.test(res.headers.get('content-type')), slug);
       const html = await res.text();
       assert.strictEqual((html.match(/<h1/g) || []).length, 1, `${slug}: one title`);
-      assert.ok(html.includes(title) && html.includes('Version 1.0 · Effective November 24, 2026'), slug);
+      assert.ok(html.includes(title) && html.includes('Version 1.1 · Effective November 27, 2026'), slug);
       // Footer on every page: Privacy and Terms links (Google sign-in verification)
       assert.ok(html.includes('href="/privacy"') && html.includes('href="/terms"'), `${slug}: footer`);
       assert.ok(!html.includes('<script'), `${slug}: no scripts`);
@@ -4579,6 +4579,193 @@ async function runAllTests() {
     for (const page of ['index.html', 'ru/index.html']) {
       const landing = fs.readFileSync(path.join(__dirname, '..', 'landing', 'public', page), 'utf8');
       for (const href of ['/privacy', '/terms', '/dpa', '/dmca']) assert.ok(landing.includes(`href="${href}"`), `${page}: ${href}`);
+    }
+  });
+
+  await test('94. Выплаты: без флага или без Whop раздела нет, помощник (без бизнес-профиля) подключить не может', async () => {
+    const config = require('../server/config');
+    const originalWhop = config.payments.whop;
+    const originalFeatures = config.features;
+    try {
+      const seller = await tokenFor({ id: 930001, first_name: 'Маркетолог', last_name: 'Выплаты' });
+      await api('POST', '/api/projects', seller, { name: 'Продавец выплат' });
+      // Whop not set up, flag on
+      config.features = ['payments_whop:all'];
+      let res = await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(res.status, 200);
+      assert.deepStrictEqual(res.body, { available: false, reason: 'off' });
+      assert.strictEqual((await api('POST', '/api/payments/payouts/connect', seller, { email: 'a@example.com' })).body.code, 'PAYOUTS_OFF');
+      // Whop set up, flag off
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: 'whop_test_key_payouts_123', webhookSecret: 'ws_payouts_not_real', envProblem: null };
+      config.features = [];
+      res = await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(res.body.available, false);
+      assert.strictEqual((await api('POST', '/api/payments/payouts/connect', seller, { email: 'a@example.com' })).status, 403);
+      // A person without a business (e.g. only an assistant) cannot connect
+      config.features = ['payments_whop:all'];
+      const assistant = await tokenFor({ id: 930002, first_name: 'Только', last_name: 'Помощник' });
+      res = await api('GET', '/api/payments/payouts', assistant);
+      assert.deepStrictEqual(res.body, { available: false, reason: 'not_business' });
+      const denied = await api('POST', '/api/payments/payouts/connect', assistant, { email: 'b@example.com' });
+      assert.strictEqual(denied.status, 403);
+      assert.strictEqual(denied.body.code, 'NOT_BUSINESS');
+      // Without signing in — nothing
+      assert.strictEqual((await api('GET', '/api/payments/payouts', null)).status, 401);
+    } finally {
+      config.payments.whop = originalWhop;
+      config.features = originalFeatures;
+    }
+  });
+
+  await test('95. Выплаты: «Подключить» создаёт один подаккаунт Whop и даёт ссылку на проверку личности', async () => {
+    const config = require('../server/config');
+    const originalWhop = config.payments.whop;
+    const originalFeatures = config.features;
+    const realFetch = global.fetch;
+    const key = 'whop_test_key_connect_456789';
+    const calls = [];
+    try {
+      config.features = ['payments_whop:all'];
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: key, webhookSecret: 'ws_connect_not_real', envProblem: null };
+      global.fetch = async (url, options = {}) => {
+        const u = String(url);
+        if (!u.startsWith('https://sandbox-api.whop.com/')) return realFetch(url, options);
+        const body = options.body ? JSON.parse(options.body) : null;
+        calls.push({ method: options.method, path: u.replace('https://sandbox-api.whop.com/api/v1', ''), body, auth: options.headers.Authorization });
+        if (u.endsWith('/accounts') && options.method === 'POST') return new Response(JSON.stringify({ id: 'biz_child_94', email: body.email }), { status: 200 });
+        if (u.endsWith('/account_links')) return new Response(JSON.stringify({ url: `https://sandbox.whop.com/onboarding/${body.use_case}/xyz`, expires_at: '2026-11-28T00:00:00Z' }), { status: 200 });
+        return new Response('{}', { status: 404 });
+      };
+      const seller = await tokenFor({ id: 940001, first_name: 'Автор', last_name: 'Сообщества' });
+      const sellerId = authService.verifySessionToken(seller).userId;
+      await api('POST', '/api/projects', seller, { name: 'Продавец 94' });
+
+      let res = await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(res.body.available, true);
+      assert.strictEqual(res.body.status, 'not_connected');
+      assert.strictEqual(res.body.connected, false);
+      assert.strictEqual(res.body.env, 'sandbox');
+
+      // A Telegram account has no e-mail: the server asks for it
+      res = await api('POST', '/api/payments/payouts/connect', seller, {});
+      assert.strictEqual(res.status, 400);
+      assert.strictEqual(res.body.code, 'EMAIL_REQUIRED');
+      assert.strictEqual((await api('POST', '/api/payments/payouts/connect', seller, { email: 'not-an-email' })).body.code, 'BAD_EMAIL');
+      assert.strictEqual(calls.length, 0, 'Nothing goes to Whop before the e-mail is right');
+
+      res = await api('POST', '/api/payments/payouts/connect', seller, { email: 'Author@Example.com' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.url, 'https://sandbox.whop.com/onboarding/account_onboarding/xyz');
+      const create = calls.find(c => c.path === '/accounts');
+      assert.strictEqual(create.body.email, 'author@example.com');
+      assert.strictEqual(create.body.external_id, sellerId, 'Our account id: a retry returns the same sub-account');
+      assert.strictEqual(create.auth, `Bearer ${key}`);
+      const link = calls.find(c => c.path === '/account_links');
+      assert.strictEqual(link.body.account_id, 'biz_child_94');
+      assert.strictEqual(link.body.use_case, 'account_onboarding');
+      assert(link.body.return_url.startsWith(config.webAppUrl));
+      const rows = await db.all('SELECT * FROM payment_accounts WHERE user_id = ?', [sellerId]);
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].provider_account_id, 'biz_child_94');
+      assert.strictEqual(rows[0].provider_env, 'sandbox');
+
+      // Pressed again: no second sub-account, only a new link
+      res = await api('POST', '/api/payments/payouts/connect', seller, {});
+      assert.strictEqual(res.status, 200, 'The e-mail is not needed again');
+      assert.strictEqual(calls.filter(c => c.path === '/accounts').length, 1);
+      assert.strictEqual(calls.filter(c => c.path === '/account_links').length, 2);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM payment_accounts WHERE user_id = ?', [sellerId])).n), 1);
+      assert(!JSON.stringify(res.body).includes(key));
+    } finally {
+      global.fetch = realFetch;
+      config.payments.whop = originalWhop;
+      config.features = originalFeatures;
+    }
+  });
+
+  await test('96. Выплаты: статусы Whop → «не подключено / на проверке / готово», кабинет выплат, Whop не отвечает', async () => {
+    const config = require('../server/config');
+    const whop = require('../server/services/payments/whop');
+    // How Whop's answers become our statuses
+    assert.strictEqual(whop.sellerStatus(null).status, 'not_connected');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: null } }).status, 'not_connected');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'not_started' } } }).status, 'not_connected');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'pending' } } }).status, 'pending');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'manual_review' } } }).status, 'pending');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'approved' } }, capabilities: { accept_card_payments: 'pending' } }).status, 'pending', 'Approved, but cards not on yet');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'approved' } }, capabilities: { accept_card_payments: 'active' } }).status, 'ready');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'approved' } } }).status, 'ready', 'No capabilities in the answer — the approval is enough');
+    assert.strictEqual(whop.sellerStatus({ verification: { individual: { status: 'rejected' } } }).status, 'rejected');
+
+    const originalWhop = config.payments.whop;
+    const originalFeatures = config.features;
+    const realFetch = global.fetch;
+    const key = 'whop_test_key_status_13579';
+    let account = { id: 'biz_child_94', verification: { individual: { status: 'pending' } } };
+    let down = false;
+    let gets = 0;
+    try {
+      config.features = ['payments_whop:all'];
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: key, webhookSecret: 'ws_status_not_real', envProblem: null };
+      global.fetch = async (url, options = {}) => {
+        const u = String(url);
+        if (!u.startsWith('https://sandbox-api.whop.com/')) return realFetch(url, options);
+        if (down) throw new Error(`connect ECONNREFUSED (key ${key})`);
+        if (u.endsWith('/accounts/biz_child_94')) { gets++; return new Response(JSON.stringify(account), { status: 200 }); }
+        if (u.endsWith('/account_links')) {
+          const body = JSON.parse(options.body);
+          return new Response(JSON.stringify({ url: `https://sandbox.whop.com/${body.use_case}/abc` }), { status: 200 });
+        }
+        return new Response('{}', { status: 404 });
+      };
+      const seller = await tokenFor({ id: 940001, first_name: 'Автор', last_name: 'Сообщества' });
+      const sellerId = authService.verifySessionToken(seller).userId;
+      const makeOld = () => db.run("UPDATE payment_accounts SET updated_at = '2020-01-01 00:00:00' WHERE user_id = ?", [sellerId]);
+
+      await makeOld();
+      let res = await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(res.body.status, 'pending');
+      assert.strictEqual(res.body.connected, true);
+      // Asked again right away: no second request to Whop
+      await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(gets, 1);
+
+      // The dashboard is only for a connected account
+      assert.strictEqual((await api('POST', '/api/payments/payouts/dashboard', seller)).body.url, 'https://sandbox.whop.com/payouts_portal/abc');
+
+      // Whop is down: the last known status stays, the screen does not break
+      down = true;
+      await makeOld();
+      res = await api('GET', '/api/payments/payouts', seller);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.status, 'pending');
+      assert.strictEqual(res.body.stale, true);
+      res = await api('POST', '/api/payments/payouts/connect', seller, {});
+      assert.strictEqual(res.status, 502);
+      assert.strictEqual(res.body.code, 'PROVIDER_UNAVAILABLE');
+      assert(/^[A-Z0-9]{4}$/.test(res.body.errorCode), 'A code for support');
+      assert(!JSON.stringify(res.body).includes(key));
+      const logged = await db.get('SELECT message FROM error_log WHERE code = ?', [res.body.errorCode]);
+      assert(logged && !logged.message.includes(key), 'The key is not in the error log either');
+
+      // Approved → ready, and then Whop is not asked any more
+      down = false;
+      account = { id: 'biz_child_94', verification: { individual: { status: 'approved' } }, capabilities: { accept_card_payments: 'active' } };
+      await makeOld();
+      assert.strictEqual((await api('GET', '/api/payments/payouts', seller)).body.status, 'ready');
+      const before = gets;
+      await makeOld();
+      assert.strictEqual((await api('GET', '/api/payments/payouts', seller)).body.status, 'ready');
+      assert.strictEqual(gets, before);
+
+      // Someone without a sub-account cannot open the dashboard
+      const other = await tokenFor({ id: 950001, first_name: 'Без', last_name: 'Выплат' });
+      await api('POST', '/api/projects', other, { name: 'Продавец 95' });
+      assert.strictEqual((await api('POST', '/api/payments/payouts/dashboard', other)).body.code, 'NOT_CONNECTED');
+    } finally {
+      global.fetch = realFetch;
+      config.payments.whop = originalWhop;
+      config.features = originalFeatures;
     }
   });
 

@@ -323,6 +323,18 @@
       store().setRemote('referral', await api().getReferral());
     }, 60000),
 
+    // Выплаты через SmartFlow (Офис → «Выплаты»): ошибка запоминается отдельно, загруженный статус не пропадает
+    payouts: (maxAge = 15000) => ensure('payouts', async () => {
+      if (!signedIn()) return false;
+      try {
+        store().setRemote('payouts', await api().getPayouts());
+        store().setRemote('payoutsError', null);
+      } catch (err) {
+        store().setRemote('payoutsError', SF.withErrorCode(err.message || 'Не удалось загрузить', err));
+        throw err;
+      }
+    }, maxAge),
+
     // My business: owner + assistant
     // Members of the business open in the Office (businessId), or of my main one
     business: (businessId = '') => ensure(`business:${businessId}`, async () => {
