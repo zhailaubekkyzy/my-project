@@ -4854,7 +4854,7 @@ async function runAllTests() {
     const evil = '<img src=x onerror=alert(1)>';
     const noRawHtml = (html) => assert.ok(!html.includes('<img src=x'), html);
     // Button: variants; a disabled one always says why
-    for (const v of ['primary', 'dark', 'outline', 'quiet', 'good']) assert.ok(ds.button({ text: 'A', variant: v }).includes(`ds-btn-${v}`));
+    for (const v of ['primary', 'dark', 'outline', 'quiet', 'good', 'soft']) assert.ok(ds.button({ text: 'A', variant: v }).includes(`ds-btn-${v}`));
     noRawHtml(ds.button({ text: evil }));
     const off = ds.button({ text: 'Опубликовать', disabled: true, reason: 'Сначала заполните описание' });
     assert.ok(off.includes(' disabled') && off.includes('ds-btn-reason') && off.includes('Сначала заполните описание') && !off.includes('onclick'));
@@ -4910,7 +4910,7 @@ async function runAllTests() {
     assert.ok(sk.includes('aria-busy="true"'));
     const em = ds.empty({ title: 'Пусто', text: evil, button: { text: 'Действие', onclick: 'x()' } });
     assert.strictEqual((em.match(/<button/g) || []).length, 1, 'one button on an empty screen');
-    assert.ok(em.includes('ds-btn-good'), 'the way out of an empty screen is a positive (turquoise) button');
+    assert.ok(em.includes('ds-btn-soft'), 'the way out of an empty screen is a neutral step (pale turquoise)');
     noRawHtml(em);
     // Catalog parts from MK-Catalog: tabs with an underline, black chosen chip, step preview, list row (2 lines, ✓, badges)
     const tb = ds.tabs([{ id: 'a', label: 'Шаблоны', num: 'N' }, { id: 'b', label: evil }], 'a');
@@ -4990,12 +4990,18 @@ async function runAllTests() {
     has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
     // Every positive action is turquoise (owner's decision 27 Nov.); red only for the urgent
     const all = Object.values(pages).join('');
-    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать', 'Дальше']) {
+    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать']) {
       const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(?:<i[^>]*><\/i>)?([^<]*)</g)].filter(m => m[2] === label);
       assert.ok(found.length, label);
       for (const m of found) assert.ok(m[1].includes('ds-btn-good'), `${label}: ${m[1]}`);
     }
     assert.ok(beta.ds.button({ text: 'x' }).includes('ds-btn-good'), 'a button is positive (turquoise) by default');
+    // Neutral steps («Дальше», «Скопировать ссылку») are pale turquoise, not like «Купить» / «Записать»
+    for (const label of ['Дальше', 'Скопировать ссылку']) {
+      const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>([^<]*)</g)].filter(m => m[2] === label);
+      assert.ok(found.length, label);
+      for (const m of found) assert.ok(m[1].includes('ds-btn-soft'), `${label}: ${m[1]}`);
+    }
     assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{ background: var\(--ds-teal\)/.test(designCss()));
     // The owner's rules in the paths: no «SI-», no review before publishing, the client's role starts with «ИИ-»
     for (const html of Object.values(pages)) {

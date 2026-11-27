@@ -56,8 +56,9 @@
 
   // ---------------- Components ----------------
 
-  // variant: good (turquoise, the default) — every positive action: «Перейти к оплате», «Подключить», «Опубликовать»,
-  // «Записать» (owner's decision 27 Nov.) · primary (red) — urgent only · dark · outline · quiet.
+  // variant: good (turquoise, the default) — a positive action with a result: «Перейти к оплате», «Подключить»,
+  // «Опубликовать», «Записать» · soft (pale turquoise) — a neutral step: «Дальше», «Скопировать ссылку»
+  // (owner's decisions 27 Nov.) · primary (red) — urgent only · dark · outline · quiet.
   // A disabled button always says why: pass `reason`.
   function button({ text, variant = 'good', size = '', block = false, onclick = '', disabled = false, reason = '', icon = '', type = 'button', label = '' } = {}) {
     const cls = ['ds-btn', `ds-btn-${variant}`, size === 'lg' ? 'ds-btn-lg' : '', block ? 'ds-btn-block' : ''].filter(Boolean).join(' ');
@@ -190,7 +191,7 @@
         ${mascot ? `<img src="${esc(mascot)}" alt="" />` : ''}
         ${title ? `<span class="ds-empty-title">${esc(title)}</span>` : ''}
         ${text ? `<span class="ds-empty-text">${esc(text)}</span>` : ''}
-        ${btn ? button({ variant: 'good', ...btn, block: true }) : ''}
+        ${btn ? button({ variant: 'soft', ...btn, block: true }) : ''}
       </div>`;
   }
 

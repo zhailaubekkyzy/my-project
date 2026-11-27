@@ -163,7 +163,8 @@
 .ds-btn-dark { background: var(--ds-ink); color: var(--ds-on-ink); }
 .ds-btn-outline { background: var(--ds-surface); color: var(--ds-ink); border-color: var(--ds-ink); }
 .ds-btn-quiet { background: transparent; color: var(--ds-ink); }
-.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }   /* every positive action */
+.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }   /* a positive action with a result: buy, sign up, publish */
+.ds-btn-soft { background: var(--ds-teal-tint); color: var(--ds-teal-text); }  /* a neutral step: «Дальше», «Скопировать ссылку» */
 .ds-btn-reason { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
 
 /* ---------- Field ---------- */
