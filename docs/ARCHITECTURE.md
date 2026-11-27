@@ -1145,7 +1145,8 @@ Telegram `activated`) и при появлении сети — проверка
   `admin-payments` (`renderFeeTest` в `js/screens/admin.js`). Сервер — `server/services/payments/fee-test.js`, маршруты
   `GET/POST /api/admin/payments/fee-test`, `POST /api/admin/payments/fee-test/cancel` (владелица, `requireStaff('owner')`).
 - «Создать тестовую подписку» → `POST /checkout_configurations` с `variant` на подаккаунте владелицы (прямое списание):
-  `billing_type: renewal`, `billing_period: 1` (раз в день — продление назавтра), $5, `application_fee_amount` = 1% ($0.05,
+  `billing_type: renewal`, `billing_period: 7` (раз в неделю; если Whop откажет — 30), $5; раз в день Whop не разрешает
+  («You cannot offer daily subscriptions», песочница 27 нояб.), `application_fee_amount` = 1% ($0.05,
   из `PAYMENTS_PLATFORM_FEE_PERCENT`). Подписка — строка `payment_orders` с `kind = 'fee_test'` (план — `subject_id`).
 - «Проверить» → платежи подаккаунта по плану (`GET /payments?account_id=…&variant_id=…`) и удержания по каждому
   (`GET /payments/:id/fees`, строка `origin = application_fee`). Итог: `passed` — с каждого оплаченного продления

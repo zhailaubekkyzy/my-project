@@ -632,7 +632,10 @@ async function sendFeeTestError(req, res, next, err) {
     const errorCode = supportService.newErrorCode();
     await supportService.logError({ code: errorCode, source: 'server', userId: req.user ? req.user.userId : null, method: req.method,
       path: req.originalUrl.split('?')[0], status: 502, message: err.message });
-    return res.status(502).json({ error: 'provider', code: 'PROVIDER_UNAVAILABLE', errorCode, message: 'Whop сейчас не отвечает. Попробуйте ещё раз через минуту.' });
+    // Whop ответил отказом (4xx) — владелице видна его причина (без ключа); иначе — «не отвечает»
+    const refused = err.providerStatus >= 400 && err.providerStatus < 500;
+    return res.status(502).json({ error: 'provider', code: refused ? 'PROVIDER_REFUSED' : 'PROVIDER_UNAVAILABLE', errorCode,
+      message: refused ? `Whop отказал: ${err.message.replace(/^Whop ответил \d+:\s*/, '')}` : 'Whop сейчас не отвечает. Попробуйте ещё раз через минуту.' });
   }
   next(err);
 }

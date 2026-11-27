@@ -4816,7 +4816,7 @@ async function runAllTests() {
     }
   });
 
-  await test('98. Проверка комиссии: подписка $5 в день с комиссией 1%, итог по продлениям, отмена', async () => {
+  await test('98. Проверка комиссии: подписка $5 раз в неделю с комиссией 1%, итог по продлениям, отмена', async () => {
     const config = require('../server/config');
     const originalWhop = config.payments.whop;
     const originalBps = config.payments.platformFeeBps;
@@ -4826,6 +4826,8 @@ async function runAllTests() {
     const calls = [];
     let payments = [];
     const fees = {};
+    // Billing periods Whop refuses (the sandbox refused daily ones on 27 Nov.)
+    let refusedPeriods = [1];
     try {
       const owner = await tokenFor({ id: 970001, first_name: 'Владелица', last_name: 'Оплат' });
       config.adminUsers = ['970001'];
@@ -4838,7 +4840,13 @@ async function runAllTests() {
         const path = u.replace('https://sandbox-api.whop.com/api/v1', '');
         calls.push({ method: options.method, path, body: options.body ? JSON.parse(options.body) : null });
         const json = (b) => new Response(JSON.stringify(b), { status: 200 });
-        if (path === '/checkout_configurations' && options.method === 'POST') return json(checkout);
+        if (path === '/checkout_configurations' && options.method === 'POST') {
+          const period = JSON.parse(options.body).variant.billing_period;
+          if (refusedPeriods.includes(period)) {
+            return new Response(JSON.stringify({ error: { message: 'Failed to create dynamic plan: You cannot offer daily subscriptions. We recommend using a monthly billing period' } }), { status: 400 });
+          }
+          return json(checkout);
+        }
         if (path === '/checkout_configurations/ch_98') return json(checkout);
         if (path.startsWith('/payments?')) return json({ data: payments, page_info: {} });
         const m = path.match(/^\/payments\/([^/]+)\/fees$/);
@@ -4847,17 +4855,38 @@ async function runAllTests() {
         return new Response('{}', { status: 404 });
       };
 
+      // Whop refuses every period: the owner sees Whop's reason, not «не отвечает»
+      refusedPeriods = [1, 7, 30];
       let res = await api('POST', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 502);
+      assert.strictEqual(res.body.code, 'PROVIDER_REFUSED');
+      assert(res.body.message.startsWith('Whop отказал: Failed to create dynamic plan'), res.body.message);
+      assert(!res.body.message.includes(key));
+      assert.strictEqual(Number((await db.get("SELECT COUNT(*) AS n FROM payment_orders WHERE kind = 'fee_test'")).n), 0, 'Nothing is saved when Whop refused');
+      // Weekly refused too → monthly
+      refusedPeriods = [1, 7];
+      calls.length = 0;
+      res = await api('POST', '/api/admin/payments/fee-test', owner);
       assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.billingPeriodDays, 30);
+      assert.deepStrictEqual(calls.filter(c => c.path === '/checkout_configurations').map(c => c.body.variant.billing_period), [7, 30]);
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', owner)).body.test.billingPeriodDays, 30);
+      await api('POST', '/api/admin/payments/fee-test/cancel', owner);
+      // Weekly allowed (the usual case)
+      refusedPeriods = [1];
+      calls.length = 0;
+      res = await api('POST', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.billingPeriodDays, 7);
       assert.strictEqual(res.body.purchaseUrl, 'https://sandbox.whop.com/checkout/ch_98');
       const create = calls.find(c => c.path === '/checkout_configurations' && c.method === 'POST');
       assert.strictEqual(create.body.variant.account_id, 'biz_owner_97', 'Charged straight to the seller’s sub-account');
       assert.strictEqual(create.body.variant.billing_type, 'renewal');
-      assert.strictEqual(create.body.variant.billing_period, 1, 'Once a day: the renewal comes tomorrow');
+      assert.strictEqual(create.body.variant.billing_period, 7, 'Once a week: Whop does not allow daily subscriptions');
       assert.strictEqual(create.body.variant.initial_price, 5);
       assert.strictEqual(create.body.variant.renewal_price, 5);
       assert.strictEqual(create.body.variant.application_fee_amount, 0.05, 'SmartFlow 1%');
-      const order = await db.get("SELECT * FROM payment_orders WHERE kind = 'fee_test' ORDER BY created_at DESC LIMIT 1");
+      const order = await db.get("SELECT * FROM payment_orders WHERE kind = 'fee_test' AND status <> 'canceled' ORDER BY created_at DESC LIMIT 1");
       assert.strictEqual(order.subject_id, 'plan_98');
       assert.strictEqual(Number(order.platform_fee_bps), 100);
 
