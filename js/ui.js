@@ -209,15 +209,20 @@
     if (modal) modal.innerHTML = '';
   }
 
-  // External links open through Telegram when possible (stays inside the Telegram app)
+  // External links open through Telegram when possible (stays inside the Telegram app).
+  // Returns false when the browser blocked the new window (then the screen can show its own button).
   function openLink(url) {
     const tg = window.Telegram?.WebApp;
-    if (!/^https?:\/\//i.test(url || '')) return;
+    if (!/^https?:\/\//i.test(url || '')) return false;
     if (tg && tg.openLink && tg.initData) {
       tg.openLink(url);
-    } else {
-      window.open(url, '_blank', 'noopener');
+      return true;
     }
+    // With 'noopener' window.open always returns null, so open first and cut the link back by hand
+    const win = window.open(url, '_blank');
+    if (!win) return false;
+    try { win.opener = null; } catch (e) { /* cross-origin: nothing to cut */ }
+    return true;
   }
 
   // Legal documents (legal/*.md): pages on the same address as the app — /privacy, /terms, /dpa, /dmca
