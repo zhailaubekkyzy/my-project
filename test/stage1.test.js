@@ -4944,6 +4944,280 @@ async function runAllTests() {
     }
   });
 
+  // ---------------- Design system (docs/design/, decision 27 Nov.) ----------------
+  // design.js runs in a sandbox with a tiny document: flags come from SF.feature like on the phone
+  function loadDesignSystem(features = []) {
+    const vm = require('vm');
+    const attrs = {};
+    const head = [];
+    const document = {
+      documentElement: {
+        getAttribute: (k) => (k in attrs ? attrs[k] : null),
+        setAttribute: (k, v) => { attrs[k] = String(v); },
+        removeAttribute: (k) => { delete attrs[k]; }
+      },
+      head: { appendChild: (el) => head.push(el) },
+      getElementById: (id) => head.find(el => el.id === id) || null,
+      createElement: () => ({})
+    };
+    const window = { document, SF: { feature: (n) => features.includes(n) } };
+    window.window = window;
+    for (const file of ['design.js', 'design-showcase.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js', file), 'utf8'), window);
+    return { ds: window.SF.ds, SF: window.SF, attrs, head, setFeatures: (list) => { features = list; } };
+  }
+  const designCss = () => fs.readFileSync(path.join(__dirname, '../css/design.css'), 'utf8');
+  // "--ds-x: #hex" inside the first block that matches the selector start
+  function tokensOf(css, selectorStart) {
+    const at = css.indexOf(selectorStart);
+    assert.ok(at >= 0, `no block ${selectorStart}`);
+    const body = css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+    const out = {};
+    for (const m of body.matchAll(/(--ds-[a-z0-9-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+    return out;
+  }
+  function contrast(a, b) {
+    const lum = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      const ch = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+    };
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  }
+
+  await test('99. Дизайн-система: токены — палитра макета, Golos Text, отступы 4–24, радиусы, тёмная тема и контраст 4,5:1', async () => {
+    const css = designCss();
+    const light = tokensOf(css, ':root,\n.ds-theme-light');
+    const dark = tokensOf(css, ':root[data-theme="dark"],\n.ds-theme-dark');
+    // The palette from docs/design/README.md, exactly
+    const palette = { '--ds-red': '#E3121F', '--ds-teal': '#1BC6B4', '--ds-teal-ink': '#0B2E2A', '--ds-ink': '#161213',
+      '--ds-fog': '#F2F0EF', '--ds-line': '#E6E1DF', '--ds-muted': '#6A6262', '--ds-surface': '#FFFFFF' };
+    for (const [k, v] of Object.entries(palette)) assert.strictEqual(light[k], v, k);
+    assert.ok(/--ds-font:\s*"Golos Text"/.test(css));
+    for (const [k, px] of [[1, 4], [2, 8], [3, 12], [4, 16], [6, 24]]) assert.strictEqual(light[`--ds-space-${k}`], `${px}px`);
+    for (const k of ['xs', 'sm', 'md', 'lg', 'xl']) assert.ok(/^\d+px$/.test(light[`--ds-radius-${k}`]), k);
+    // Dark theme: every color token of the light one is redefined
+    const colors = Object.keys(light).filter(k => /^#/.test(light[k]));
+    assert.ok(colors.length >= 18);
+    for (const k of colors) assert.ok(/^#[0-9A-F]{6}$/i.test(dark[k] || ''), `dark ${k}`);
+    // Contrast at least 4.5:1 for every text on its background, in both themes
+    const pairs = [['on-red', 'red'], ['teal-ink', 'teal'], ['ink', 'surface'], ['ink', 'fog'], ['ink', 'page'], ['muted', 'surface'],
+      ['muted', 'fog'], ['ink-2', 'fog'], ['red-ink', 'surface'], ['red-deep', 'red-tint'], ['teal-text', 'surface'],
+      ['teal-text', 'teal-tint'], ['on-ink', 'ink'], ['ink', 'red-tint']];
+    for (const [theme, t] of [['light', light], ['dark', dark]]) {
+      for (const [fg, bg] of pairs) {
+        const c = contrast(t[`--ds-${fg}`], t[`--ds-${bg}`]);
+        assert.ok(c >= 4.5, `${theme}: ${fg} on ${bg} = ${c.toFixed(2)}`);
+      }
+    }
+    // The new look for the old screens: neutrals and Golos Text only under data-design="v2", in both themes
+    assert.ok(css.includes(':root[data-design="v2"] {') && css.includes(':root[data-design="v2"][data-theme="dark"] {'));
+    assert.ok(/\[data-design="v2"\] body/.test(css));
+    // Touch targets and fields: buttons at least 44, fields 16px (iPhone does not zoom in)
+    assert.ok(/--ds-tap:\s*44px/.test(css));
+    assert.ok(/\.ds-btn \{[^}]*min-height: 46px/.test(css));
+    assert.ok(/\.ds-input \{[^}]*font-size: 16px/.test(css));
+    assert.ok(/prefers-reduced-motion/.test(css));
+    // As in the mockups: white page, flat cards and buttons without shadows (only in the new look)
+    assert.ok(/:root\[data-design="v2"\] \{[^}]*--c-page: 255 255 255/.test(css));
+    assert.ok(/\[data-design="v2"\] \.glass-card-3d \{[^}]*box-shadow: none/.test(css));
+    assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{[^}]*box-shadow: none/.test(css));
+  });
+
+  await test('100. Дизайн-система: базовые компоненты рисуются, текст людей экранируется', async () => {
+    const { ds } = loadDesignSystem();
+    const evil = '<img src=x onerror=alert(1)>';
+    const noRawHtml = (html) => assert.ok(!html.includes('<img src=x'), html);
+    // Button: variants; a disabled one always says why
+    for (const v of ['primary', 'dark', 'outline', 'quiet', 'good', 'soft']) assert.ok(ds.button({ text: 'A', variant: v }).includes(`ds-btn-${v}`));
+    noRawHtml(ds.button({ text: evil }));
+    const off = ds.button({ text: 'Опубликовать', disabled: true, reason: 'Сначала заполните описание' });
+    assert.ok(off.includes(' disabled') && off.includes('ds-btn-reason') && off.includes('Сначала заполните описание') && !off.includes('onclick'));
+    assert.ok(ds.button({ text: 'X', disabled: true }).includes('ds-btn-reason'));
+    // Field: label tied to the input, hint, error state
+    const f = ds.field({ label: 'Название', value: evil, hint: 'Подсказка', id: 'f1' });
+    assert.ok(f.includes('for="f1"') && f.includes('id="f1"') && f.includes('aria-describedby="f1-hint"'));
+    noRawHtml(f);
+    const bad = ds.field({ label: 'Ссылка', error: 'Нужна ссылка https://' });
+    assert.ok(bad.includes('ds-field-error') && bad.includes('aria-invalid="true"') && bad.includes('Нужна ссылка'));
+    assert.ok(ds.field({ multiline: true, value: evil }).includes('<textarea'));
+    noRawHtml(ds.search({ value: evil }));
+    // Card, badge, counter, status
+    assert.ok(ds.card('x').includes('ds-card') && ds.card('x', { fog: true }).includes('ds-card-fog'));
+    assert.ok(ds.card('x', { onclick: 'go()' }).includes('role="button"'));
+    for (const t of ['good', 'neutral', 'new', 'warn']) assert.ok(ds.badge('b', t).includes(`ds-badge-${t}`));
+    assert.ok(ds.badge('b', 'pink').includes('ds-badge-neutral'));
+    noRawHtml(ds.badge(evil));
+    assert.strictEqual(ds.count(0), '');
+    assert.ok(ds.count(3).includes('>3<') && ds.count(250).includes('99+'));
+    assert.deepStrictEqual(Object.keys(ds.STATUSES), ['waiting_human', 'objections', 'not_finished', 'bought', 'refused']);
+    assert.ok(ds.status('waiting_human').includes('ds-status-waiting') && ds.status('waiting_human').includes('Ждут человека'));
+    assert.ok(ds.status('bought').includes('ds-status-bought') && ds.status('unknown').includes('ds-status-unfinished'));
+    // Chat: role pale gray under the name, my / incoming bubbles, the expert's check mark, ready answers
+    const head = ds.chatHead({ name: evil, role: 'ИИ-консультант' });
+    assert.ok(head.includes('ds-role') && head.includes('ИИ-консультант'));
+    noRawHtml(head);
+    assert.ok(ds.bubble('a', { mine: true }).includes('ds-bubble-mine') && ds.bubble('a').includes('ds-bubble-in'));
+    assert.ok(ds.bubble('a', { author: 'Имя · эксперт', expert: true }).includes('badge-check'));
+    // A person's messages are red: mine solid, another person's pale; AI stays fog
+    assert.ok(ds.bubble('a', { author: 'Имя · эксперт', expert: true }).includes('ds-bubble-human'));
+    assert.ok(ds.bubble('a', { human: true }).includes('ds-bubble-human') && !ds.bubble('a').includes('ds-bubble-human'));
+    assert.ok(/\.ds-bubble-mine \{[^}]*background: var\(--ds-red\);[^}]*color: var\(--ds-on-red\)/.test(designCss()));
+    assert.ok(/\.ds-bubble-human \{ background: var\(--ds-red-tint\)/.test(designCss()));
+    // ...only in chats with AI and personal chats: in groups and Комьюнити people's messages are turquoise, AI stays fog
+    assert.ok(ds.bubble('a', { mine: true, place: 'group' }).includes('ds-bubble-teal'));
+    assert.ok(ds.bubble('a', { human: true, place: 'group' }).includes('ds-bubble-teal'));
+    assert.ok(!ds.bubble('a', { mine: true }).includes('ds-bubble-teal'));
+    assert.ok(ds.bubble('a', { mine: true, place: 'community' }).includes('ds-bubble-teal'));
+    assert.ok(ds.bubble('a', { human: true, place: 'community' }).includes('ds-bubble-teal'));
+    assert.ok(!ds.bubble('a', { place: 'community' }).includes('ds-bubble-teal'));
+    assert.ok(/\.ds-bubble-teal\.ds-bubble-mine \{ background: var\(--ds-teal\); color: var\(--ds-teal-ink\)/.test(designCss()));
+    noRawHtml(ds.bubble(evil));
+    const rep = ds.replies(['Первый', 'Второй'], { selected: 1, onclick: 'pick($i)' });
+    assert.ok(rep.includes('pick(0)') && rep.includes('pick(1)') && rep.includes('aria-pressed="true"'));
+    assert.strictEqual(ds.replies([]), '');
+    // Bottom menu: the active tab marked, Buddy is the mascot, counters
+    const nav = ds.tabbar([{ id: 'a', label: 'А', icon: 'store' }, { id: 'b', label: 'Бадди', buddy: true }, { id: 'c', label: 'Чаты', icon: 'x', count: 2 }], 'a');
+    assert.ok(nav.includes('ds-tabbar') && nav.includes('aria-current="page"') && nav.includes('si-buddy') && nav.includes('ds-count'));
+    // Loading / empty / error
+    const sk = ds.skeleton({ rows: 4 });
+    assert.strictEqual((sk.match(/ds-skel-row/g) || []).length, 4);
+    assert.ok(sk.includes('aria-busy="true"'));
+    const em = ds.empty({ title: 'Пусто', text: evil, button: { text: 'Действие', onclick: 'x()' } });
+    assert.strictEqual((em.match(/<button/g) || []).length, 1, 'one button on an empty screen');
+    assert.ok(em.includes('ds-btn-soft'), 'the way out of an empty screen is a neutral step (pale turquoise)');
+    noRawHtml(em);
+    // Catalog parts from MK-Catalog: tabs with an underline, black chosen chip, step preview, list row (2 lines, ✓, badges)
+    const tb = ds.tabs([{ id: 'a', label: 'Шаблоны', num: 'N' }, { id: 'b', label: evil }], 'a');
+    assert.ok(tb.includes('aria-selected="true"') && tb.includes('ds-tab-num'));
+    noRawHtml(tb);
+    assert.ok(ds.chips([{ id: 'a', label: 'Раздел' }], 'a').includes('aria-pressed="true"'));
+    assert.ok(ds.thumb({ steps: 5 }).includes('5 шагов') && ds.thumb({ steps: 3, tone: 'teal' }).includes('3 шага') && ds.thumb({ steps: 1 }).includes('1 шаг<'));
+    const it = ds.item({ title: evil, meta: 'Автор', verified: true, badges: [{ text: 'N% в покупку', tone: 'good' }], preview: ds.thumb({ steps: 5 }) });
+    assert.ok(it.includes('ds-item-title') && it.includes('badge-check') && it.includes('ds-badge-good') && it.includes('ds-thumb'));
+    noRawHtml(it);
+    // Parts from the three roles' mockups
+    const path5 = ds.stepPath([{ title: 'A' }, { title: 'B' }, { title: evil, note: 'Здесь кнопка «Купить»' }], { done: 1, sale: 2 });
+    assert.strictEqual((path5.match(/ds-step-num/g) || []).length, 3);
+    assert.ok(path5.includes('ds-step-done') && path5.includes('ds-step-sale') && path5.includes('ds-step-note'));
+    noRawHtml(path5);
+    const ed = ds.stepEditor([{ title: 'A', mine: true }, { title: 'B', warn: true }], { current: 1 });
+    assert.ok(ed.includes('aria-current="step"') && ed.includes('ваш текст') && ed.includes('ds-step-warn'));
+    assert.ok(ds.stats([{ value: 'N%', label: 'в покупку', good: true }, { value: 'N', label: 'подключили' }]).includes('ds-stat-good'));
+    const ch = ds.choice([{ id: 'a', title: 'A' }, { id: 'b', title: 'B', disabled: true, reason: 'Автор не продаёт разово' }], { selected: 'a', onclick: 'pick(\'$id\')' });
+    assert.ok(ch.includes('role="radiogroup"') && ch.includes('aria-checked="true"') && ch.includes('aria-disabled="true"') && ch.includes('Автор не продаёт разово'));
+    assert.ok(!/pick\('b'\)/.test(ch), 'a disabled choice cannot be picked');
+    assert.ok(ds.choice([{ id: 'a', title: 'A' }], { tiles: true }).includes('ds-tiles'));
+    assert.ok(ds.segmented([{ id: 'w', label: 'Неделя' }, { id: 'm', label: 'Месяц' }], 'm').includes('aria-pressed="true"'));
+    const tg = ds.toggle({ title: '% от продаж', on: true, value: 'N%' });
+    assert.ok(tg.includes('role="switch"') && tg.includes('aria-checked="true"') && tg.includes('ds-value-box'));
+    assert.ok(ds.progress(2, 5).includes('2 из 5') && (ds.progress(2, 5).match(/class="on"/g) || []).length === 2);
+    const cl = ds.checklist([{ text: 'A', done: true }, { text: 'B', done: false, action: 'Написать' }], { title: 'Перед публикацией' });
+    assert.ok(cl.includes('Перед публикацией · 1 из 2') && cl.includes('ds-check-todo') && cl.includes('Написать'));
+    const al = ds.alert({ title: 'Нет ссылки на оплату.', text: evil, action: 'Добавить', onclick: 'add()' });
+    assert.ok(al.includes('ds-alert') && al.includes('add()'));
+    noRawHtml(al);
+    assert.ok(ds.focusCard({ title: 't', bars: [{ value: 50 }, { value: 20, loss: true }] }).includes('ds-bar-loss'));
+    const ab = ds.actionBar({ price: 'N%', sub: 'с каждой продажи', button: { text: 'Подключить' } });
+    assert.ok(ab.includes('ds-actionbar') && ab.includes('ds-btn-good'));
+    const sh = ds.sheet({ title: 'Подключить шаблон', body: 'x', onclose: 'close()' });
+    assert.ok(sh.includes('role="dialog"') && sh.includes('aria-label="Закрыть"') && sh.includes('close()'));
+    const of = ds.offerCard({ title: evil, options: [{ id: 'o', label: 'Сразу', price: '[цена]' }], selected: 'o', button: { text: 'Перейти к оплате' }, fineprint: 'Деньги идут эксперту напрямую' });
+    assert.ok(of.includes('ds-offer') && of.includes('aria-checked="true"') && of.includes('ds-btn-good') && of.includes('ds-fineprint'));
+    noRawHtml(of);
+    assert.ok(ds.giftCard({ title: 'g', button: { text: 'Записать' } }).includes('ds-btn-good'), '«Записать» is turquoise');
+    assert.ok(ds.composer().includes('ds-mic') && ds.composer().includes('работает на SmartFlow'));
+    assert.ok(ds.conditions([{ when: 'пишет «дорого»', then: 'показать отзыв' }]).includes('ds-cond'));
+    assert.ok(ds.avatar({ name: 'Имя · помощница' }).includes('>ИП<') && ds.avatar({ name: 'a', kind: 'ai' }).includes('ds-avatar-ai'));
+    assert.ok(ds.screenHead({ title: 'T', sub: 'Черновик', back: 'back()' }).includes('aria-label="Назад"'));
+    // Disabled buttons are gray, as in the mockups
+    assert.ok(/\.ds-btn:disabled \{ background: var\(--ds-fog\)/.test(designCss()));
+    const er = ds.error({ text: 'Нет интернета', retry: 'reload()', code: 'K7P2' });
+    assert.ok(er.includes('role="alert"') && er.includes('Повторить') && er.includes('reload()') && er.includes('K7P2'));
+  });
+
+  await test('101. Дизайн-система: новый вид и витрина — только с флагом design-v2 (BETA_USERS)', async () => {
+    // On the phone: <html data-design="v2"> and the font only with the flag; switching it off returns the old look
+    const off = loadDesignSystem([]);
+    assert.strictEqual(off.ds.apply(), false);
+    assert.strictEqual(off.attrs['data-design'], undefined);
+    assert.strictEqual(off.head.length, 0);
+    const beta = loadDesignSystem(['design-v2']);
+    assert.strictEqual(beta.ds.FLAG, 'design-v2');
+    assert.strictEqual(beta.ds.apply(), true);
+    assert.strictEqual(beta.attrs['data-design'], 'v2');
+    assert.ok(beta.head[0].href.includes('Golos+Text'));
+    beta.ds.apply();
+    assert.strictEqual(beta.head.length, 1, 'the font is added once');
+    beta.setFeatures([]);
+    beta.ds.apply();
+    assert.strictEqual(beta.attrs['data-design'], undefined);
+    // The showcase holds every base component
+    // The showcase: the three roles' paths from the mockups and «Детали»; together they hold every part
+    const sc = beta.SF.dsShowcase;
+    assert.strictEqual(sc.ROLES.map(r => r.label).join(','), 'Клиент,Эксперт,Маркетолог,Детали');
+    const pages = {};
+    for (const r of sc.ROLES) { sc.setRole(r.id); pages[r.id] = sc.render(); assert.ok(pages[r.id].includes('data-no-tr')); }
+    const has = (id, classes) => classes.forEach(cls => assert.ok(pages[id].includes(cls), `${id}: ${cls}`));
+    has('client', ['ds-chat-head', 'ds-role', 'ИИ-помощница', 'ds-reply', 'ds-bubble-mine', 'ds-offer', 'ds-option', 'ds-gift', 'ds-date', 'ds-composer', 'ds-mic', 'ds-powered']);
+    has('expert', ['ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb', 'ds-tabbar', 'ds-head', 'ds-stats', 'ds-step-sale', 'ds-actionbar', 'ds-sheet', 'ds-choice', 'ds-alert', 'ds-btn-reason']);
+    has('marketer', ['ds-progress', 'ds-pill', 'ds-tiles', 'ds-segmented', 'ds-steps-edit', 'ds-step-mine', 'ds-step-warn', 'ds-cond', 'ds-toggle', 'ds-checklist', 'ds-check-todo', 'ds-big', 'ds-focus', 'ds-bars']);
+    has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
+    // Every positive action is turquoise (owner's decision 27 Nov.); red only for the urgent
+    const all = Object.values(pages).join('');
+    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать']) {
+      const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(?:<i[^>]*><\/i>)?([^<]*)</g)].filter(m => m[2] === label);
+      assert.ok(found.length, label);
+      for (const m of found) assert.ok(m[1].includes('ds-btn-good'), `${label}: ${m[1]}`);
+    }
+    assert.ok(beta.ds.button({ text: 'x' }).includes('ds-btn-good'), 'a button is positive (turquoise) by default');
+    // Neutral steps («Дальше», «Скопировать ссылку») are pale turquoise, not like «Купить» / «Записать»
+    for (const label of ['Дальше', 'Скопировать ссылку']) {
+      const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>([^<]*)</g)].filter(m => m[2] === label);
+      assert.ok(found.length, label);
+      for (const m of found) assert.ok(m[1].includes('ds-btn-soft'), `${label}: ${m[1]}`);
+    }
+    assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{ background: var\(--ds-teal\)/.test(designCss()));
+    // The owner's rules in the paths: no «SI-», no review before publishing, the client's role starts with «ИИ-»
+    for (const html of Object.values(pages)) {
+      assert.ok(!/SI-|на проверку|без регистрации|Позвать/.test(html));
+      for (const m of html.matchAll(/class="ds-role">([^<]*)</g)) assert.ok(m[1].startsWith('ИИ-'), m[1]);
+    }
+    // Settings show the showcase row and screen only with the flag
+    const profile = fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8');
+    assert.ok(/SF\.ds && SF\.ds\.on\(\) \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
+    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase"));
+    // On the server: FEATURES=design-v2:beta reaches only the people from BETA_USERS
+    const appInfo = require('../server/services/app-info');
+    const saved = { features: config.features, betaUsers: config.betaUsers };
+    try {
+      config.features = ['design-v2:beta'];
+      config.betaUsers = [String(studentTg.id)];
+      assert.deepStrictEqual((await api('GET', '/api/auth/me', tokenStudent)).body.app.features, ['design-v2']);
+      assert.deepStrictEqual((await api('GET', '/api/auth/me', tokenOwner)).body.app.features, []);
+    } finally {
+      Object.assign(config, saved);
+    }
+  });
+
+  await test('102. Дизайн-система подключена: порядок стилей, скрипт до экранов, без цветов в коде компонентов', async () => {
+    const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    const at = (s) => html.indexOf(s);
+    assert.ok(at('css/app.css') < at('css/design.css') && at('css/design.css') < at('css/tailwind.css') && at('css/design.css') > 0);
+    assert.ok(at('js/ui.js') < at('js/design.js') && at('js/design.js') < at('js/design-showcase.js') && at('js/design-showcase.js') < at('js/screens/'));
+    assert.ok(html.includes('window.SFApplyTheme = applyTheme'));
+    const js = fs.readFileSync(path.join(__dirname, '../js/design.js'), 'utf8');
+    assert.ok(!/[^&]#[0-9a-f]{3,6}\b/i.test(js), 'colors only through tokens in css/design.css');
+    // The renderer calls apply() before drawing; the menu counter is red in the new look
+    const app = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+    // «Template» look goes away in the new look: no colored icons in Settings rows, no logo and photo in every header
+    const css = designCss();
+    assert.ok(/\[data-design="v2"\] \.settings-row-icon \{ display: none; \}/.test(css));
+    assert.ok(css.includes('[data-design="v2"] .app-header-logo') && app.includes('app-header-logo') && app.includes('app-header-me'));
+    assert.ok(fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8').includes('settings-row-icon'));
+    assert.ok(app.includes('if (SF.ds) SF.ds.apply();') && app.includes('SF.ds.count(badges[t.id])'));
+  });
+
   await new Promise(resolve => httpServer.close(resolve));
 
   console.log('\n------------------------------------------------------');

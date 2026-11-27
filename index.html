@@ -36,6 +36,7 @@
   <!-- App theme, then precompiled Tailwind (npm run build:css).
        Order matters: the Play CDN injected Tailwind after app.css, so utilities win ties. -->
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/design.css">
   <link rel="stylesheet" href="css/tailwind.css">
 
   <!-- Google Fonts: Plus Jakarta Sans & Caveat — loaded without blocking first paint -->
@@ -67,9 +68,17 @@
         var dark = tg.colorScheme === 'dark';
         if (dark) document.documentElement.setAttribute('data-theme', 'dark');
         else document.documentElement.removeAttribute('data-theme');
+        // The page colour from the theme (the new look, flag design-v2, has its own): "R G B" → #rrggbb
         var bg = dark ? '#090f17' : '#f6f9fa';
+        try {
+          var rgb = getComputedStyle(document.documentElement).getPropertyValue('--c-page').trim().split(/\s+/).map(Number);
+          if (rgb.length === 3 && rgb.every(function (n) { return n >= 0 && n <= 255; })) {
+            bg = '#' + rgb.map(function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+          }
+        } catch (e) {}
         try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } catch (e) {}
       }
+      window.SFApplyTheme = applyTheme;
       applyTheme();
       try { tg.onEvent('themeChanged', applyTheme); } catch (e) {}
     })();
@@ -81,6 +90,8 @@
   <script src="js/icons.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/design.js"></script>
+  <script src="js/design-showcase.js"></script>
   <script src="js/data.js"></script>
   <script src="js/niches.js"></script>
   <script src="js/media.js"></script>

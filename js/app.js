@@ -670,6 +670,9 @@ function renderApp(state) {
     return;
   }
 
+  // The new look (flag design-v2, only BETA_USERS for now): <html data-design="v2">
+  if (SF.ds) SF.ds.apply();
+
   const tab = state.ui.tab;
   const stack = state.ui.routes[tab];
   const route = stack[stack.length - 1];
@@ -711,11 +714,11 @@ function renderApp(state) {
             <button onclick="SF.back()" class="p-1.5 -ml-1.5 rounded-xl text-muted hover:text-ink" aria-label="Назад">
               <i data-lucide="chevron-left" class="w-5 h-5"></i>
             </button>
-          ` : `<img src="images/logo-mark.webp" alt="SmartFlow" width="28" height="28" class="w-7 h-7" />`}
+          ` : `<img src="images/logo-mark.webp" alt="SmartFlow" width="28" height="28" class="w-7 h-7 app-header-logo" />`}
           <div class="flex-1 min-w-0">
             <div class="text-sm font-bold text-ink truncate">${SF.esc(title)}</div>
           </div>
-          <button onclick="SF.go('profile')" class="flex-shrink-0" aria-label="Профиль">
+          <button onclick="SF.go('profile')" class="flex-shrink-0 app-header-me" aria-label="Профиль">
             ${SF.avatar(state.me.photoUrl, { size: 30, kind: 'human', userId: state.me.id })}
           </button>
         </header>
@@ -801,11 +804,13 @@ function renderBottomNav(state) {
             </button>`;
         }
         return `
-          <button onclick="SF.go('${t.id}')" class="tg-nav-item relative ${active ? 'active' : ''} ${t.enabled ? '' : 'opacity-50'}">
+          <button onclick="SF.go('${t.id}')" class="tg-nav-item relative ${active ? 'active' : ''} ${t.enabled ? '' : 'opacity-50'}" aria-label="${t.label}${badges[t.id] ? `: ${badges[t.id]} новых` : ''}"${active ? ' aria-current="page"' : ''}>
             <i data-lucide="${t.icon}" class="w-5 h-5"></i>
             <span class="truncate max-w-full">${t.label}</span>
             ${!t.enabled ? `<span class="absolute -top-1.5 left-1/2 -translate-x-1/2">${SF.soonBadge()}</span>` : ''}
-            ${badges[t.id] ? `<span class="absolute top-0.5 right-3 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center">${badges[t.id]}</span>` : ''}
+            ${badges[t.id] ? (SF.ds && SF.ds.on()
+              ? `<span class="absolute top-0.5 right-3">${SF.ds.count(badges[t.id])}</span>`
+              : `<span class="absolute top-0.5 right-3 min-w-4 h-4 px-1 rounded-full bg-[#81D8D0] text-[#08302c] text-[9px] font-bold flex items-center justify-center">${badges[t.id]}</span>`) : ''}
           </button>`;
       }).join('')}
     </nav>

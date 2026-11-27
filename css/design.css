@@ -1,0 +1,561 @@
+/* design.css - SmartFlow design system (макеты 25 нояб., docs/design/; decision 27 Nov.).
+ *
+ * Colors: red = what matters now (urgent: a client is waiting, something is missing), turquoise = good news and
+ * every positive action (pay, connect, publish, sign up — owner's decision 27 Nov.), ink and fog = everything else. White text on red, only dark text on turquoise.
+ * Font Golos Text, spacing in steps of 4 (4/8/12/16/24), numbers tabular.
+ * Dark theme is ours (the mockups have none): <html data-theme="dark">, or .ds-theme-dark on a block for a preview.
+ *
+ * Two layers:
+ *  1. --ds-* tokens and .ds-* components: always available; the showcase (Настройки → «Дизайн-система») uses them.
+ *  2. <html data-design="v2"> (flag `design-v2`, only BETA_USERS for now; js/design.js): the old --c-* tokens get
+ *     the new calm neutrals and the app gets Golos Text. Screens move to the .ds-* components one by one (step 2).
+ * Never write raw colors in screens: use the tokens.
+ */
+
+:root,
+.ds-theme-light {
+  /* Palette (docs/design/README.md) */
+  --ds-red: #E3121F;        /* urgent, the main button */
+  --ds-red-ink: #C20F1A;    /* red text on white */
+  --ds-red-deep: #8A0B14;   /* text on --ds-red-tint */
+  --ds-red-tint: #FDECEC;
+  --ds-on-red: #FFFFFF;
+  --ds-teal: #1BC6B4;       /* good news */
+  --ds-teal-ink: #0B2E2A;   /* the only text on --ds-teal */
+  --ds-teal-text: #0B5A52;  /* turquoise text on white / on --ds-teal-tint */
+  --ds-teal-tint: #DDF6F3;
+  --ds-teal-line: #9FD9D1;
+  --ds-ink: #161213;
+  --ds-ink-2: #4A4343;
+  --ds-muted: #6A6262;
+  --ds-on-ink: #FFFFFF;
+  --ds-fog: #F2F0EF;
+  --ds-fog-2: #ECE8E7;
+  --ds-line: #E6E1DF;
+  --ds-line-2: #DCD7D5;
+  --ds-surface: #FFFFFF;
+  --ds-page: #FFFFFF;
+  --ds-focus: #161213;      /* the dark «главное сейчас» card */
+  --ds-on-focus: #FFFFFF;
+  --ds-focus-muted: #B9B1B0;
+
+  /* Spacing: multiples of 4 */
+  --ds-space-1: 4px;   /* inside a badge */
+  --ds-space-2: 8px;   /* between badges */
+  --ds-space-3: 12px;  /* preview ↔ text */
+  --ds-space-4: 16px;  /* screen edge */
+  --ds-space-6: 24px;  /* between sections */
+
+  /* Radii */
+  --ds-radius-xs: 6px;    /* badge */
+  --ds-radius-sm: 8px;    /* chip, filter */
+  --ds-radius-md: 12px;   /* button, field */
+  --ds-radius-lg: 16px;   /* card */
+  --ds-radius-xl: 20px;   /* big panel */
+  --ds-radius-bubble: 18px;
+  --ds-radius-pill: 999px;
+
+  /* Type: size / weight */
+  --ds-font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ds-text-screen: 24px;   /* 800 */
+  --ds-text-section: 17px;  /* 800 */
+  --ds-text-card: 15px;     /* 700 */
+  --ds-text-body: 15px;
+  --ds-text-meta: 13px;     /* 500 */
+  --ds-text-badge: 12px;    /* 600, the minimum */
+
+  --ds-tap: 44px;           /* the smallest thing a finger presses */
+}
+
+:root[data-theme="dark"],
+.ds-theme-dark {
+  --ds-red: #E3121F;
+  --ds-red-ink: #FF6B73;
+  --ds-red-deep: #FFB3B7;
+  --ds-red-tint: #3A1316;
+  --ds-on-red: #FFFFFF;
+  --ds-teal: #1BC6B4;
+  --ds-teal-ink: #0B2E2A;
+  --ds-teal-text: #5FE0D2;
+  --ds-teal-tint: #0E3532;
+  --ds-teal-line: #1F6A62;
+  --ds-ink: #F5F2F1;
+  --ds-ink-2: #D3CCCB;
+  --ds-muted: #A69D9C;
+  --ds-on-ink: #161213;
+  --ds-fog: #262021;
+  --ds-fog-2: #2E2728;
+  --ds-line: #342D2E;
+  --ds-line-2: #423A3B;
+  --ds-surface: #1B1718;
+  --ds-page: #0F0C0D;
+  --ds-focus: #2E2728;
+  --ds-on-focus: #F5F2F1;
+  --ds-focus-muted: #B9B1B0;
+}
+
+/* The preview block keeps the light look inside a dark app too (and the other way round) */
+.ds-theme-light, .ds-theme-dark { background: var(--ds-page); color: var(--ds-ink); }
+
+/* ---------- New look for the whole app (flag design-v2) ---------- */
+:root[data-design="v2"] {
+  --c-page: 255 255 255;   /* white, as in the mockups; fog is for fills */
+  --c-card: 255 255 255;
+  --c-sunken: 242 240 239;
+  --c-raised: 236 232 231;
+  --c-ink: 22 18 19;
+  --c-ink-2: 74 67 67;
+  --c-muted: 106 98 98;
+  --c-faint: 143 135 134;
+  --c-line: 230 225 223;
+  --c-line-2: 220 215 213;
+  --c-brand: 11 90 82;     /* turquoise text = good news */
+  --c-si: 194 15 26;       /* red text = urgent */
+}
+
+:root[data-design="v2"][data-theme="dark"] {
+  --c-page: 15 12 13;
+  --c-card: 27 23 24;
+  --c-sunken: 38 32 33;
+  --c-raised: 46 39 40;
+  --c-ink: 245 242 241;
+  --c-ink-2: 211 204 203;
+  --c-muted: 166 157 156;
+  --c-faint: 125 116 115;
+  --c-line: 52 45 46;
+  --c-line-2: 66 58 59;
+  --c-brand: 95 224 210;
+  --c-si: 255 107 115;
+}
+
+[data-design="v2"] body,
+[data-design="v2"] .font-sans,
+.ds {
+  font-family: var(--ds-font);
+}
+
+.ds { color: var(--ds-ink); font-variant-numeric: tabular-nums; font-size: var(--ds-text-body); line-height: 1.4; }
+
+/* ---------- Type ---------- */
+.ds-h1 { margin: 0; font-size: var(--ds-text-screen); font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+.ds-h2 { margin: 0; font-size: var(--ds-text-section); font-weight: 800; line-height: 1.3; }
+.ds-h3 { margin: 0; font-size: var(--ds-text-card); font-weight: 700; line-height: 1.25; }
+.ds-meta { font-size: var(--ds-text-meta); font-weight: 500; color: var(--ds-muted); }
+.ds-small { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-num { font-variant-numeric: tabular-nums; }
+
+/* ---------- Button ---------- */
+.ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-space-2);
+  min-height: 46px; min-width: var(--ds-tap); padding: 0 var(--ds-space-4);
+  border: 1px solid transparent; border-radius: var(--ds-radius-md);
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 700; line-height: 1.2;
+  cursor: pointer; text-align: center; text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease, opacity .15s ease, transform .1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ds-btn:active:not(:disabled) { transform: scale(0.98); }
+.ds-btn:focus-visible { outline: 2px solid var(--ds-teal-text); outline-offset: 2px; }
+.ds-btn:disabled { background: var(--ds-fog); color: var(--ds-muted); border-color: transparent; cursor: not-allowed; } /* gray, as in the mockups */
+.ds-btn-lg { min-height: 52px; font-size: 16px; }
+.ds-btn-block { display: flex; width: 100%; }
+.ds-btn-primary { background: var(--ds-red); color: var(--ds-on-red); }   /* urgent only */
+.ds-btn-dark { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-btn-outline { background: var(--ds-surface); color: var(--ds-ink); border-color: var(--ds-ink); }
+.ds-btn-quiet { background: transparent; color: var(--ds-ink); }
+.ds-btn-good { background: var(--ds-teal); color: var(--ds-teal-ink); }   /* a positive action with a result: buy, sign up, publish */
+.ds-btn-soft { background: var(--ds-teal-tint); color: var(--ds-teal-text); }  /* a neutral step: «Дальше», «Скопировать ссылку» */
+.ds-btn-reason { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
+
+/* ---------- Field ---------- */
+.ds-field { display: flex; flex-direction: column; gap: var(--ds-space-1); }
+.ds-label { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-ink-2); }
+.ds-input {
+  width: 100%; box-sizing: border-box; min-height: 46px; padding: 0 14px;
+  border: 1px solid transparent; border-radius: var(--ds-radius-md);
+  background: var(--ds-fog); color: var(--ds-ink);
+  font-family: inherit; font-size: 16px; /* 16px: iPhone does not zoom into the field */
+  outline: none; transition: border-color .15s ease, background-color .15s ease;
+}
+textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-height: 1.4; resize: vertical; }
+.ds-input::placeholder { color: var(--ds-muted); }
+.ds-input:focus { border-color: var(--ds-teal-text); background: var(--ds-surface); }
+.ds-field-error .ds-input, .ds-input[aria-invalid="true"] { border-color: var(--ds-red-ink); }
+.ds-hint { font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.35; }
+.ds-field-error .ds-hint { color: var(--ds-red-ink); }
+.ds-search { position: relative; display: flex; align-items: center; }
+.ds-search > svg, .ds-search > i { position: absolute; left: 12px; width: 18px; height: 18px; color: var(--ds-muted); pointer-events: none; }
+.ds-search .ds-input { padding-left: 38px; }
+
+/* ---------- Card ---------- */
+.ds-card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-radius-lg); padding: var(--ds-space-4); }
+.ds-card-fog { background: var(--ds-fog); border-color: transparent; }
+.ds-card-press { cursor: pointer; transition: border-color .15s ease; }
+.ds-card-press:hover { border-color: var(--ds-line-2); }
+.ds-stack { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-row { display: flex; align-items: center; gap: var(--ds-space-2); flex-wrap: wrap; }
+.ds-section { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+
+/* ---------- Badge and counter ---------- */
+.ds-badge {
+  display: inline-flex; align-items: center; gap: var(--ds-space-1);
+  padding: 3px 6px; border-radius: var(--ds-radius-xs);
+  font-size: var(--ds-text-badge); font-weight: 700; line-height: 1.3; white-space: nowrap;
+}
+.ds-badge-good { color: var(--ds-teal-text); background: var(--ds-teal-tint); }
+.ds-badge-neutral { color: var(--ds-muted); background: var(--ds-fog); font-weight: 600; }
+.ds-badge-new { color: var(--ds-on-ink); background: var(--ds-ink); }
+.ds-badge-warn { color: var(--ds-red-deep); background: var(--ds-red-tint); }  /* a warning only, never an ad */
+.ds-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--ds-radius-pill);
+  background: var(--ds-red); color: var(--ds-on-red); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Client status ---------- */
+.ds-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-ink-2); }
+.ds-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-line-2); flex-shrink: 0; }
+.ds-status-waiting { color: var(--ds-ink); font-weight: 700; }
+.ds-status-waiting::before { background: var(--ds-red); }
+.ds-status-objection::before { background: var(--ds-ink-2); }
+.ds-status-unfinished { color: var(--ds-muted); }
+.ds-status-unfinished::before { background: var(--ds-muted); }
+.ds-status-bought { color: var(--ds-teal-text); }
+.ds-status-bought::before { background: var(--ds-teal); }
+.ds-status-refused { color: var(--ds-muted); font-weight: 500; }
+
+/* ---------- Chat ---------- */
+.ds-chat { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+.ds-chat-head { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px var(--ds-space-4); border-bottom: 1px solid var(--ds-line); }
+.ds-chat-name { font-size: 16px; font-weight: 700; line-height: 1.25; }
+.ds-role { font-size: var(--ds-text-badge); color: var(--ds-muted); font-weight: 400; } /* «ИИ-…» pale gray under the name */
+.ds-bubble { max-width: 84%; padding: 10px 13px; font-size: var(--ds-text-body); line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
+.ds-bubble-in { align-self: flex-start; background: var(--ds-fog); color: var(--ds-ink); border-radius: var(--ds-radius-bubble) var(--ds-radius-bubble) var(--ds-radius-bubble) 4px; }
+/* Messages written by a person are red (owner's decision 27 Nov.): mine — solid red, another person's — pale red; AI — fog */
+.ds-bubble-mine { align-self: flex-end; background: var(--ds-red); color: var(--ds-on-red); border-radius: var(--ds-radius-bubble) var(--ds-radius-bubble) 4px var(--ds-radius-bubble); }
+.ds-bubble-human { background: var(--ds-red-tint); }
+/* Red is only for chats with AI and personal chats with a person (owner's decision 27 Nov.). Everywhere else — groups, Комьюнити —
+   what people write is turquoise: mine solid turquoise with dark text, another person's pale turquoise */
+.ds-bubble-teal.ds-bubble-mine { background: var(--ds-teal); color: var(--ds-teal-ink); }
+.ds-bubble-teal.ds-bubble-human { background: var(--ds-teal-tint); }
+.ds-bubble-author { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-size: var(--ds-text-badge); font-weight: 700; color: var(--ds-ink-2); }
+.ds-bubble-author svg, .ds-bubble-author i { width: 14px; height: 14px; color: var(--ds-teal-text); }
+.ds-bubble-time { display: block; margin-top: 2px; text-align: right; font-size: 11px; opacity: .65; }
+.ds-replies { display: flex; flex-direction: column; gap: var(--ds-space-2); padding-left: var(--ds-space-2); }
+.ds-reply {
+  min-height: 46px; padding: 0 14px; border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-teal-line); background: var(--ds-surface); color: var(--ds-ink);
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 500; text-align: left; cursor: pointer;
+}
+.ds-reply[aria-pressed="true"] { border: 2px solid var(--ds-teal-text); background: var(--ds-teal-tint); font-weight: 700; }
+.ds-typing { display: inline-flex; gap: 4px; align-items: center; }
+.ds-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--ds-muted); animation: ds-typing 1.2s infinite ease-in-out; }
+.ds-typing span:nth-child(2) { animation-delay: .15s; }
+.ds-typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes ds-typing { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* ---------- Bottom menu ---------- */
+.ds-tabbar {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end;
+  background: var(--ds-surface); border-top: 1px solid var(--ds-line);
+  padding: 6px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.ds-tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-height: var(--ds-tap); padding: 6px 2px 0; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 11px; font-weight: 500; color: var(--ds-muted); min-width: 0;
+}
+.ds-tab svg, .ds-tab i { width: 24px; height: 24px; }
+.ds-tab { justify-content: center; padding: 10px 2px; }
+.ds-tab.active { color: var(--ds-ink); font-weight: 700; }
+.ds-tab.active::before { content: ""; position: absolute; top: 0; left: 50%; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--ds-red); }
+.ds-tab .ds-count { position: absolute; top: 0; right: calc(50% - 22px); }
+.ds-tab-buddy img { width: 48px; height: 48px; margin-top: -18px; object-fit: contain; } /* the mascot stays the only "3D" thing */
+
+/* The existing bottom menu in the new look (same buttons, same logic) */
+[data-design="v2"] .tg-nav-bar { background: var(--ds-surface); backdrop-filter: none; border-top-color: var(--ds-line); }
+[data-design="v2"] .tg-nav-item { font-size: 11px; font-weight: 500; color: var(--ds-muted); background: transparent; border-radius: 0; }
+[data-design="v2"] .tg-nav-item.active { color: var(--ds-ink); font-weight: 700; background: transparent; }
+[data-design="v2"] .tg-nav-item.active::before { content: ""; position: absolute; top: -8px; left: 50%; width: 24px; height: 3px; margin-left: -12px; border-radius: 2px; background: var(--ds-red); }
+[data-design="v2"] .buddy-nav-btn { box-shadow: none; border-color: var(--ds-line); background: var(--ds-surface); }
+[data-design="v2"] .buddy-nav-btn.active { border-color: var(--ds-red); }
+
+/* ---------- Skeleton (loading) ---------- */
+.ds-skel {
+  display: block; border-radius: 4px; background: var(--ds-fog-2);
+  background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.35) 50%, transparent 100%);
+  background-size: 200% 100%; background-repeat: no-repeat;
+  animation: ds-shimmer 1.4s infinite linear;
+}
+.ds-theme-dark .ds-skel, :root[data-theme="dark"] .ds-skel { background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.06) 50%, transparent 100%); }
+.ds-skel-line { height: 12px; }
+.ds-skel-line.ds-skel-soft { height: 10px; background-color: var(--ds-fog); }
+.ds-skel-thumb { width: 72px; height: 84px; border-radius: 10px; flex-shrink: 0; }
+.ds-skel-row { display: flex; gap: var(--ds-space-3); }
+.ds-skel-lines { flex: 1; display: flex; flex-direction: column; gap: var(--ds-space-2); padding-top: var(--ds-space-1); }
+@keyframes ds-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ds-skel, .ds-typing span { animation: none; }
+}
+
+/* ---------- Empty state ---------- */
+.ds-empty { display: flex; flex-direction: column; align-items: center; gap: var(--ds-space-3); padding: var(--ds-space-6) var(--ds-space-4); text-align: center; }
+.ds-empty img { width: 100px; height: 110px; object-fit: contain; }
+.ds-empty-title { font-size: var(--ds-text-section); font-weight: 800; line-height: 1.3; }
+.ds-empty-text { font-size: 14px; color: var(--ds-muted); line-height: 1.4; max-width: 320px; }
+.ds-empty .ds-btn { align-self: stretch; max-width: 360px; margin: 0 auto; width: 100%; }
+
+/* ---------- Error (what was loaded stays below) ---------- */
+.ds-error {
+  display: flex; align-items: center; gap: 10px; padding: var(--ds-space-3) var(--ds-space-4);
+  border-radius: var(--ds-radius-md); background: var(--ds-ink); color: var(--ds-on-ink);
+  font-size: var(--ds-text-meta); line-height: 1.35;
+}
+.ds-error-text { flex: 1; }
+.ds-error .ds-btn { min-height: var(--ds-tap); padding: 0 12px; font-size: var(--ds-text-meta); background: transparent; color: var(--ds-on-ink); border-color: var(--ds-on-ink); }
+
+/* ---------- Showcase only ---------- */
+.ds-swatch { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ds-swatch-chip { height: 56px; border-radius: var(--ds-radius-md); border: 1px solid var(--ds-line); }
+.ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--ds-space-3); }
+.ds-space-bar { display: inline-block; height: 12px; background: var(--ds-red); }
+.ds-radius-box { width: 44px; height: 44px; background: var(--ds-fog-2); border: 1px solid var(--ds-line-2); }
+.ds-showcase { background: var(--ds-page); color: var(--ds-ink); display: flex; flex-direction: column; gap: 32px; padding: var(--ds-space-2) 0; }
+.ds-segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-radius-md); background: var(--ds-fog); }
+.ds-segmented-block { display: flex; }
+.ds-segmented-block button { flex: 1; }
+.ds-segmented button { min-height: 40px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 600; cursor: pointer; }
+.ds-segmented button[aria-pressed="true"] { background: var(--ds-surface); color: var(--ds-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.ds-tab > span:not(.ds-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Tabs, filter chips, list rows, catalog card (MK-Catalog, MK-Components) ---------- */
+.ds-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--ds-line); overflow-x: auto; scrollbar-width: none; }
+.ds-tabs::-webkit-scrollbar { display: none; }
+.ds-tabs button {
+  height: var(--ds-tap); padding: 0; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none;
+  font-family: inherit; font-size: var(--ds-text-body); font-weight: 500; color: var(--ds-muted); white-space: nowrap; cursor: pointer;
+}
+.ds-tabs button[aria-selected="true"] { color: var(--ds-ink); font-weight: 700; border-bottom-color: var(--ds-ink); }
+.ds-tabs .ds-tab-num { margin-left: 4px; color: var(--ds-muted); font-weight: 500; }
+.ds-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ds-chips::-webkit-scrollbar { display: none; }
+.ds-chip {
+  height: 34px; min-height: 34px; padding: 0 12px; border-radius: var(--ds-radius-sm); border: 1px solid var(--ds-line);
+  background: var(--ds-surface); color: var(--ds-ink); font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.ds-chip[aria-pressed="true"] { background: var(--ds-ink); color: var(--ds-on-ink); border-color: var(--ds-ink); font-weight: 600; }
+.ds-list > * + * { border-top: 1px solid var(--ds-line); }
+.ds-item { display: flex; gap: var(--ds-space-3); padding: 14px 0; color: var(--ds-ink); text-decoration: none; cursor: pointer; }
+.ds-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ds-item-title { font-size: var(--ds-text-card); font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ds-item-meta { font-size: var(--ds-text-meta); color: var(--ds-muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ds-item-meta svg, .ds-item-meta i { width: 13px; height: 13px; color: var(--ds-teal); }
+.ds-item-foot { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-thumb {
+  width: 84px; height: 96px; flex-shrink: 0; box-sizing: border-box; border-radius: 10px; padding: 8px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; background: var(--ds-fog);
+}
+.ds-thumb > i { display: block; height: 8px; border-radius: 4px; background: var(--ds-surface); }
+.ds-thumb > i.ds-thumb-sale { background: var(--ds-red); align-self: flex-end; }
+.ds-thumb > span { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--ds-ink); }
+.ds-thumb-red { background: var(--ds-red-tint); }
+.ds-thumb-red > span { color: var(--ds-red-deep); }
+.ds-thumb-teal { background: var(--ds-teal-tint); }
+.ds-thumb-teal > span { color: var(--ds-teal-text); }
+.ds-thumb-teal > i.ds-thumb-sale { background: var(--ds-ink); }
+.ds-hint-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--ds-radius-md); background: var(--ds-fog); font-size: var(--ds-text-meta); line-height: 1.35; }
+.ds-hint-card img { width: 34px; height: 34px; object-fit: contain; }
+.ds-link-red { border: none; background: none; padding: 0 4px; min-height: var(--ds-tap); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 700; color: var(--ds-red-ink); cursor: pointer; }
+.ds-icon-btn { width: var(--ds-tap); height: var(--ds-tap); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ds-radius-md); border: 1px solid var(--ds-line); background: var(--ds-surface); color: var(--ds-ink); cursor: pointer; }
+.ds-icon-btn svg, .ds-icon-btn i { width: 20px; height: 20px; }
+.ds-phone { border: 1px solid var(--ds-line); border-radius: var(--ds-radius-xl); overflow: hidden; background: var(--ds-page); }
+
+/* ---------- Old parts of the screens in the new look (flag design-v2): flat, no shadows; the old Tiffany buttons
+   (positive actions) become the new turquoise ---------- */
+[data-design="v2"] .glass-card-3d { border-radius: var(--ds-radius-lg); border-color: rgb(var(--c-line)); box-shadow: none; }
+[data-design="v2"] .glass-card-3d:hover { box-shadow: none; }
+[data-design="v2"] .tg-header { background: var(--ds-surface); backdrop-filter: none; }
+[data-design="v2"] .btn-3d-tiffany { background: var(--ds-teal); color: var(--ds-teal-ink); border: 1px solid var(--ds-teal); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-tiffany:active { transform: scale(0.98); box-shadow: none; }
+[data-design="v2"] .btn-3d-red { background: var(--ds-red); color: var(--ds-on-red); border: 1px solid var(--ds-red); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-red:active { transform: scale(0.98); box-shadow: none; }
+[data-design="v2"] .btn-3d-dark { background: var(--ds-surface); color: var(--ds-ink); border: 1px solid var(--ds-line); border-radius: var(--ds-radius-md); box-shadow: none; }
+[data-design="v2"] .btn-3d-dark:hover { border-color: var(--ds-ink); color: var(--ds-ink); }
+[data-design="v2"] .hero-tiffany-banner { background: var(--ds-fog); color: var(--ds-ink); box-shadow: none; border-radius: var(--ds-radius-lg); }
+
+/* Bottom menu: icons only, no captions (owner's decision 27 Nov.); the name stays in aria-label */
+[data-design="v2"] .tg-nav-item > span.truncate,
+[data-design="v2"] .tg-nav-bar button > span.text-\[11px\] { display: none; }
+[data-design="v2"] .tg-nav-item { min-height: var(--ds-tap); justify-content: center; }
+[data-design="v2"] .tg-nav-item svg { width: 24px; height: 24px; }
+
+/* ---------- Screen header: «назад» in a square, title, state under it, actions on the right ---------- */
+.ds-head { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px var(--ds-space-4); border-bottom: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ds-head-title { font-size: 17px; font-weight: 800; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-head-sub { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-head-actions { display: flex; gap: var(--ds-space-2); flex-shrink: 0; }
+.ds-head .ds-btn { min-height: var(--ds-tap); padding: 0 12px; font-size: 14px; }
+.ds-eyebrow { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-muted); }
+
+/* ---------- Path of steps: the thread through all three roles ---------- */
+.ds-steps { position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ds-steps::before { content: ""; position: absolute; left: 20px; top: 14px; bottom: 14px; width: 2px; background: var(--ds-line); }
+.ds-step { position: relative; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px; border-radius: 10px; font-size: var(--ds-text-body); font-weight: 600; }
+.ds-step-num {
+  width: 22px; height: 22px; box-sizing: border-box; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--ds-ink);
+  background: var(--ds-surface); color: var(--ds-ink); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.ds-step-done .ds-step-num { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-step-sale { background: var(--ds-red-tint); }
+.ds-step-sale .ds-step-num { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); }
+.ds-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ds-step-note { font-size: var(--ds-text-meta); font-weight: 500; color: var(--ds-red-ink); }
+/* The editor's list of steps (S-Builder): no line, the chosen step framed, «ваш текст», a red dot = something to fix */
+.ds-steps-edit::before { display: none; }
+.ds-steps-edit .ds-step { min-height: 48px; border: 2px solid transparent; cursor: pointer; }
+.ds-steps-edit .ds-step[aria-current="step"] { border-color: var(--ds-ink); }
+.ds-step-grip { color: var(--ds-line-2); font-size: 14px; letter-spacing: -2px; }
+.ds-step-mine { font-size: 11px; font-weight: 700; color: var(--ds-teal-text); white-space: nowrap; }
+.ds-step-warn { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-red); flex-shrink: 0; }
+.ds-step-add { min-height: var(--ds-tap); border: 1px dashed var(--ds-line-2); border-radius: var(--ds-radius-md); background: none; font-family: inherit; font-size: 14px; font-weight: 700; color: var(--ds-ink); cursor: pointer; }
+
+/* ---------- Numbers ---------- */
+.ds-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--ds-line); border-bottom: 1px solid var(--ds-line); }
+.ds-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 12px 12px 0; }
+.ds-stat + .ds-stat { border-left: 1px solid var(--ds-line); padding-left: 12px; }
+.ds-stat-value { font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.ds-stat-good .ds-stat-value { color: var(--ds-teal-text); }
+.ds-stat-label { font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.3; }
+.ds-big { font-size: 44px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ds-delta-good { color: var(--ds-teal-text); font-weight: 700; }
+.ds-delta-bad { color: var(--ds-red-ink); font-weight: 700; }
+
+/* ---------- Choice: cards with a radio (how to pay, what the client sells) ---------- */
+.ds-choices { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ds-choice {
+  display: flex; gap: var(--ds-space-3); align-items: flex-start; width: 100%; box-sizing: border-box; padding: 14px;
+  border: 1px solid var(--ds-line); border-radius: 14px; background: var(--ds-surface); color: var(--ds-ink);
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.ds-tiles .ds-choice { flex-direction: column; justify-content: space-between; min-height: 92px; }
+.ds-choice[aria-checked="true"] { border: 2px solid var(--ds-ink); padding: 13px; }
+.ds-choice[aria-disabled="true"] { background: var(--ds-fog); border-color: var(--ds-line); color: var(--ds-muted); cursor: not-allowed; }
+.ds-radio { width: 20px; height: 20px; box-sizing: border-box; flex-shrink: 0; margin-top: 1px; border-radius: 50%; border: 2px solid var(--ds-line-2); background: var(--ds-surface); }
+.ds-choice[aria-checked="true"] .ds-radio { border-color: var(--ds-red); background: var(--ds-red); box-shadow: inset 0 0 0 3px var(--ds-surface); }
+.ds-choice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ds-choice-title { font-size: var(--ds-text-body); font-weight: 700; }
+.ds-choice-sub { font-size: var(--ds-text-meta); color: var(--ds-muted); line-height: 1.35; }
+.ds-choice-right { font-size: var(--ds-text-body); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------- Toggle ---------- */
+.ds-toggle-row { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-toggle { position: relative; width: 52px; height: var(--ds-tap); flex-shrink: 0; padding: 0; border: none; background: none; cursor: pointer; }
+.ds-toggle::before { content: ""; position: absolute; left: 2px; right: 2px; top: 8px; bottom: 8px; border-radius: 14px; background: var(--ds-line-2); transition: background-color .15s ease; }
+.ds-toggle::after { content: ""; position: absolute; left: 5px; top: 11px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgb(0 0 0 / 0.2); transition: transform .15s ease; }
+.ds-toggle[aria-checked="true"]::before { background: var(--ds-ink); }
+.ds-toggle[aria-checked="true"]::after { transform: translateX(20px); background: var(--ds-surface); }
+.ds-toggle:focus-visible { outline: 2px solid var(--ds-teal-text); outline-offset: 2px; border-radius: 14px; }
+.ds-value-box { min-width: 64px; min-height: 40px; box-sizing: border-box; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--ds-ink); border-radius: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Progress ---------- */
+.ds-progress { display: flex; align-items: center; gap: var(--ds-space-3); }
+.ds-progress-parts { flex: 1; display: flex; gap: 6px; }
+.ds-progress-parts i { flex: 1; height: 4px; border-radius: 2px; background: var(--ds-line); }
+.ds-progress-parts i.on { background: var(--ds-ink); }
+.ds-progress-label { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-muted); white-space: nowrap; }
+.ds-meter { height: 6px; border-radius: 3px; background: var(--ds-line); overflow: hidden; }
+.ds-meter > i { display: block; height: 100%; background: var(--ds-teal); border-radius: 3px; }
+
+/* ---------- Checklist («Перед публикацией · 3 из 4») ---------- */
+.ds-checklist { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ds-check { display: flex; align-items: center; gap: 10px; min-height: 28px; font-size: 14px; }
+.ds-check-mark { width: 18px; height: 18px; box-sizing: border-box; flex-shrink: 0; border-radius: 50%; background: var(--ds-teal); color: var(--ds-teal-ink); display: flex; align-items: center; justify-content: center; }
+.ds-check-mark svg, .ds-check-mark i { width: 12px; height: 12px; stroke-width: 3; }
+.ds-check-todo .ds-check-mark { background: transparent; border: 2px solid var(--ds-red-ink); }
+.ds-check-todo .ds-check-text { font-weight: 700; }
+.ds-check-text { flex: 1; min-width: 0; }
+
+/* ---------- Warning with an action (pale red: «Нет ссылки на оплату», «Не хватает ответов») ---------- */
+.ds-alert { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px 12px 10px 14px; border-radius: var(--ds-radius-md); background: var(--ds-red-tint); color: var(--ds-ink); font-size: 14px; line-height: 1.35; }
+.ds-alert::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-red); flex-shrink: 0; }
+.ds-alert-text { flex: 1; min-width: 0; }
+.ds-alert .ds-btn { min-height: 40px; min-width: var(--ds-tap); padding: 0 12px; font-size: 14px; border-color: var(--ds-ink); }
+
+/* ---------- «Главное сейчас»: the dark card (task of the day, where people are lost) ---------- */
+.ds-focus { display: flex; flex-direction: column; gap: var(--ds-space-3); padding: var(--ds-space-4); border-radius: var(--ds-radius-xl); background: var(--ds-focus); color: var(--ds-on-focus); }
+.ds-focus-eyebrow { display: flex; justify-content: space-between; gap: 8px; font-size: var(--ds-text-meta); color: var(--ds-focus-muted); }
+.ds-focus-title { font-size: 18px; font-weight: 800; line-height: 1.3; }
+.ds-focus .ds-meter { background: rgb(255 255 255 / 0.18); }
+.ds-focus-actions { display: flex; gap: var(--ds-space-2); }
+.ds-focus-actions .ds-btn { flex: 1; }
+.ds-btn-onfocus { background: var(--ds-on-focus); color: var(--ds-focus); }
+.ds-btn-onfocus-outline { background: transparent; color: var(--ds-on-focus); border-color: var(--ds-focus-muted); flex: 0 0 auto !important; }
+.ds-bars { display: flex; align-items: flex-end; gap: 6px; height: 44px; }
+.ds-bars > i { flex: 1; border-radius: 3px; background: var(--ds-on-focus); }
+.ds-bars > i.ds-bar-loss { background: var(--ds-red); }
+
+/* ---------- Bottom action bar: price on the left, the main button on the right ---------- */
+.ds-actionbar { display: flex; align-items: center; gap: var(--ds-space-3); padding: 12px var(--ds-space-4) calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-actionbar-price { display: flex; flex-direction: column; flex-shrink: 0; }
+.ds-actionbar-price b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ds-actionbar-price span { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-actionbar > .ds-btn, .ds-actionbar > div:last-child { flex: 1; }
+
+/* ---------- Bottom sheet ---------- */
+.ds-sheet-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(22 18 19 / 0.5); }
+.ds-sheet-preview { position: relative; inset: auto; z-index: auto; min-height: 560px; padding-top: 72px; }
+.ds-sheet { width: 100%; max-width: 640px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; padding: 8px var(--ds-space-4) calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: var(--ds-radius-xl) var(--ds-radius-xl) 0 0; background: var(--ds-surface); color: var(--ds-ink); display: flex; flex-direction: column; gap: var(--ds-space-4); }
+.ds-sheet-preview .ds-sheet { max-height: none; }
+.ds-sheet-handle { width: 40px; height: 4px; margin: 4px auto 0; border-radius: 2px; background: var(--ds-line-2); }
+.ds-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-3); }
+.ds-close { width: var(--ds-tap); height: var(--ds-tap); margin-right: -10px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--ds-ink); cursor: pointer; }
+.ds-label-sm { font-size: var(--ds-text-meta); font-weight: 700; color: var(--ds-muted); }
+
+/* ---------- Chat extras ---------- */
+.ds-avatar { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; font-size: 16px; font-weight: 800; }
+.ds-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ds-avatar-ai { background: var(--ds-teal); color: var(--ds-teal-ink); }
+.ds-avatar-person { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-avatar-sm { width: 36px; height: 36px; font-size: 14px; }
+.ds-date { align-self: center; font-size: var(--ds-text-badge); font-weight: 600; color: var(--ds-muted); }
+.ds-offer { align-self: stretch; border: 2px solid var(--ds-ink); border-radius: var(--ds-radius-lg); background: var(--ds-surface); overflow: hidden; }
+.ds-offer-body { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+.ds-offer-title { font-size: 17px; font-weight: 800; line-height: 1.25; }
+.ds-offer-list { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--ds-text-meta); }
+.ds-offer-list li::before { content: "✓ "; }
+.ds-offer-options { border-top: 1px solid var(--ds-line); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ds-option { display: flex; align-items: center; gap: var(--ds-space-3); min-height: var(--ds-tap); padding: 0 8px; border: none; border-radius: 10px; background: none; color: var(--ds-ink); font-family: inherit; font-size: var(--ds-text-body); text-align: left; cursor: pointer; }
+.ds-option[aria-checked="true"] { background: var(--ds-teal-tint); font-weight: 700; }
+.ds-option[aria-checked="true"] .ds-radio { border-color: var(--ds-ink); background: var(--ds-ink); box-shadow: inset 0 0 0 3px var(--ds-teal-tint); }
+.ds-option .ds-choice-right { margin-left: auto; }
+.ds-offer-foot { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ds-fineprint { font-size: var(--ds-text-badge); color: var(--ds-muted); text-align: center; line-height: 1.4; }
+.ds-gift { align-self: stretch; display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--ds-teal-line); border-radius: var(--ds-radius-lg); background: var(--ds-teal-tint); }
+.ds-gift-eyebrow { font-size: var(--ds-text-badge); font-weight: 800; color: var(--ds-teal-text); text-transform: uppercase; letter-spacing: 0.02em; }
+.ds-composer { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-composer .ds-input { border-radius: var(--ds-radius-pill); padding: 0 16px; }
+.ds-mic { width: 46px; height: 46px; flex-shrink: 0; border: none; border-radius: 50%; background: var(--ds-teal); color: var(--ds-teal-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ds-mic svg, .ds-mic i { width: 22px; height: 22px; }
+.ds-powered { padding: 2px 0 8px; text-align: center; font-size: 11px; color: var(--ds-muted); background: var(--ds-surface); }
+.ds-link-quiet { align-self: center; min-height: var(--ds-tap); padding: 0 8px; border: none; background: none; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); text-decoration: underline; cursor: pointer; }
+.ds-pill { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 4px 4px 4px 10px; border-radius: var(--ds-radius-sm); background: var(--ds-fog); font-size: var(--ds-text-meta); }
+.ds-pill .ds-link-red { min-height: 32px; }
+
+/* ---------- «Если клиент… → …» rows (scenarios) ---------- */
+.ds-cond { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.ds-cond-cell { min-height: 40px; box-sizing: border-box; display: flex; align-items: center; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 10px; font-size: 14px; line-height: 1.3; }
+.ds-cond-arrow { color: var(--ds-muted); font-size: 13px; }
+
+/* ---------- Showcase: one role's path, screen after screen ---------- */
+.ds-path { display: flex; flex-direction: column; gap: var(--ds-space-6); }
+.ds-screen { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-screen > .ds-phone { display: flex; flex-direction: column; }
+.ds-pad { padding: var(--ds-space-4); display: flex; flex-direction: column; gap: var(--ds-space-4); }
+
+/* ---------- The new look also drops what makes screens look «template-made» ---------- */
+[data-design="v2"] .settings-row-icon { display: none; }
+[data-design="v2"] .app-header-logo,
+[data-design="v2"] .app-header-me { display: none; }
+[data-design="v2"] .tg-header .text-sm.font-bold { font-size: 17px; font-weight: 800; }
