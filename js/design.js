@@ -135,10 +135,12 @@
 
   // Messages written by a person are red (owner's decision 27 Nov.): mine — solid red on the right,
   // another person's (the expert writing personally, a friend) — pale red on the left; AI — fog.
-  // author + expert: «Имя · эксперт» with the check mark.
-  function bubble(text, { mine = false, human = false, author = '', expert = false, time = '' } = {}) {
+  // Red only in chats (with AI and with people); elsewhere (Комьюнити: posts, comments) pass place: 'community' →
+  // the same shapes in turquoise. author + expert: «Имя · эксперт» with the check mark.
+  function bubble(text, { mine = false, human = false, author = '', expert = false, time = '', place = 'chat' } = {}) {
     const head = author ? `<span class="ds-bubble-author">${esc(author)}${expert ? iconTag('badge-check') : ''}</span>` : '';
-    const cls = mine ? 'ds-bubble-mine' : `ds-bubble-in${human || expert ? ' ds-bubble-human' : ''}`;
+    const cls = (mine ? 'ds-bubble-mine' : `ds-bubble-in${human || expert ? ' ds-bubble-human' : ''}`) +
+      (place !== 'chat' && (mine || human || expert) ? ' ds-bubble-teal' : '');
     return `<div class="ds-bubble ${cls}">${head}${esc(text)}${time ? `<span class="ds-bubble-time">${esc(time)}</span>` : ''}</div>`;
   }
 
@@ -332,7 +334,7 @@
             ${button({ text: 'Тёмная', variant: 'dark' })}
             ${button({ text: 'Обводка', variant: 'outline' })}
             ${button({ text: 'Тихая', variant: 'quiet' })}
-            ${button({ text: 'Хорошая новость', variant: 'good', icon: 'check' })}
+            ${button({ text: 'Записать', variant: 'good', icon: 'check' })}
           </div>
           ${button({ text: 'Опубликовать', variant: 'primary', block: true, disabled: true, reason: 'Сначала заполните описание шаблона' })}
           <span class="ds-small">Главная (красная) кнопка — одна на экран, внизу. Неактивная всегда объясняет почему.</span>`)}
@@ -372,8 +374,13 @@
               ${bubble('Ответ эксперта лично', { author: 'Имя · эксперт', expert: true })}
               ${typing()}
             </div>
-          </div>
-          `)}
+          </div>`)}
+
+        ${section('Комьюнити', `
+          <div class="ds-chat">
+            ${bubble('Комментарий другого участника', { human: true, author: 'Имя участника', place: 'community' })}
+            ${bubble('Мой ответ в обсуждении', { mine: true, time: '12:30', place: 'community' })}
+          </div>`)}
 
         ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs_, 'marketplace')}</div>`)}
 
