@@ -4889,7 +4889,9 @@ async function runAllTests() {
     assert.ok(ds.bubble('a', { human: true }).includes('ds-bubble-human') && !ds.bubble('a').includes('ds-bubble-human'));
     assert.ok(/\.ds-bubble-mine \{[^}]*background: var\(--ds-red\);[^}]*color: var\(--ds-on-red\)/.test(designCss()));
     assert.ok(/\.ds-bubble-human \{ background: var\(--ds-red-tint\)/.test(designCss()));
-    // ...only in chats: in Комьюнити people's messages are turquoise, AI stays fog
+    // ...only in chats with AI and personal chats: in groups and Комьюнити people's messages are turquoise, AI stays fog
+    assert.ok(ds.bubble('a', { mine: true, place: 'group' }).includes('ds-bubble-teal'));
+    assert.ok(ds.bubble('a', { human: true, place: 'group' }).includes('ds-bubble-teal'));
     assert.ok(!ds.bubble('a', { mine: true }).includes('ds-bubble-teal'));
     assert.ok(ds.bubble('a', { mine: true, place: 'community' }).includes('ds-bubble-teal'));
     assert.ok(ds.bubble('a', { human: true, place: 'community' }).includes('ds-bubble-teal'));

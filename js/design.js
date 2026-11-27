@@ -135,8 +135,8 @@
 
   // Messages written by a person are red (owner's decision 27 Nov.): mine — solid red on the right,
   // another person's (the expert writing personally, a friend) — pale red on the left; AI — fog.
-  // Red only in chats (with AI and with people); elsewhere (Комьюнити: posts, comments) pass place: 'community' →
-  // the same shapes in turquoise. author + expert: «Имя · эксперт» with the check mark.
+  // Red only in chats with AI and personal chats with a person (place: 'chat', the default); in groups
+  // (place: 'group') and Комьюнити (place: 'community') the same shapes are turquoise. author + expert: «Имя · эксперт» with the check mark.
   function bubble(text, { mine = false, human = false, author = '', expert = false, time = '', place = 'chat' } = {}) {
     const head = author ? `<span class="ds-bubble-author">${esc(author)}${expert ? iconTag('badge-check') : ''}</span>` : '';
     const cls = (mine ? 'ds-bubble-mine' : `ds-bubble-in${human || expert ? ' ds-bubble-human' : ''}`) +
@@ -376,10 +376,10 @@
             </div>
           </div>`)}
 
-        ${section('Комьюнити', `
+        ${section('Группы и Комьюнити', `
           <div class="ds-chat">
-            ${bubble('Комментарий другого участника', { human: true, author: 'Имя участника', place: 'community' })}
-            ${bubble('Мой ответ в обсуждении', { mine: true, time: '12:30', place: 'community' })}
+            ${bubble('Сообщение другого участника', { human: true, author: 'Имя участника', place: 'group' })}
+            ${bubble('Моё сообщение в группе', { mine: true, time: '12:30', place: 'group' })}
           </div>`)}
 
         ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs_, 'marketplace')}</div>`)}

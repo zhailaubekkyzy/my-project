@@ -227,7 +227,7 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 /* Messages written by a person are red (owner's decision 27 Nov.): mine — solid red, another person's — pale red; AI — fog */
 .ds-bubble-mine { align-self: flex-end; background: var(--ds-red); color: var(--ds-on-red); border-radius: var(--ds-radius-bubble) var(--ds-radius-bubble) 4px var(--ds-radius-bubble); }
 .ds-bubble-human { background: var(--ds-red-tint); }
-/* Red is for chats only (with AI and with people, owner's decision 27 Nov.). Everywhere else — e.g. Комьюнити —
+/* Red is only for chats with AI and personal chats with a person (owner's decision 27 Nov.). Everywhere else — groups, Комьюнити —
    what people write is turquoise: mine solid turquoise with dark text, another person's pale turquoise */
 .ds-bubble-teal.ds-bubble-mine { background: var(--ds-teal); color: var(--ds-teal-ink); }
 .ds-bubble-teal.ds-bubble-human { background: var(--ds-teal-tint); }
