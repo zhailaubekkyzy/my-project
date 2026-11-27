@@ -5185,8 +5185,9 @@ async function runAllTests() {
     }
     // Settings show the showcase row and screen only with the flag
     const profile = fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8');
-    assert.ok(/SF\.ds && SF\.ds\.on\(\) \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
-    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase"));
+    // ...and only to the team: with design-v2:all the clients get the new look, not the showcase
+    assert.ok(/SF\.ds && SF\.ds\.on\(\) && me\.staffRole \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
+    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && state.me.staffRole && SF.dsShowcase"));
     // On the server: FEATURES=design-v2:beta reaches only the people from BETA_USERS
     const appInfo = require('../server/services/app-info');
     const saved = { features: config.features, betaUsers: config.betaUsers };
