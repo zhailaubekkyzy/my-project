@@ -56,7 +56,8 @@
 
   // ---------------- Components ----------------
 
-  // variant: primary (red, one per screen) · dark · outline · quiet · good (turquoise)
+  // variant: primary (red, one per screen) · dark · outline · quiet · good (turquoise: «Записать», «Опубликовать» —
+  // owner's decisions 27 Nov.)
   // A disabled button always says why: pass `reason`.
   function button({ text, variant = 'primary', size = '', block = false, onclick = '', disabled = false, reason = '', icon = '', type = 'button', label = '' } = {}) {
     const cls = ['ds-btn', `ds-btn-${variant}`, size === 'lg' ? 'ds-btn-lg' : '', block ? 'ds-btn-block' : ''].filter(Boolean).join(' ');

@@ -4987,6 +4987,9 @@ async function runAllTests() {
     has('expert', ['ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb', 'ds-tabbar', 'ds-head', 'ds-stats', 'ds-step-sale', 'ds-actionbar', 'ds-sheet', 'ds-choice', 'ds-alert', 'ds-btn-reason']);
     has('marketer', ['ds-progress', 'ds-pill', 'ds-tiles', 'ds-segmented', 'ds-steps-edit', 'ds-step-mine', 'ds-step-warn', 'ds-cond', 'ds-toggle', 'ds-checklist', 'ds-check-todo', 'ds-big', 'ds-focus', 'ds-bars']);
     has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
+    // «Опубликовать» is turquoise like «Записать» (owner's decision 27 Nov.)
+    for (const m of pages.marketer.matchAll(/<button[^>]*class="([^"]*)"[^>]*>Опубликовать</g)) assert.ok(m[1].includes('ds-btn-good'), m[1]);
+    assert.ok(/ds-btn-good[^>]*>Опубликовать/.test(pages.marketer));
     // The owner's rules in the paths: no «SI-», no review before publishing, the client's role starts with «ИИ-»
     for (const html of Object.values(pages)) {
       assert.ok(!/SI-|на проверку|без регистрации|Позвать/.test(html));

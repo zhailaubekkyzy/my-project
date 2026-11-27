@@ -147,7 +147,7 @@
           ${d.chatHead({ name: 'Имя продавца', role: 'ИИ-консультант' })}
           <div class="ds-chat" style="padding:12px">${d.bubble('Звучит классно, но дорого для меня', { mine: true })}${d.bubble('Понимаю, сразу всю сумму отдать непросто. Курс можно оплатить частями.')}</div>
         </div>
-        <div class="ds-row" style="flex-wrap:nowrap">${d.button({ text: 'Как клиент', variant: 'outline', size: 'lg' })}<div style="flex:1">${d.button({ text: 'Опубликовать', size: 'lg', block: true })}</div></div>
+        <div class="ds-row" style="flex-wrap:nowrap">${d.button({ text: 'Как клиент', variant: 'outline', size: 'lg' })}<div style="flex:1">${d.button({ text: 'Опубликовать', variant: 'good', size: 'lg', block: true })}</div></div>
       </div>`;
     const listing = `
       ${d.screenHead({ back: 'void 0', title: 'Опубликовать' })}
@@ -164,7 +164,7 @@
           { text: 'Все шаги заполнены', done: true }, { text: 'Проверено на примере бизнеса', done: true },
           { text: 'Ниша и цель указаны', done: true }, { text: 'Описание для покупателя', done: false, action: 'Написать' }
         ], { title: 'Перед публикацией' })}
-        ${d.button({ text: 'Опубликовать', size: 'lg', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}
+        ${d.button({ text: 'Опубликовать', variant: 'good', size: 'lg', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}
       </div>`;
     const earnings = `
       <div class="ds-pad">
@@ -195,7 +195,7 @@
         <div class="ds-row" style="gap:16px">${['xs', 'sm', 'md', 'lg', 'xl'].map(k => `<span class="ds-radius-box" style="border-radius:var(--ds-radius-${k})"></span>`).join('')}</div>`)}
       ${section('Кнопки', `${d.button({ text: 'Главная кнопка', size: 'lg', block: true })}
         <div class="ds-row">${d.button({ text: 'Дальше', variant: 'dark' })}${d.button({ text: 'Обводка', variant: 'outline' })}${d.button({ text: 'Тихая', variant: 'quiet' })}${d.button({ text: 'Записать', variant: 'good' })}</div>
-        ${d.button({ text: 'Опубликовать', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}`)}
+        ${d.button({ text: 'Опубликовать', variant: 'good', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}`)}
       ${section('Поля', `${d.search({ placeholder: 'Ниша, продукт или цель' })}
         ${d.field({ label: 'Название', placeholder: '[название]', hint: 'Это увидят клиенты' })}
         ${d.field({ label: 'Ссылка на оплату', value: pick.error ? 'не ссылка' : '', placeholder: 'https://…', error: pick.error ? 'Ссылка должна начинаться с https://' : '' })}
