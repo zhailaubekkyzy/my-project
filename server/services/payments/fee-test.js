@@ -1,8 +1,9 @@
 // server/services/payments/fee-test.js - Шаг 2 оплат: берёт ли Whop комиссию SmartFlow с каждого продления подписки.
 //
 // Только владелица (панель поддержки → «Проверка оплат») и только в песочнице. На её подаккаунте создаётся
-// тестовая подписка $5 в день с комиссией SmartFlow (PAYMENTS_PLATFORM_FEE_PERCENT, сейчас 1% = $0.05);
-// она платит тестовой картой, через сутки Whop продлевает подписку. «Проверить» спрашивает у Whop платежи
+// тестовая подписка $5 раз в неделю с комиссией SmartFlow (PAYMENTS_PLATFORM_FEE_PERCENT, сейчас 1% = $0.05);
+// она платит тестовой картой, через неделю Whop продлевает подписку. Подписку раз в день Whop не разрешает
+// («You cannot offer daily subscriptions», песочница 27 нояб.); если откажет и неделю — берём месяц. «Проверить» спрашивает у Whop платежи
 // по этому плану и удержания по каждому: первый платёж и продления — с комиссией или без.
 //   passed  — хотя бы одно продление оплачено, и с каждого оплаченного продления удержана комиссия
 //   failed  — оплаченное продление без комиссии (или меньше ожидаемой): шаги 3–4 — только после решения владелицы
@@ -15,7 +16,8 @@ const { moneyToMinor, feeOf } = require('./ledger');
 
 const KIND = 'fee_test';
 const PRICE_MINOR = 500;           // $5
-const BILLING_PERIOD_DAYS = 1;     // раз в день, чтобы продление пришло назавтра
+// Самый короткий срок, который разрешит Whop: неделя, иначе месяц (раз в день Whop не разрешает)
+const BILLING_PERIODS = [7, 30];
 const CURRENCY = 'usd';
 const RENEWAL = new Set(['subscription_cycle', 'subscription']);
 const FIRST = new Set(['subscription_create', 'one_time', 'manual']);
@@ -61,7 +63,7 @@ async function accountOf(userId) {
 
 async function latestTest(userId) {
   return db.get(`SELECT * FROM payment_orders WHERE kind = ? AND seller_user_id = ? AND provider_env = 'sandbox'
-                 ORDER BY created_at DESC, id DESC LIMIT 1`, [KIND, userId]);
+                 ORDER BY CASE WHEN status = 'canceled' THEN 1 ELSE 0 END, created_at DESC, id DESC LIMIT 1`, [KIND, userId]);
 }
 
 function applicationFeeMinor(payment, fees) {
@@ -84,11 +86,12 @@ function verdictOf(rows, expected) {
 async function status(userId) {
   const block = await blocker(userId);
   const order = await latestTest(userId);
-  const base = { available: !block, blocker: block, expectedFeeMinor: expectedFeeMinor(), priceMinor: PRICE_MINOR, currency: CURRENCY, billingPeriodDays: BILLING_PERIOD_DAYS };
+  const base = { available: !block, blocker: block, expectedFeeMinor: expectedFeeMinor(), priceMinor: PRICE_MINOR, currency: CURRENCY };
   if (!order) return { ...base, test: null, payments: [], verdict: null };
   const adapter = provider();
   const account = await accountOf(userId);
-  const test = { id: order.id, createdAt: order.created_at, canceled: order.status === 'canceled', variantId: order.subject_id, purchaseUrl: null };
+  const test = { id: order.id, createdAt: order.created_at, canceled: order.status === 'canceled', variantId: order.subject_id,
+    billingPeriodDays: order.access_days ? Number(order.access_days) : null, purchaseUrl: null };
   if (!account || !account.provider_account_id) return { ...base, test, payments: [], verdict: null };
   if (!test.canceled && order.provider_checkout_id) {
     test.purchaseUrl = (await adapter.getCheckout(order.provider_checkout_id)).purchaseUrl;
@@ -122,24 +125,36 @@ async function create(userId) {
   const adapter = provider();
   const account = await accountOf(userId);
   const fee = expectedFeeMinor();
-  const checkout = await adapter.createSubscriptionCheckout({
-    accountId: account.provider_account_id,
-    title: 'SmartFlow: проверка комиссии',
-    priceMinor: PRICE_MINOR,
-    feeMinor: fee,
-    billingPeriodDays: BILLING_PERIOD_DAYS,
-    currency: CURRENCY,
-    metadata: { smartflow: KIND }
-  });
+  let checkout = null;
+  let period = null;
+  for (const days of BILLING_PERIODS) {
+    try {
+      checkout = await adapter.createSubscriptionCheckout({
+        accountId: account.provider_account_id,
+        title: 'SmartFlow: проверка комиссии',
+        priceMinor: PRICE_MINOR,
+        feeMinor: fee,
+        billingPeriodDays: days,
+        currency: CURRENCY,
+        metadata: { smartflow: KIND }
+      });
+      period = days;
+      break;
+    } catch (err) {
+      // Whop не разрешил такой срок — пробуем следующий; другие ошибки — сразу наверх
+      const periodRefused = err.providerStatus === 400 && /billing period|subscriptions/i.test(String(err.message));
+      if (!periodRefused || days === BILLING_PERIODS[BILLING_PERIODS.length - 1]) throw err;
+    }
+  }
   const id = `ord_${crypto.randomBytes(12).toString('hex')}`;
   await db.run(
     `INSERT INTO payment_orders (id, kind, provider, provider_env, seller_user_id, subject_type, subject_id, title,
        amount_minor, currency, recurring, platform_fee_bps, refund_policy, access_days, status, provider_checkout_id, created_at, updated_at)
      VALUES (?, ?, ?, 'sandbox', ?, 'variant', ?, ?, ?, ?, 1, ?, ?, ?, 'created', ?, ?, ?)`,
     [id, KIND, adapter.name, userId, checkout.variantId, 'SmartFlow: проверка комиссии', PRICE_MINOR, CURRENCY,
-      config.payments.platformFeeBps, 'Тестовая подписка в песочнице', BILLING_PERIOD_DAYS, checkout.id, sqlNow(), sqlNow()]
+      config.payments.platformFeeBps, 'Тестовая подписка в песочнице', period, checkout.id, sqlNow(), sqlNow()]
   );
-  return { id, purchaseUrl: checkout.purchaseUrl };
+  return { id, purchaseUrl: checkout.purchaseUrl, billingPeriodDays: period };
 }
 
 // «Отменить тестовую подписку»: отменяет подписки покупателей этого плана сразу, без продлений

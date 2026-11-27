@@ -821,9 +821,12 @@
     const d = cache.feeTest;
     if (!d) return loading('feeTest');
     const errorBox = errors.feeTest ? card(`<div class="text-xs text-si">Не обновилось: ${esc(errors.feeTest)}</div><button onclick="SF.admin.checkFeeTest()" class="px-3 py-1.5 rounded-xl btn-3d-dark text-xs">Повторить</button>`) : '';
+    const days = d.test && d.test.billingPeriodDays;
+    const every = days === 30 ? 'в месяц' : days ? `раз в ${days} дней` : 'в неделю';
+    const after = days === 30 ? 'через месяц' : days ? `через ${days} дней` : 'через неделю';
     const intro = card(`
       <div class="text-xs font-bold text-ink">Берёт ли Whop 1% с каждого продления</div>
-      <div class="text-[11px] text-ink-2 leading-snug">Тестовая подписка ${money(d.priceMinor)} в день на вашем подаккаунте, комиссия SmartFlow — ${money(d.expectedFeeMinor)}. Оплатите тестовой картой песочницы; через сутки Whop продлит подписку. Нажмите «Проверить»: у продления должна стоять комиссия ${money(d.expectedFeeMinor)}.</div>`);
+      <div class="text-[11px] text-ink-2 leading-snug">Тестовая подписка ${money(d.priceMinor)} ${every} на вашем подаккаунте, комиссия SmartFlow — ${money(d.expectedFeeMinor)}. Оплатите тестовой картой песочницы; ${after} Whop продлит подписку. Нажмите «Проверить»: у продления должна стоять комиссия ${money(d.expectedFeeMinor)}. Подписку раз в день Whop не разрешает.</div>`);
     if (d.blocker) return `${errorBox}${intro}${card(`<div class="text-xs text-si">${esc(d.blocker.message)}</div>`)}`;
     if (!d.test) {
       return `${errorBox}${intro}${card(`<div class="text-xs text-muted">Тестовой подписки ещё нет.</div>${btn('Создать тестовую подписку', 'SF.admin.createFeeTest()', 'tiffany', { icon: 'circle-plus' })}`)}`;
@@ -831,7 +834,7 @@
     const verdict = {
       passed: '<div class="text-sm font-bold text-emerald-500">Проверка пройдена: комиссия взята с продления ✓</div>',
       failed: '<div class="text-sm font-bold text-si">Продление прошло без комиссии — подписки на шаблоны и сообщества пока не делаем</div>',
-      waiting: '<div class="text-sm font-bold text-amber-500">Ждём продление (через сутки после оплаты)</div>'
+      waiting: `<div class="text-sm font-bold text-amber-500">Ждём продление (${after} после оплаты)</div>`
     }[d.verdict] || '';
     const rows = d.payments.length ? d.payments.map(p => `
       <div class="flex items-center justify-between gap-2 text-[11px] py-1.5 border-t border-line first:border-0">
