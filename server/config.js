@@ -112,6 +112,10 @@ const config = {
   // Messages to clients (broadcasts, follow-ups) go only 9:00–21:00 by the client's time.
   defaultTzOffset: Number.isFinite(parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10)) ? parseInt(process.env.DEFAULT_TZ_OFFSET_MINUTES, 10) : 300,
 
+  // Оплаты через платформу (Whop for Platforms, сначала песочница): server/services/payments/settings.js.
+  // Без явного WHOP_ENV (sandbox / production) оплаты не запускаются; ручной режим работает всегда.
+  payments: require('./services/payments/settings').resolvePaymentSettings(process.env, { appEnv }),
+
   // SmartFlow Business Rules
   firstUsersFreeLimit: 100,
   defaultTrialDays: 14,
