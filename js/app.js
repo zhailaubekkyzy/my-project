@@ -714,11 +714,11 @@ function renderApp(state) {
             <button onclick="SF.back()" class="p-1.5 -ml-1.5 rounded-xl text-muted hover:text-ink" aria-label="Назад">
               <i data-lucide="chevron-left" class="w-5 h-5"></i>
             </button>
-          ` : `<img src="images/logo-mark.webp" alt="SmartFlow" width="28" height="28" class="w-7 h-7" />`}
+          ` : `<img src="images/logo-mark.webp" alt="SmartFlow" width="28" height="28" class="w-7 h-7 app-header-logo" />`}
           <div class="flex-1 min-w-0">
             <div class="text-sm font-bold text-ink truncate">${SF.esc(title)}</div>
           </div>
-          <button onclick="SF.go('profile')" class="flex-shrink-0" aria-label="Профиль">
+          <button onclick="SF.go('profile')" class="flex-shrink-0 app-header-me" aria-label="Профиль">
             ${SF.avatar(state.me.photoUrl, { size: 30, kind: 'human', userId: state.me.id })}
           </button>
         </header>

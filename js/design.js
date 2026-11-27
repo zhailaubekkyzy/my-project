@@ -121,15 +121,15 @@
   }
 
   // Chat header: name, and the role pale gray under it (always starts with «ИИ-», decision 27 Nov.)
-  function chatHead({ name = '', role = '', photo = '' } = {}) {
-    const avatar = photo ? `<img src="${esc(photo)}" alt="" width="44" height="44" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0" />` : '';
+  function chatHead({ name = '', role = '', photo = '', right = '' } = {}) {
     return `
       <div class="ds-chat-head">
-        ${avatar}
+        ${avatar({ name, photo, kind: 'ai' })}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column">
           <span class="ds-chat-name">${esc(name)}</span>
           ${role ? `<span class="ds-role">${esc(role)}</span>` : ''}
         </span>
+        ${right}
       </div>`;
   }
 
@@ -237,173 +237,220 @@
   }
   const list = (items) => `<div class="ds-list">${items.join('')}</div>`;
 
-  // ---------------- Showcase: Настройки → «Дизайн-система» (only with the flag) ----------------
-  // Sample texts only: no invented people, ratings or numbers.
-  const PALETTE = [
-    ['red', 'Красный', 'срочное, главная кнопка'],
-    ['teal', 'Бирюза', 'хорошие новости'],
-    ['ink', 'Чернила', 'текст'],
-    ['fog', 'Туман', 'фон блоков'],
-    ['line', 'Линии', 'границы'],
-    ['muted', 'Второстепенный', 'подписи'],
-    ['surface', 'Белый', 'карточки']
-  ];
-  let preview = ''; // '' = like the app, 'light' / 'dark' = forced for this page only
-  let pickedReply = 0;
-  let fieldError = false;
+  // ---------------- Parts from the three roles' mockups (C-*, MK-*, S-*) ----------------
 
-  const section = (title, body) => `<section class="ds-section"><h2 class="ds-h2">${esc(title)}</h2>${body}</section>`;
-
-  function renderShowcase() {
-    const themeCls = preview ? `ds-theme-${preview}` : '';
-    const swatches = PALETTE.map(([token, name, use]) => `
-      <div class="ds-swatch">
-        <div class="ds-swatch-chip" style="background:var(--ds-${token})"></div>
-        <span style="font-size:13px;font-weight:700">${esc(name)}</span>
-        <span class="ds-small">${esc(use)}</span>
-      </div>`).join('');
-    const spaces = [[1, 4, 'внутри бейджа'], [2, 8, 'между бейджами'], [3, 12, 'превью ↔ текст'], [4, 16, 'край экрана'], [6, 24, 'между секциями']]
-      .map(([k, px, use]) => `<div class="ds-row" style="gap:10px;font-size:13px"><span class="ds-space-bar" style="width:var(--ds-space-${k})"></span>${px} — ${esc(use)}</div>`).join('');
-    const radii = [['xs', 6, 'бейдж'], ['sm', 8, 'фильтр'], ['md', 12, 'кнопка, поле'], ['lg', 16, 'карточка'], ['xl', 20, 'панель']]
-      .map(([k, px, use]) => `<div class="ds-stack" style="align-items:center;gap:4px"><span class="ds-radius-box" style="border-radius:var(--ds-radius-${k})"></span><span class="ds-small">${px} · ${esc(use)}</span></div>`).join('');
-    const tabs_ = [
-      { id: 'community', label: 'Комьюнити', icon: 'users' },
-      { id: 'marketplace', label: 'Маркетплейс', icon: 'store' },
-      { id: 'buddy', label: 'Бадди', buddy: true },
-      { id: 'chats', label: 'Чаты', icon: 'messages-square', count: 3 },
-      { id: 'profile', label: 'Настройки', icon: 'settings' }
-    ];
-
+  // Screen header: «назад» in a square, the title, its state under it («Черновик · сохранено только что»), actions
+  function screenHead({ title = '', sub = '', back = '', actions = '' } = {}) {
     return `
-      <div class="ds ds-showcase ${themeCls}" data-no-tr>
-        <div class="ds-stack">
-          <h1 class="ds-h1">Дизайн-система</h1>
-          <span class="ds-meta">Все базовые детали нового вида. Тексты — примеры. Видно только тем, у кого включён новый вид.</span>
-          <div class="ds-switch" role="group" aria-label="Тема">
-            ${[['', 'Как в приложении'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([id, label]) =>
-              `<button type="button" aria-pressed="${preview === id}" onclick="SF.actions.dsPreview('${id}')">${esc(label)}</button>`).join('')}
-          </div>
-        </div>
-
-        ${section('Пример экрана: каталог', `
-          <div class="ds-phone">
-            <div class="ds-stack" style="gap:12px;padding:12px 16px 0">
-              <div class="ds-row" style="flex-wrap:nowrap">
-                <div style="flex:1">${search({ placeholder: 'Ниша, продукт или цель' })}</div>
-                <button type="button" class="ds-icon-btn" aria-label="Избранное"><i data-lucide="bookmark" aria-hidden="true"></i></button>
-              </div>
-              ${tabs([{ id: 't', label: 'Шаблоны', num: 'N' }, { id: 's', label: 'Специалисты' }], 't')}
-              ${chips([{ id: 'a', label: 'Раздел 1' }, { id: 'b', label: 'Раздел 2' }, { id: 'c', label: 'Раздел 3' }], 'a')}
-              <div class="ds-hint-card"><img src="images/mascots/si-buddy.webp" alt="" /><span style="flex:1">Подсказка Бадди в одну-две строки</span><button type="button" class="ds-link-red">Изменить</button></div>
-            </div>
-            <div style="padding:0 16px">
-              ${list([
-                item({ title: 'Название шаблона = результат для клиента', meta: 'Имя автора', verified: true, preview: thumb({ steps: 5, tone: 'red' }),
-                  badges: [{ text: 'N% в покупку', tone: 'good' }, { text: '% от продаж', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
-                item({ title: 'Второй шаблон: диагностика → консультация', meta: 'Имя автора', preview: thumb({ steps: 3, tone: 'teal' }),
-                  badges: [{ text: 'N% в запись', tone: 'good' }, { text: 'Бесплатно', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
-                item({ title: 'Третий шаблон, пока без цифр', meta: 'Имя автора · новинка', preview: thumb({ steps: 7, tone: 'fog' }),
-                  badges: [{ text: 'мало данных', tone: 'neutral' }, { text: 'Разово · [цена]', tone: 'neutral' }] })
-              ])}
-            </div>
-            ${tabbar(tabs_, 'marketplace')}
-          </div>
-          <span class="ds-small">Собрано из деталей ниже, как в макете MK-Catalog. Тексты и N — места для настоящих данных.</span>`)}
-
-        ${section('Палитра', `
-          <div class="ds-grid">${swatches}</div>
-          <div class="ds-stack ds-meta" style="color:var(--ds-ink-2)">
-            <span><b>Красный</b> — только то, что важно сейчас: клиенты ждут, главная кнопка.</span>
-            <span><b>Бирюза</b> — хорошие новости: купили, оплачено, цель достигнута.</span>
-            <span><b>Чернила и туман</b> — всё остальное. Чем спокойнее фон, тем громче красный.</span>
-          </div>`)}
-
-        ${section('Шрифт Golos Text', `
-          <span class="ds-h1">24 · Экран</span>
-          <span class="ds-h2">17 · Секция</span>
-          <span class="ds-h3">15 · Карточка</span>
-          <span class="ds-meta">13 · Подпись</span>
-          <span style="font-size:12px;font-weight:600">12 · Бейдж — самый мелкий текст</span>
-          <span class="ds-num" style="font-size:15px">Цифры ровными столбиками: 1 111 · 8 808</span>`)}
-
-        ${section('Отступы и радиусы', `<div class="ds-stack">${spaces}</div><div class="ds-row" style="gap:16px;align-items:flex-start">${radii}</div>`)}
-
-        ${section('Кнопки', `
-          ${button({ text: 'Главная кнопка', variant: 'primary', size: 'lg', block: true })}
-          <div class="ds-row">
-            ${button({ text: 'Тёмная', variant: 'dark' })}
-            ${button({ text: 'Обводка', variant: 'outline' })}
-            ${button({ text: 'Тихая', variant: 'quiet' })}
-            ${button({ text: 'Записать', variant: 'good', icon: 'check' })}
-          </div>
-          ${button({ text: 'Опубликовать', variant: 'primary', block: true, disabled: true, reason: 'Сначала заполните описание шаблона' })}
-          <span class="ds-small">Главная (красная) кнопка — одна на экран, внизу. Неактивная всегда объясняет почему.</span>`)}
-
-        ${section('Поля', `
-          ${search({ placeholder: 'Ниша, продукт или цель' })}
-          ${field({ label: 'Название', placeholder: 'Например, «Курс по питанию»', hint: 'Это увидят клиенты' })}
-          ${field({ label: 'Ссылка на оплату', value: fieldError ? 'не ссылка' : '', placeholder: 'https://…', error: fieldError ? 'Ссылка должна начинаться с https://' : '', hint: fieldError ? '' : 'Куда клиент пойдёт платить' })}
-          ${field({ label: 'Описание', multiline: true, placeholder: 'Что получит клиент' })}
-          ${button({ text: fieldError ? 'Убрать ошибку' : 'Показать ошибку в поле', variant: 'quiet', onclick: 'SF.actions.dsToggleError()' })}`)}
-
-        ${section('Карточки', `
-          ${card(`<div class="ds-stack"><span class="ds-h3">Название = результат для клиента</span><span class="ds-meta">Имя автора · раздел</span><div class="ds-row">${badge('Бесплатно', 'neutral')}${badge('3 шага', 'neutral')}</div></div>`)}
-          ${card('<span class="ds-meta" style="color:var(--ds-ink-2)">Карточка на тумане — для подсказок и вспомогательных блоков.</span>', { fog: true })}`)}
-
-        ${section('Бейджи и счётчик', `
-          <div class="ds-row">
-            ${badge('N% в покупку', 'good')}
-            ${badge('мало данных', 'neutral')}
-            ${badge('новинка', 'new')}
-            ${badge('падает 3 недели', 'warn')}
-            ${count(3)}
-          </div>
-          <span class="ds-small">Бирюза — только при достаточных данных. Красный бейдж — только предупреждение, не реклама. Счётчик непрочитанного — красный.</span>`)}
-
-        ${section('Статусы клиента', `
-          <div class="ds-stack">${Object.keys(STATUSES).map(status).join('')}</div>
-          <span class="ds-small">Названия — как сейчас в Офисе (переименование ещё не решено).</span>`)}
-
-        ${section('Чат', `
-          <div class="ds-card" style="padding:0;overflow:hidden">
-            ${chatHead({ name: 'Имя продавца', role: 'ИИ-консультант' })}
-            <div class="ds-chat" style="padding:16px">
-              ${bubble('Здравствуйте! Помогу понять, подойдёт ли вам программа. Что для вас сейчас важнее всего?')}
-              ${replies(['Первый готовый ответ', 'Второй готовый ответ', 'Третий готовый ответ'], { selected: pickedReply, onclick: 'SF.actions.dsPickReply($i)' })}
-              ${bubble('Ответ клиента своими словами', { mine: true, time: '12:30' })}
-              ${bubble('Ответ эксперта лично', { author: 'Имя · эксперт', expert: true })}
-              ${typing()}
-            </div>
-          </div>`)}
-
-        ${section('Группы и Комьюнити', `
-          <div class="ds-chat">
-            ${bubble('Сообщение другого участника', { human: true, author: 'Имя участника', place: 'group' })}
-            ${bubble('Моё сообщение в группе', { mine: true, time: '12:30', place: 'group' })}
-          </div>`)}
-
-        ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs_, 'marketplace')}</div>`)}
-
-        ${section('Четыре состояния экрана', `
-          <span class="ds-meta">Загрузка — скелет в форме настоящих карточек</span>
-          ${card(skeleton({ rows: 3 }))}
-          <span class="ds-meta">Пусто — одна фраза и одна кнопка</span>
-          ${card(empty({ title: 'Здесь пока пусто', text: 'Одна фраза, почему пусто и что сделать дальше.', button: { text: 'Одно действие' } }))}
-          <span class="ds-meta">Ошибка — по-человечески и «Повторить»; загруженное остаётся</span>
-          ${error({ text: 'Нет интернета. Показываем то, что сохранили', retry: "SF.showToast('Здесь экран загрузил бы данные заново')" })}
-          <div style="opacity:.55">${card('<span class="ds-h3">Уже загруженная карточка</span>')}</div>`)}
+      <div class="ds-head">
+        ${back ? `<button type="button" class="ds-icon-btn" aria-label="Назад"${handler(back)}><i data-lucide="chevron-left" aria-hidden="true"></i></button>` : ''}
+        <span class="ds-head-text"><span class="ds-head-title">${esc(title)}</span>${sub ? `<span class="ds-head-sub">${esc(sub)}</span>` : ''}</span>
+        ${actions ? `<span class="ds-head-actions">${actions}</span>` : ''}
       </div>`;
   }
 
-  SF.actions = SF.actions || {};
-  const rerender = () => window.funnelStore && window.funnelStore.notify && window.funnelStore.notify();
-  SF.actions.dsPreview = (id) => { preview = ['light', 'dark'].includes(id) ? id : ''; rerender(); };
-  SF.actions.dsPickReply = (i) => { pickedReply = Number(i); rerender(); };
-  SF.actions.dsToggleError = () => { fieldError = !fieldError; rerender(); };
+  // Photo or initials. kind: 'ai' (the AI seller) · 'person'
+  function avatar({ name = '', photo = '', kind = 'person', size = '' } = {}) {
+    const initials = (String(name || '').match(/[\p{L}\p{N}]+/gu) || []).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const cls = `ds-avatar ds-avatar-${kind === 'ai' ? 'ai' : 'person'}${size === 'sm' ? ' ds-avatar-sm' : ''}`;
+    return `<span class="${cls}" aria-hidden="true">${photo ? `<img src="${esc(photo)}" alt="" />` : esc(initials || '·')}</span>`;
+  }
+
+  // The path of steps — the thread through all three roles: the author builds it, the expert sees it, the client walks it.
+  // steps: [{ title, note }]; done: how many are passed (black); sale: the step where people buy (red, with its note).
+  function stepPath(steps = [], { done = 0, sale = -1 } = {}) {
+    return `<ol class="ds-steps">${steps.map((s, i) => {
+      const cls = ['ds-step', i < done ? 'ds-step-done' : '', i === sale ? 'ds-step-sale' : ''].filter(Boolean).join(' ');
+      return `<li class="${cls}"><span class="ds-step-num">${i + 1}</span><span class="ds-step-body"><span>${esc(s.title)}</span>${s.note ? `<span class="ds-step-note">${esc(s.note)}</span>` : ''}</span></li>`;
+    }).join('')}</ol>`;
+  }
+
+  // The author's list of steps in the editor: the chosen one framed, «ваш текст» where the author rewrote it,
+  // a red dot where something is missing. steps: [{ title, mine, warn }]
+  function stepEditor(steps = [], { current = 0, onclick = '', addLabel = '+ Добавить шаг', onadd = '' } = {}) {
+    return `
+      <ol class="ds-steps ds-steps-edit">${steps.map((s, i) => {
+        const sale = s.warn || i === current;
+        return `<li class="ds-step${i === current ? ' ds-step-current' : ''}" role="button" tabindex="0"${i === current ? ' aria-current="step"' : ''}${handler(onclick ? onclick.replace('$i', String(i)) : '')}>
+          <span class="ds-step-grip" aria-hidden="true">⋮⋮</span>
+          <span class="ds-step-num" style="${sale && i === current ? 'background:var(--ds-red);border-color:var(--ds-red);color:var(--ds-on-red)' : i < current ? 'background:var(--ds-ink);color:var(--ds-on-ink)' : ''}">${i + 1}</span>
+          <span class="ds-step-body"><span${i === current ? ' style="font-weight:700"' : ''}>${esc(s.title)}</span></span>
+          ${s.mine ? '<span class="ds-step-mine">ваш текст</span>' : ''}${s.warn ? '<span class="ds-step-warn" aria-label="нужно дополнить"></span>' : ''}
+        </li>`;
+      }).join('')}</ol>
+      ${addLabel ? `<button type="button" class="ds-step-add"${handler(onadd)}>${esc(addLabel)}</button>` : ''}`;
+  }
+
+  // A row of big numbers divided by lines: [{ value, label, good }]
+  function stats(list = []) {
+    return `<div class="ds-stats">${list.map(s =>
+      `<div class="ds-stat${s.good ? ' ds-stat-good' : ''}"><span class="ds-stat-value">${esc(s.value)}</span><span class="ds-stat-label">${esc(s.label)}</span></div>`).join('')}</div>`;
+  }
+
+  // One big number (income): value · under it the period and the change (good = turquoise, bad = red)
+  function bigNumber({ value = '', sub = '', delta = '', good = true } = {}) {
+    return `<div class="ds-stack" style="gap:2px"><span class="ds-big">${esc(value)}</span>${sub || delta ? `<span class="ds-meta">${esc(sub)}${delta ? ` · <span class="${good ? 'ds-delta-good' : 'ds-delta-bad'}">${esc(delta)}</span>` : ''}</span>` : ''}</div>`;
+  }
+
+  // Choice cards with a radio: [{ id, title, sub, right, disabled, reason }]. tiles: 2 in a row (what the client sells).
+  function choice(options = [], { selected = '', onclick = '', tiles = false, label = '' } = {}) {
+    return `<div class="${tiles ? 'ds-tiles' : 'ds-choices'}" role="radiogroup"${label ? ` aria-label="${esc(label)}"` : ''}>${options.map(o => {
+      const on = o.id === selected;
+      return `<button type="button" class="ds-choice" role="radio" aria-checked="${on}"${o.disabled ? ' aria-disabled="true"' : handler(onclick ? onclick.replace('$id', o.id) : '')}>
+        <span class="ds-radio" aria-hidden="true"></span>
+        <span class="ds-choice-body"><span class="ds-choice-title">${esc(o.title)}</span>${o.sub || o.reason ? `<span class="ds-choice-sub">${esc(o.disabled && o.reason ? o.reason : o.sub)}</span>` : ''}</span>
+        ${o.right ? `<span class="ds-choice-right">${esc(o.right)}</span>` : ''}
+      </button>`;
+    }).join('')}</div>`;
+  }
+
+  // Two or three options in a row («Неделя / Месяц», «до 20 тыс / 20–100 тыс / от 100 тыс»): [{ id, label }]
+  function segmented(options = [], active = '', { onclick = '', block = false, label = '' } = {}) {
+    return `<div class="ds-segmented${block ? ' ds-segmented-block' : ''}" role="group"${label ? ` aria-label="${esc(label)}"` : ''}>${options.map(o =>
+      `<button type="button" aria-pressed="${o.id === active}"${handler(onclick ? onclick.replace('$id', o.id) : '')}>${esc(o.label)}</button>`).join('')}</div>`;
+  }
+
+  // A setting that is on or off, with its explanation and an optional value box («10%»)
+  function toggle({ title = '', sub = '', on = false, onclick = '', value = '' } = {}) {
+    return `
+      <div class="ds-toggle-row">
+        <span class="ds-choice-body"><span class="ds-choice-title">${esc(title)}</span>${sub ? `<span class="ds-choice-sub">${esc(sub)}</span>` : ''}</span>
+        ${value ? `<span class="ds-value-box">${esc(value)}</span>` : ''}
+        <button type="button" class="ds-toggle" role="switch" aria-checked="${Boolean(on)}" aria-label="${esc(title)}"${handler(onclick)}></button>
+      </div>`;
+  }
+
+  // «2 из 3» on top of a short form
+  function progress(step, total) {
+    const n = Math.max(1, Math.floor(Number(total) || 1));
+    const k = Math.min(n, Math.max(0, Math.floor(Number(step) || 0)));
+    return `<div class="ds-progress"><span class="ds-progress-parts" role="progressbar" aria-valuemin="0" aria-valuemax="${n}" aria-valuenow="${k}">${Array.from({ length: n }, (_, i) => `<i${i < k ? ' class="on"' : ''}></i>`).join('')}</span><span class="ds-progress-label">${k} из ${n}</span></div>`;
+  }
+
+  // A thin turquoise bar (0–100)
+  function meter(percent) {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    return `<div class="ds-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><i style="width:${p}%"></i></div>`;
+  }
+
+  // «Перед публикацией · 3 из 4»: [{ text, done, action, onclick }] — done = turquoise check, not done = red circle + action
+  function checklist(items = [], { title = '' } = {}) {
+    const doneCount = items.filter(i => i.done).length;
+    return `
+      <div class="ds-stack">
+        ${title ? `<span class="ds-label-sm">${esc(title)} · ${doneCount} из ${items.length}</span>` : ''}
+        <ul class="ds-checklist">${items.map(i => `
+          <li class="ds-check${i.done ? '' : ' ds-check-todo'}">
+            <span class="ds-check-mark" aria-hidden="true">${i.done ? iconTag('check') : ''}</span>
+            <span class="ds-check-text">${esc(i.text)}</span>
+            ${!i.done && i.action ? `<button type="button" class="ds-link-red"${handler(i.onclick)}>${esc(i.action)}</button>` : ''}
+          </li>`).join('')}</ul>
+      </div>`;
+  }
+
+  // Pale red warning with one action: «Нет ссылки на оплату. Без неё … → Добавить»
+  function alert({ title = '', text = '', action = '', onclick = '' } = {}) {
+    return `
+      <div class="ds-alert" role="status">
+        <span class="ds-alert-text">${title ? `<b>${esc(title)}</b> ` : ''}${esc(text)}</span>
+        ${action ? button({ text: action, variant: 'outline', onclick }) : ''}
+      </div>`;
+  }
+
+  // «Главное сейчас» — the dark card: eyebrow (left, right) · title · optional progress / bars · actions (HTML)
+  function focusCard({ eyebrow = '', eyebrowRight = '', title = '', percent = null, bars = null, actions = '' } = {}) {
+    const barsHtml = Array.isArray(bars) && bars.length ? `<div class="ds-bars" aria-hidden="true">${bars.map(b =>
+      `<i${b.loss ? ' class="ds-bar-loss"' : ''} style="height:${Math.max(8, Math.min(100, Number(b.value) || 0))}%"></i>`).join('')}</div>` : '';
+    return `
+      <div class="ds-focus">
+        ${eyebrow || eyebrowRight ? `<span class="ds-focus-eyebrow"><span>${esc(eyebrow)}</span><span>${esc(eyebrowRight)}</span></span>` : ''}
+        ${percent != null ? meter(percent) : ''}
+        <span class="ds-focus-title">${esc(title)}</span>
+        ${barsHtml}
+        ${actions ? `<div class="ds-focus-actions">${actions}</div>` : ''}
+      </div>`;
+  }
+
+  // Bottom bar: price on the left («10% / с каждой продажи»), the main button on the right
+  function actionBar({ price = '', sub = '', button: btn = null } = {}) {
+    return `
+      <div class="ds-actionbar">
+        ${price || sub ? `<span class="ds-actionbar-price"><b>${esc(price)}</b><span>${esc(sub)}</span></span>` : ''}
+        ${btn ? button({ variant: 'primary', size: 'lg', block: true, ...btn }) : ''}
+      </div>`;
+  }
+
+  // Bottom sheet. preview: drawn in place (the showcase) instead of over the screen
+  function sheet({ title = '', body = '', footer = '', onclose = '', preview = false } = {}) {
+    return `
+      <div class="ds-sheet-backdrop${preview ? ' ds-sheet-preview' : ''}"${preview ? '' : ' role="dialog" aria-modal="true"'}>
+        <div class="ds-sheet">
+          <span class="ds-sheet-handle" aria-hidden="true"></span>
+          <div class="ds-sheet-head"><h2 class="ds-h2">${esc(title)}</h2><button type="button" class="ds-close" aria-label="Закрыть"${handler(onclose)}><i data-lucide="x" aria-hidden="true"></i></button></div>
+          ${body}
+          ${footer}
+        </div>
+      </div>`;
+  }
+
+  // Chat: «Через 2 дня»
+  const dateLine = (text) => `<span class="ds-date">${esc(text)}</span>`;
+
+  // Chat: the offer — what the client gets, ways to pay, the pay button, the small print under it.
+  // options: [{ id, label, price }]; the button is red (main), unless variant says otherwise
+  function offerCard({ title = '', meta = '', points = [], options = [], selected = '', onpick = '', button: btn = null, fineprint = '' } = {}) {
+    return `
+      <div class="ds-offer">
+        <div class="ds-offer-body">
+          <span class="ds-offer-title">${esc(title)}</span>
+          ${meta ? `<span class="ds-meta">${esc(meta)}</span>` : ''}
+          ${points.length ? `<ul class="ds-offer-list">${points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+        </div>
+        ${options.length ? `<div class="ds-offer-options" role="radiogroup">${options.map(o => `
+          <button type="button" class="ds-option" role="radio" aria-checked="${o.id === selected}"${handler(onpick ? onpick.replace('$id', o.id) : '')}>
+            <span class="ds-radio" aria-hidden="true"></span><span>${esc(o.label)}</span><span class="ds-choice-right">${esc(o.price)}</span>
+          </button>`).join('')}</div>` : ''}
+        ${btn || fineprint ? `<div class="ds-offer-foot">${btn ? button({ variant: 'primary', size: 'lg', block: true, ...btn }) : ''}${fineprint ? `<span class="ds-fineprint">${esc(fineprint)}</span>` : ''}</div>` : ''}
+      </div>`;
+  }
+
+  // Chat: a free next step for those who did not buy (turquoise: it is good news)
+  function giftCard({ eyebrow = '', title = '', text = '', button: btn = null } = {}) {
+    return `
+      <div class="ds-gift">
+        ${eyebrow ? `<span class="ds-gift-eyebrow">${esc(eyebrow)}</span>` : ''}
+        <span class="ds-offer-title">${esc(title)}</span>
+        ${text ? `<span class="ds-meta" style="color:var(--ds-ink-2)">${esc(text)}</span>` : ''}
+        ${btn ? button({ variant: 'good', size: 'lg', block: true, ...btn }) : ''}
+      </div>`;
+  }
+
+  // Chat: the input with the round microphone, and SmartFlow one small line at the very bottom
+  function composer({ placeholder = 'Или напишите своими словами', name = 'message' } = {}) {
+    return `
+      <div class="ds-composer">
+        <input class="ds-input" name="${esc(name)}" placeholder="${esc(placeholder)}" aria-label="Сообщение" />
+        <button type="button" class="ds-mic" aria-label="Голосовое сообщение"><i data-lucide="mic" aria-hidden="true"></i></button>
+      </div>
+      <div class="ds-powered">работает на SmartFlow</div>`;
+  }
+
+  // «Если клиент… → …» rows of a step's scenarios: [{ when, then }]
+  function conditions(rows = []) {
+    return `<div class="ds-stack">${rows.map(r =>
+      `<div class="ds-cond"><span class="ds-cond-cell">${esc(r.when)}</span><span class="ds-cond-arrow" aria-hidden="true">→</span><span class="ds-cond-cell">${esc(r.then)}</span></div>`).join('')}</div>`;
+  }
+
+  // «Ниша: нутрициология · изменить»
+  function pill({ label = '', value = '', action = '', onclick = '' } = {}) {
+    return `<span class="ds-pill">${esc(label)}${label ? ':' : ''} <b>${esc(value)}</b>${action ? `<button type="button" class="ds-link-red"${handler(onclick)}>${esc(action)}</button>` : ''}</span>`;
+  }
 
   SF.ds = {
-    FLAG, on, apply,
+    FLAG, on, apply, esc,
     button, field, search, card, badge, count, status, STATUSES, chatHead, bubble, replies, typing, tabbar,
-    skeleton, empty, error, tabs, chips, thumb, item, list, renderShowcase
+    skeleton, empty, error, tabs, chips, thumb, item, list,
+    screenHead, avatar, stepPath, stepEditor, stats, bigNumber, choice, segmented, toggle, progress, meter, checklist, alert,
+    focusCard, actionBar, sheet, dateLine, offerCard, giftCard, composer, conditions, pill
   };
 })(window);

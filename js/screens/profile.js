@@ -30,7 +30,7 @@
     // A div with role="button": an «i» inside must not be a button inside a button
     return `
       <div ${onclick ? `role="button" tabindex="0" onclick="${onclick}"` : ''} class="w-full px-3.5 py-3 flex items-center gap-3 text-left text-sm ${onclick ? 'cursor-pointer' : ''}">
-        ${icon ? `<i data-lucide="${icon}" class="w-5 h-5 text-brand flex-shrink-0"></i>` : ''}
+        ${icon ? `<i data-lucide="${icon}" class="w-5 h-5 text-brand flex-shrink-0 settings-row-icon"></i>` : ''}
         <span class="flex-1 min-w-0 font-semibold ${tone} flex items-center gap-1">${label}${info ? SF.info(info) : ''}</span>
         ${right}${onclick && !right ? '<i data-lucide="chevron-right" class="w-4 h-4 text-faint"></i>' : ''}
       </div>`;
@@ -553,7 +553,7 @@
       if (route.screen === 'me') return renderView(state);
       if (route.screen === 'invite') return renderInvite(state);
       if (route.screen === 'legal') return renderLegal();
-      if (route.screen === 'design' && SF.ds && SF.ds.on()) return SF.ds.renderShowcase();
+      if (route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase) return SF.dsShowcase.render();
       return renderSettings(state);
     },
     afterRender(route, state) {

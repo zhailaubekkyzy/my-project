@@ -4787,7 +4787,7 @@ async function runAllTests() {
     };
     const window = { document, SF: { feature: (n) => features.includes(n) } };
     window.window = window;
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js/design.js'), 'utf8'), window);
+    for (const file of ['design.js', 'design-showcase.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js', file), 'utf8'), window);
     return { ds: window.SF.ds, SF: window.SF, attrs, head, setFeatures: (list) => { features = list; } };
   }
   const designCss = () => fs.readFileSync(path.join(__dirname, '../css/design.css'), 'utf8');
@@ -4920,6 +4920,42 @@ async function runAllTests() {
     const it = ds.item({ title: evil, meta: 'Автор', verified: true, badges: [{ text: 'N% в покупку', tone: 'good' }], preview: ds.thumb({ steps: 5 }) });
     assert.ok(it.includes('ds-item-title') && it.includes('badge-check') && it.includes('ds-badge-good') && it.includes('ds-thumb'));
     noRawHtml(it);
+    // Parts from the three roles' mockups
+    const path5 = ds.stepPath([{ title: 'A' }, { title: 'B' }, { title: evil, note: 'Здесь кнопка «Купить»' }], { done: 1, sale: 2 });
+    assert.strictEqual((path5.match(/ds-step-num/g) || []).length, 3);
+    assert.ok(path5.includes('ds-step-done') && path5.includes('ds-step-sale') && path5.includes('ds-step-note'));
+    noRawHtml(path5);
+    const ed = ds.stepEditor([{ title: 'A', mine: true }, { title: 'B', warn: true }], { current: 1 });
+    assert.ok(ed.includes('aria-current="step"') && ed.includes('ваш текст') && ed.includes('ds-step-warn'));
+    assert.ok(ds.stats([{ value: 'N%', label: 'в покупку', good: true }, { value: 'N', label: 'подключили' }]).includes('ds-stat-good'));
+    const ch = ds.choice([{ id: 'a', title: 'A' }, { id: 'b', title: 'B', disabled: true, reason: 'Автор не продаёт разово' }], { selected: 'a', onclick: 'pick(\'$id\')' });
+    assert.ok(ch.includes('role="radiogroup"') && ch.includes('aria-checked="true"') && ch.includes('aria-disabled="true"') && ch.includes('Автор не продаёт разово'));
+    assert.ok(!/pick\('b'\)/.test(ch), 'a disabled choice cannot be picked');
+    assert.ok(ds.choice([{ id: 'a', title: 'A' }], { tiles: true }).includes('ds-tiles'));
+    assert.ok(ds.segmented([{ id: 'w', label: 'Неделя' }, { id: 'm', label: 'Месяц' }], 'm').includes('aria-pressed="true"'));
+    const tg = ds.toggle({ title: '% от продаж', on: true, value: 'N%' });
+    assert.ok(tg.includes('role="switch"') && tg.includes('aria-checked="true"') && tg.includes('ds-value-box'));
+    assert.ok(ds.progress(2, 5).includes('2 из 5') && (ds.progress(2, 5).match(/class="on"/g) || []).length === 2);
+    const cl = ds.checklist([{ text: 'A', done: true }, { text: 'B', done: false, action: 'Написать' }], { title: 'Перед публикацией' });
+    assert.ok(cl.includes('Перед публикацией · 1 из 2') && cl.includes('ds-check-todo') && cl.includes('Написать'));
+    const al = ds.alert({ title: 'Нет ссылки на оплату.', text: evil, action: 'Добавить', onclick: 'add()' });
+    assert.ok(al.includes('ds-alert') && al.includes('add()'));
+    noRawHtml(al);
+    assert.ok(ds.focusCard({ title: 't', bars: [{ value: 50 }, { value: 20, loss: true }] }).includes('ds-bar-loss'));
+    const ab = ds.actionBar({ price: 'N%', sub: 'с каждой продажи', button: { text: 'Подключить' } });
+    assert.ok(ab.includes('ds-actionbar') && ab.includes('ds-btn-primary'));
+    const sh = ds.sheet({ title: 'Подключить шаблон', body: 'x', onclose: 'close()' });
+    assert.ok(sh.includes('role="dialog"') && sh.includes('aria-label="Закрыть"') && sh.includes('close()'));
+    const of = ds.offerCard({ title: evil, options: [{ id: 'o', label: 'Сразу', price: '[цена]' }], selected: 'o', button: { text: 'Перейти к оплате' }, fineprint: 'Деньги идут эксперту напрямую' });
+    assert.ok(of.includes('ds-offer') && of.includes('aria-checked="true"') && of.includes('ds-btn-primary') && of.includes('ds-fineprint'));
+    noRawHtml(of);
+    assert.ok(ds.giftCard({ title: 'g', button: { text: 'Записать' } }).includes('ds-btn-good'), '«Записать» is turquoise');
+    assert.ok(ds.composer().includes('ds-mic') && ds.composer().includes('работает на SmartFlow'));
+    assert.ok(ds.conditions([{ when: 'пишет «дорого»', then: 'показать отзыв' }]).includes('ds-cond'));
+    assert.ok(ds.avatar({ name: 'Имя · помощница' }).includes('>ИП<') && ds.avatar({ name: 'a', kind: 'ai' }).includes('ds-avatar-ai'));
+    assert.ok(ds.screenHead({ title: 'T', sub: 'Черновик', back: 'back()' }).includes('aria-label="Назад"'));
+    // Disabled buttons are gray, as in the mockups
+    assert.ok(/\.ds-btn:disabled \{ background: var\(--ds-fog\)/.test(designCss()));
     const er = ds.error({ text: 'Нет интернета', retry: 'reload()', code: 'K7P2' });
     assert.ok(er.includes('role="alert"') && er.includes('Повторить') && er.includes('reload()') && er.includes('K7P2'));
   });
@@ -4941,14 +4977,25 @@ async function runAllTests() {
     beta.ds.apply();
     assert.strictEqual(beta.attrs['data-design'], undefined);
     // The showcase holds every base component
-    const page = beta.ds.renderShowcase();
-    for (const cls of ['ds-btn-primary', 'ds-input', 'ds-card', 'ds-badge', 'ds-status', 'ds-bubble-mine', 'ds-bubble-in', 'ds-role',
-      'ds-reply', 'ds-tabbar', 'ds-skel', 'ds-empty', 'ds-error', 'ds-swatch', 'ds-btn-reason', 'ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb']) assert.ok(page.includes(cls), cls);
-    assert.ok(page.includes('data-no-tr'));
+    // The showcase: the three roles' paths from the mockups and «Детали»; together they hold every part
+    const sc = beta.SF.dsShowcase;
+    assert.strictEqual(sc.ROLES.map(r => r.label).join(','), 'Клиент,Эксперт,Маркетолог,Детали');
+    const pages = {};
+    for (const r of sc.ROLES) { sc.setRole(r.id); pages[r.id] = sc.render(); assert.ok(pages[r.id].includes('data-no-tr')); }
+    const has = (id, classes) => classes.forEach(cls => assert.ok(pages[id].includes(cls), `${id}: ${cls}`));
+    has('client', ['ds-chat-head', 'ds-role', 'ИИ-помощница', 'ds-reply', 'ds-bubble-mine', 'ds-offer', 'ds-option', 'ds-gift', 'ds-date', 'ds-composer', 'ds-mic', 'ds-powered']);
+    has('expert', ['ds-tabs', 'ds-chip', 'ds-item', 'ds-thumb', 'ds-tabbar', 'ds-head', 'ds-stats', 'ds-step-sale', 'ds-actionbar', 'ds-sheet', 'ds-choice', 'ds-alert', 'ds-btn-reason']);
+    has('marketer', ['ds-progress', 'ds-pill', 'ds-tiles', 'ds-segmented', 'ds-steps-edit', 'ds-step-mine', 'ds-step-warn', 'ds-cond', 'ds-toggle', 'ds-checklist', 'ds-check-todo', 'ds-big', 'ds-focus', 'ds-bars']);
+    has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
+    // The owner's rules in the paths: no «SI-», no review before publishing, the client's role starts with «ИИ-»
+    for (const html of Object.values(pages)) {
+      assert.ok(!/SI-|на проверку|без регистрации|Позвать/.test(html));
+      for (const m of html.matchAll(/class="ds-role">([^<]*)</g)) assert.ok(m[1].startsWith('ИИ-'), m[1]);
+    }
     // Settings show the showcase row and screen only with the flag
     const profile = fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8');
     assert.ok(/SF\.ds && SF\.ds\.on\(\) \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
-    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on()"));
+    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase"));
     // On the server: FEATURES=design-v2:beta reaches only the people from BETA_USERS
     const appInfo = require('../server/services/app-info');
     const saved = { features: config.features, betaUsers: config.betaUsers };
@@ -4966,12 +5013,17 @@ async function runAllTests() {
     const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
     const at = (s) => html.indexOf(s);
     assert.ok(at('css/app.css') < at('css/design.css') && at('css/design.css') < at('css/tailwind.css') && at('css/design.css') > 0);
-    assert.ok(at('js/ui.js') < at('js/design.js') && at('js/design.js') < at('js/screens/'));
+    assert.ok(at('js/ui.js') < at('js/design.js') && at('js/design.js') < at('js/design-showcase.js') && at('js/design-showcase.js') < at('js/screens/'));
     assert.ok(html.includes('window.SFApplyTheme = applyTheme'));
     const js = fs.readFileSync(path.join(__dirname, '../js/design.js'), 'utf8');
     assert.ok(!/[^&]#[0-9a-f]{3,6}\b/i.test(js), 'colors only through tokens in css/design.css');
     // The renderer calls apply() before drawing; the menu counter is red in the new look
     const app = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+    // «Template» look goes away in the new look: no colored icons in Settings rows, no logo and photo in every header
+    const css = designCss();
+    assert.ok(/\[data-design="v2"\] \.settings-row-icon \{ display: none; \}/.test(css));
+    assert.ok(css.includes('[data-design="v2"] .app-header-logo') && app.includes('app-header-logo') && app.includes('app-header-me'));
+    assert.ok(fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8').includes('settings-row-icon'));
     assert.ok(app.includes('if (SF.ds) SF.ds.apply();') && app.includes('SF.ds.count(badges[t.id])'));
   });
 

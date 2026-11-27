@@ -35,6 +35,9 @@
   --ds-line-2: #DCD7D5;
   --ds-surface: #FFFFFF;
   --ds-page: #FFFFFF;
+  --ds-focus: #161213;      /* the dark «главное сейчас» card */
+  --ds-on-focus: #FFFFFF;
+  --ds-focus-muted: #B9B1B0;
 
   /* Spacing: multiples of 4 */
   --ds-space-1: 4px;   /* inside a badge */
@@ -86,6 +89,9 @@
   --ds-line-2: #423A3B;
   --ds-surface: #1B1718;
   --ds-page: #0F0C0D;
+  --ds-focus: #2E2728;
+  --ds-on-focus: #F5F2F1;
+  --ds-focus-muted: #B9B1B0;
 }
 
 /* The preview block keeps the light look inside a dark app too (and the other way round) */
@@ -150,7 +156,7 @@
 }
 .ds-btn:active:not(:disabled) { transform: scale(0.98); }
 .ds-btn:focus-visible { outline: 2px solid var(--ds-teal-text); outline-offset: 2px; }
-.ds-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ds-btn:disabled { background: var(--ds-fog); color: var(--ds-muted); border-color: transparent; cursor: not-allowed; } /* gray, as in the mockups */
 .ds-btn-lg { min-height: 52px; font-size: 16px; }
 .ds-btn-block { display: flex; width: 100%; }
 .ds-btn-primary { background: var(--ds-red); color: var(--ds-on-red); }   /* one per screen */
@@ -314,9 +320,11 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 .ds-space-bar { display: inline-block; height: 12px; background: var(--ds-red); }
 .ds-radius-box { width: 44px; height: 44px; background: var(--ds-fog-2); border: 1px solid var(--ds-line-2); }
 .ds-showcase { background: var(--ds-page); color: var(--ds-ink); display: flex; flex-direction: column; gap: 32px; padding: var(--ds-space-2) 0; }
-.ds-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-radius-md); background: var(--ds-fog); }
-.ds-switch button { min-height: 38px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 600; cursor: pointer; }
-.ds-switch button[aria-pressed="true"] { background: var(--ds-surface); color: var(--ds-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.ds-segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--ds-radius-md); background: var(--ds-fog); }
+.ds-segmented-block { display: flex; }
+.ds-segmented-block button { flex: 1; }
+.ds-segmented button { min-height: 40px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); font-weight: 600; cursor: pointer; }
+.ds-segmented button[aria-pressed="true"] { background: var(--ds-surface); color: var(--ds-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 .ds-tab > span:not(.ds-count) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- Tabs, filter chips, list rows, catalog card (MK-Catalog, MK-Components) ---------- */
@@ -378,3 +386,174 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 [data-design="v2"] .tg-nav-bar button > span.text-\[11px\] { display: none; }
 [data-design="v2"] .tg-nav-item { min-height: var(--ds-tap); justify-content: center; }
 [data-design="v2"] .tg-nav-item svg { width: 24px; height: 24px; }
+
+/* ---------- Screen header: «назад» in a square, title, state under it, actions on the right ---------- */
+.ds-head { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px var(--ds-space-4); border-bottom: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ds-head-title { font-size: 17px; font-weight: 800; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-head-sub { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-head-actions { display: flex; gap: var(--ds-space-2); flex-shrink: 0; }
+.ds-head .ds-btn { min-height: var(--ds-tap); padding: 0 12px; font-size: 14px; }
+.ds-eyebrow { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-muted); }
+
+/* ---------- Path of steps: the thread through all three roles ---------- */
+.ds-steps { position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ds-steps::before { content: ""; position: absolute; left: 20px; top: 14px; bottom: 14px; width: 2px; background: var(--ds-line); }
+.ds-step { position: relative; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px; border-radius: 10px; font-size: var(--ds-text-body); font-weight: 600; }
+.ds-step-num {
+  width: 22px; height: 22px; box-sizing: border-box; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--ds-ink);
+  background: var(--ds-surface); color: var(--ds-ink); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.ds-step-done .ds-step-num { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-step-sale { background: var(--ds-red-tint); }
+.ds-step-sale .ds-step-num { background: var(--ds-red); border-color: var(--ds-red); color: var(--ds-on-red); }
+.ds-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ds-step-note { font-size: var(--ds-text-meta); font-weight: 500; color: var(--ds-red-ink); }
+/* The editor's list of steps (S-Builder): no line, the chosen step framed, «ваш текст», a red dot = something to fix */
+.ds-steps-edit::before { display: none; }
+.ds-steps-edit .ds-step { min-height: 48px; border: 2px solid transparent; cursor: pointer; }
+.ds-steps-edit .ds-step[aria-current="step"] { border-color: var(--ds-ink); }
+.ds-step-grip { color: var(--ds-line-2); font-size: 14px; letter-spacing: -2px; }
+.ds-step-mine { font-size: 11px; font-weight: 700; color: var(--ds-teal-text); white-space: nowrap; }
+.ds-step-warn { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-red); flex-shrink: 0; }
+.ds-step-add { min-height: var(--ds-tap); border: 1px dashed var(--ds-line-2); border-radius: var(--ds-radius-md); background: none; font-family: inherit; font-size: 14px; font-weight: 700; color: var(--ds-ink); cursor: pointer; }
+
+/* ---------- Numbers ---------- */
+.ds-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--ds-line); border-bottom: 1px solid var(--ds-line); }
+.ds-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 12px 12px 0; }
+.ds-stat + .ds-stat { border-left: 1px solid var(--ds-line); padding-left: 12px; }
+.ds-stat-value { font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.ds-stat-good .ds-stat-value { color: var(--ds-teal-text); }
+.ds-stat-label { font-size: var(--ds-text-badge); color: var(--ds-muted); line-height: 1.3; }
+.ds-big { font-size: 44px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ds-delta-good { color: var(--ds-teal-text); font-weight: 700; }
+.ds-delta-bad { color: var(--ds-red-ink); font-weight: 700; }
+
+/* ---------- Choice: cards with a radio (how to pay, what the client sells) ---------- */
+.ds-choices { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ds-choice {
+  display: flex; gap: var(--ds-space-3); align-items: flex-start; width: 100%; box-sizing: border-box; padding: 14px;
+  border: 1px solid var(--ds-line); border-radius: 14px; background: var(--ds-surface); color: var(--ds-ink);
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.ds-tiles .ds-choice { flex-direction: column; justify-content: space-between; min-height: 92px; }
+.ds-choice[aria-checked="true"] { border: 2px solid var(--ds-ink); padding: 13px; }
+.ds-choice[aria-disabled="true"] { background: var(--ds-fog); border-color: var(--ds-line); color: var(--ds-muted); cursor: not-allowed; }
+.ds-radio { width: 20px; height: 20px; box-sizing: border-box; flex-shrink: 0; margin-top: 1px; border-radius: 50%; border: 2px solid var(--ds-line-2); background: var(--ds-surface); }
+.ds-choice[aria-checked="true"] .ds-radio { border-color: var(--ds-red); background: var(--ds-red); box-shadow: inset 0 0 0 3px var(--ds-surface); }
+.ds-choice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ds-choice-title { font-size: var(--ds-text-body); font-weight: 700; }
+.ds-choice-sub { font-size: var(--ds-text-meta); color: var(--ds-muted); line-height: 1.35; }
+.ds-choice-right { font-size: var(--ds-text-body); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------- Toggle ---------- */
+.ds-toggle-row { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px 0; border-bottom: 1px solid var(--ds-line); }
+.ds-toggle { position: relative; width: 52px; height: var(--ds-tap); flex-shrink: 0; padding: 0; border: none; background: none; cursor: pointer; }
+.ds-toggle::before { content: ""; position: absolute; left: 2px; right: 2px; top: 8px; bottom: 8px; border-radius: 14px; background: var(--ds-line-2); transition: background-color .15s ease; }
+.ds-toggle::after { content: ""; position: absolute; left: 5px; top: 11px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgb(0 0 0 / 0.2); transition: transform .15s ease; }
+.ds-toggle[aria-checked="true"]::before { background: var(--ds-ink); }
+.ds-toggle[aria-checked="true"]::after { transform: translateX(20px); background: var(--ds-surface); }
+.ds-toggle:focus-visible { outline: 2px solid var(--ds-teal-text); outline-offset: 2px; border-radius: 14px; }
+.ds-value-box { min-width: 64px; min-height: 40px; box-sizing: border-box; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--ds-ink); border-radius: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Progress ---------- */
+.ds-progress { display: flex; align-items: center; gap: var(--ds-space-3); }
+.ds-progress-parts { flex: 1; display: flex; gap: 6px; }
+.ds-progress-parts i { flex: 1; height: 4px; border-radius: 2px; background: var(--ds-line); }
+.ds-progress-parts i.on { background: var(--ds-ink); }
+.ds-progress-label { font-size: var(--ds-text-meta); font-weight: 600; color: var(--ds-muted); white-space: nowrap; }
+.ds-meter { height: 6px; border-radius: 3px; background: var(--ds-line); overflow: hidden; }
+.ds-meter > i { display: block; height: 100%; background: var(--ds-teal); border-radius: 3px; }
+
+/* ---------- Checklist («Перед публикацией · 3 из 4») ---------- */
+.ds-checklist { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ds-check { display: flex; align-items: center; gap: 10px; min-height: 28px; font-size: 14px; }
+.ds-check-mark { width: 18px; height: 18px; box-sizing: border-box; flex-shrink: 0; border-radius: 50%; background: var(--ds-teal); color: var(--ds-teal-ink); display: flex; align-items: center; justify-content: center; }
+.ds-check-mark svg, .ds-check-mark i { width: 12px; height: 12px; stroke-width: 3; }
+.ds-check-todo .ds-check-mark { background: transparent; border: 2px solid var(--ds-red-ink); }
+.ds-check-todo .ds-check-text { font-weight: 700; }
+.ds-check-text { flex: 1; min-width: 0; }
+
+/* ---------- Warning with an action (pale red: «Нет ссылки на оплату», «Не хватает ответов») ---------- */
+.ds-alert { display: flex; align-items: center; gap: var(--ds-space-3); padding: 10px 12px 10px 14px; border-radius: var(--ds-radius-md); background: var(--ds-red-tint); color: var(--ds-ink); font-size: 14px; line-height: 1.35; }
+.ds-alert::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-red); flex-shrink: 0; }
+.ds-alert-text { flex: 1; min-width: 0; }
+.ds-alert .ds-btn { min-height: 40px; min-width: var(--ds-tap); padding: 0 12px; font-size: 14px; border-color: var(--ds-ink); }
+
+/* ---------- «Главное сейчас»: the dark card (task of the day, where people are lost) ---------- */
+.ds-focus { display: flex; flex-direction: column; gap: var(--ds-space-3); padding: var(--ds-space-4); border-radius: var(--ds-radius-xl); background: var(--ds-focus); color: var(--ds-on-focus); }
+.ds-focus-eyebrow { display: flex; justify-content: space-between; gap: 8px; font-size: var(--ds-text-meta); color: var(--ds-focus-muted); }
+.ds-focus-title { font-size: 18px; font-weight: 800; line-height: 1.3; }
+.ds-focus .ds-meter { background: rgb(255 255 255 / 0.18); }
+.ds-focus-actions { display: flex; gap: var(--ds-space-2); }
+.ds-focus-actions .ds-btn { flex: 1; }
+.ds-btn-onfocus { background: var(--ds-on-focus); color: var(--ds-focus); }
+.ds-btn-onfocus-outline { background: transparent; color: var(--ds-on-focus); border-color: var(--ds-focus-muted); flex: 0 0 auto !important; }
+.ds-bars { display: flex; align-items: flex-end; gap: 6px; height: 44px; }
+.ds-bars > i { flex: 1; border-radius: 3px; background: var(--ds-on-focus); }
+.ds-bars > i.ds-bar-loss { background: var(--ds-red); }
+
+/* ---------- Bottom action bar: price on the left, the main button on the right ---------- */
+.ds-actionbar { display: flex; align-items: center; gap: var(--ds-space-3); padding: 12px var(--ds-space-4) calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-actionbar-price { display: flex; flex-direction: column; flex-shrink: 0; }
+.ds-actionbar-price b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ds-actionbar-price span { font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-actionbar > .ds-btn, .ds-actionbar > div:last-child { flex: 1; }
+
+/* ---------- Bottom sheet ---------- */
+.ds-sheet-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(22 18 19 / 0.5); }
+.ds-sheet-preview { position: relative; inset: auto; z-index: auto; min-height: 560px; padding-top: 72px; }
+.ds-sheet { width: 100%; max-width: 640px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; padding: 8px var(--ds-space-4) calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: var(--ds-radius-xl) var(--ds-radius-xl) 0 0; background: var(--ds-surface); color: var(--ds-ink); display: flex; flex-direction: column; gap: var(--ds-space-4); }
+.ds-sheet-preview .ds-sheet { max-height: none; }
+.ds-sheet-handle { width: 40px; height: 4px; margin: 4px auto 0; border-radius: 2px; background: var(--ds-line-2); }
+.ds-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-3); }
+.ds-close { width: var(--ds-tap); height: var(--ds-tap); margin-right: -10px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--ds-ink); cursor: pointer; }
+.ds-label-sm { font-size: var(--ds-text-meta); font-weight: 700; color: var(--ds-muted); }
+
+/* ---------- Chat extras ---------- */
+.ds-avatar { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; font-size: 16px; font-weight: 800; }
+.ds-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ds-avatar-ai { background: var(--ds-teal); color: var(--ds-teal-ink); }
+.ds-avatar-person { background: var(--ds-ink); color: var(--ds-on-ink); }
+.ds-avatar-sm { width: 36px; height: 36px; font-size: 14px; }
+.ds-date { align-self: center; font-size: var(--ds-text-badge); font-weight: 600; color: var(--ds-muted); }
+.ds-offer { align-self: stretch; border: 2px solid var(--ds-ink); border-radius: var(--ds-radius-lg); background: var(--ds-surface); overflow: hidden; }
+.ds-offer-body { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+.ds-offer-title { font-size: 17px; font-weight: 800; line-height: 1.25; }
+.ds-offer-list { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--ds-text-meta); }
+.ds-offer-list li::before { content: "✓ "; }
+.ds-offer-options { border-top: 1px solid var(--ds-line); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ds-option { display: flex; align-items: center; gap: var(--ds-space-3); min-height: var(--ds-tap); padding: 0 8px; border: none; border-radius: 10px; background: none; color: var(--ds-ink); font-family: inherit; font-size: var(--ds-text-body); text-align: left; cursor: pointer; }
+.ds-option[aria-checked="true"] { background: var(--ds-teal-tint); font-weight: 700; }
+.ds-option[aria-checked="true"] .ds-radio { border-color: var(--ds-ink); background: var(--ds-ink); box-shadow: inset 0 0 0 3px var(--ds-teal-tint); }
+.ds-option .ds-choice-right { margin-left: auto; }
+.ds-offer-foot { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ds-fineprint { font-size: var(--ds-text-badge); color: var(--ds-muted); text-align: center; line-height: 1.4; }
+.ds-gift { align-self: stretch; display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--ds-teal-line); border-radius: var(--ds-radius-lg); background: var(--ds-teal-tint); }
+.ds-gift-eyebrow { font-size: var(--ds-text-badge); font-weight: 800; color: var(--ds-teal-text); text-transform: uppercase; letter-spacing: 0.02em; }
+.ds-composer { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--ds-line); background: var(--ds-surface); }
+.ds-composer .ds-input { border-radius: var(--ds-radius-pill); padding: 0 16px; }
+.ds-mic { width: 46px; height: 46px; flex-shrink: 0; border: none; border-radius: 50%; background: var(--ds-teal); color: var(--ds-teal-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ds-mic svg, .ds-mic i { width: 22px; height: 22px; }
+.ds-powered { padding: 2px 0 8px; text-align: center; font-size: 11px; color: var(--ds-muted); background: var(--ds-surface); }
+.ds-link-quiet { align-self: center; min-height: var(--ds-tap); padding: 0 8px; border: none; background: none; color: var(--ds-muted); font-family: inherit; font-size: var(--ds-text-meta); text-decoration: underline; cursor: pointer; }
+.ds-pill { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 4px 4px 4px 10px; border-radius: var(--ds-radius-sm); background: var(--ds-fog); font-size: var(--ds-text-meta); }
+.ds-pill .ds-link-red { min-height: 32px; }
+
+/* ---------- «Если клиент… → …» rows (scenarios) ---------- */
+.ds-cond { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.ds-cond-cell { min-height: 40px; box-sizing: border-box; display: flex; align-items: center; padding: 8px 12px; border: 1px solid var(--ds-line); border-radius: 10px; font-size: 14px; line-height: 1.3; }
+.ds-cond-arrow { color: var(--ds-muted); font-size: 13px; }
+
+/* ---------- Showcase: one role's path, screen after screen ---------- */
+.ds-path { display: flex; flex-direction: column; gap: var(--ds-space-6); }
+.ds-screen { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-screen > .ds-phone { display: flex; flex-direction: column; }
+.ds-pad { padding: var(--ds-space-4); display: flex; flex-direction: column; gap: var(--ds-space-4); }
+
+/* ---------- The new look also drops what makes screens look «template-made» ---------- */
+[data-design="v2"] .settings-row-icon { display: none; }
+[data-design="v2"] .app-header-logo,
+[data-design="v2"] .app-header-me { display: none; }
+[data-design="v2"] .tg-header .text-sm.font-bold { font-size: 17px; font-weight: 800; }
