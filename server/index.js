@@ -68,6 +68,8 @@ app.use((req, res, next) => {
   });
   next();
 });
+// Payment provider webhooks read the body exactly as sent (the signature covers those bytes): before express.json
+app.use('/api/payments', require('./routes/payments'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -114,6 +116,9 @@ app.get('/api/health', async (req, res) => {
       push: { configured: require('./services/push-service').isConfigured() },
       // true = the «Войти через Google» button is shown (GOOGLE_CLIENT_ID)
       google: { configured: Boolean(config.googleClientId) },
+      // Payments through the platform (Whop, sandbox first): env = sandbox / production / null (payments off);
+      // only "set / not set" for the key and the webhook secret — never the values
+      payments: require('./services/payments').status(),
       // The alarm clock: running = it checks once a minute; lastTickAt = its last check
       scheduler: await scheduler.status().then(s => ({ running: s.running, lastTickAt: s.lastTickAt })).catch(() => null),
       timestamp: new Date().toISOString()
@@ -227,6 +232,11 @@ async function startServer(port = config.port) {
   if (unknownAdmins.length) {
     console.warn(`[SmartFlow] ADMIN_USERS: nobody has ${unknownAdmins.join(', ')} — remove it from Railway Variables (safer: write your Telegram ID, digits only)`);
   }
+
+  // Payments: without an explicit WHOP_ENV the platform payments stay off (manual mode keeps working)
+  const whopProblem = config.payments.whop.envProblem;
+  if (whopProblem) console.warn(`[SmartFlow Payments] ${whopProblem}. Платформенные оплаты выключены, работает ручной режим.`);
+  else if (config.payments.whop.env) console.log(`[SmartFlow Payments] Whop: ${config.payments.whop.env}`);
 
   scheduler.start();
   // A forgotten error somewhere must not stop the whole server: it goes to the Railway logs

@@ -6,10 +6,10 @@
 
 ## Цифры
 
-- **Миграций:** 38 (`001_initial_schema` … `038_buddy_welcome`, папка `server/db/migrations/`).
-- **Таблиц:** 61. В спецификации написано 62: `businesses_new` в миграции 030 — временное имя, оно переименовано в `businesses`.
+- **Миграций:** 39 (`001_initial_schema` … `039_payments`, папка `server/db/migrations/`).
+- **Таблиц:** 68 (с 27 нояб. +7 таблиц оплат, миграция 039). В спецификации написано 62: `businesses_new` в миграции 030 — временное имя, оно переименовано в `businesses`.
 
-## Таблицы (61)
+## Таблицы (68)
 
 | Группа | Таблицы |
 |---|---|
@@ -20,12 +20,13 @@
 | Шаблоны | `ready_funnels`, `funnel_purchases` |
 | Бадди и уведомления | `notifications`, `buddy_reminders`, `scheduler_jobs` |
 | Люди, группы, Комьюнити | `dm_threads`, `dm_messages`, `dm_files`, `chat_groups`, `chat_group_members`, `chat_group_messages`, `chat_group_files`, `chat_group_mentions`, `chat_group_reactions`, `chat_group_summaries`, `communities`, `community_members`, `community_posts`, `community_comments`, `community_likes`, `community_files` |
+| Оплаты (Whop, шаг 0, пока пустые) | `payment_accounts`, `payment_orders`, `payment_charges`, `payment_shares`, `payment_payouts`, `payment_reserves`, `payment_events` |
 | Поддержка | `staff`, `feedback`, `error_log`, `admin_actions` |
 | Старые (первая версия) | `funnel_templates`, `funnel_subscriptions`, `project_members`, `platform_subscriptions` |
 
 ## Флаги «сначала одному человеку» (`FEATURES` в Railway)
 
-В коде четыре флага: `funnels` (шаблоны), `quick-start` (быстрый старт), `card-cta` (кнопка на карточке), `new-chat`.
+В коде пять флагов: `funnels` (шаблоны), `quick-start` (быстрый старт), `card-cta` (кнопка на карточке), `new-chat`, `payments_whop` (оплата через Whop продавцу; с 27 нояб., пока ни на что не влияет в интерфейсе).
 Как они выставлены в Railway, из кода не видно. **Владелице:** Railway → сервис → Variables → `FEATURES` — пришлите
 строку (это не секрет), запишем сюда.
 
