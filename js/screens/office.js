@@ -962,9 +962,8 @@
       const email = e.target.email ? e.target.email.value.trim() : '';
       const res = await api().connectPayouts(email);
       store().setRemote('payoutsNeedEmail', false);
-      // Ссылка одноразовая; если браузер не дал открыть окно сам — кнопка «Открыть страницу Whop»
-      store().setRemote('payoutsLink', res.url);
-      SF.openLink(res.url);
+      // Страница Whop открывается сама; кнопка «Открыть страницу Whop» — только если браузер её не открыл
+      store().setRemote('payoutsLink', SF.openLink(res.url) ? null : res.url);
       SF.actions.reloadPayouts();
     } catch (err) {
       if (err.data && (err.data.code === 'EMAIL_REQUIRED' || err.data.code === 'BAD_EMAIL')) store().setRemote('payoutsNeedEmail', true);
@@ -978,8 +977,7 @@
     if (needServer()) return;
     try {
       const res = await api().payoutsDashboard();
-      store().setRemote('payoutsLink', res.url);
-      SF.openLink(res.url);
+      store().setRemote('payoutsLink', SF.openLink(res.url) ? null : res.url);
     } catch (err) {
       showToast(SF.withErrorCode(err.message || 'Не удалось открыть Whop', err));
     }
