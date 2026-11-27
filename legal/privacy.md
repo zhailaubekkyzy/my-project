@@ -1,12 +1,12 @@
 ---
 title: Smartflow Privacy Policy
-version: v1.0
-date: 2026-11-24
+version: v1.1
+date: 2026-11-27
 ---
 
 # Smartflow Privacy Policy
 
-**Version v1.0 · November 24, 2026**
+**Version v1.1 · November 27, 2026**
 
 ## 1. Who we are
 
@@ -33,7 +33,7 @@ Smartflow is a platform where marketers build sales funnels, businesses and expe
 | Usage and device data | Pages and features used, clicks, session times, device type, browser, IP address, approximate location | PostHog, Amplitude, server logs |
 | Communications | Emails and SMS we send you, your support requests | You, Resend, [SMS provider] |
 
-**Payments.** At this stage Smartflow does not process payments. Clients pay marketers and businesses directly, so we do not receive card or bank details. If this changes, we will update this policy before we start.
+**Payments.** Payments through Smartflow are processed by Whop, Inc. You enter card details on Whop's checkout; Smartflow never receives or stores full card numbers. From Whop we receive what we need to keep records: the amount, currency, status (paid, refunded, disputed), the date, and the IDs of the payment and the buyer's membership. Sellers who connect payouts give their identity documents and bank details to Whop, not to Smartflow; we receive only the verification status. To create a seller's Whop account, we send Whop the seller's email and Smartflow account ID. When a buyer pays a seller directly, outside Smartflow's checkout, we do not receive card or bank details.
 
 We do not ask for sensitive data (health, religion, political views and similar). Businesses must not use Smart consultants to collect such data unless the law allows it and they take responsibility for it.
 
@@ -82,14 +82,15 @@ We share data only with the service providers below, only as needed to run the S
 | Provider | What it does for us | Location |
 |---|---|---|
 | Supabase | Database, authentication, file storage | EU (Frankfurt, Germany) |
-| Railway | Server hosting | [USA / EU] |
+| Railway | Server hosting | EU (Amsterdam, Netherlands) |
 | OpenAI | AI replies, transcription, generation | USA |
-| PostHog | Product analytics | [USA / EU] |
+| PostHog | Product analytics | USA |
 | Amplitude | Product analytics | USA |
 | Resend | Transactional email | USA |
 | [SMS provider] | Weekly SMS reports | [location] |
 | Telegram | Runs the Mini App and delivers notifications | Telegram's own policy applies |
 | Google | Sign-in and Calendar | USA |
+| Whop | Payment processing, seller accounts and identity verification, payouts | USA |
 
 We also share data:
 
