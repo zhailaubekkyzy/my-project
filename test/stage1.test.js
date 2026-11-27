@@ -4828,7 +4828,7 @@ async function runAllTests() {
     // Contrast at least 4.5:1 for every text on its background, in both themes
     const pairs = [['on-red', 'red'], ['teal-ink', 'teal'], ['ink', 'surface'], ['ink', 'fog'], ['ink', 'page'], ['muted', 'surface'],
       ['muted', 'fog'], ['ink-2', 'fog'], ['red-ink', 'surface'], ['red-deep', 'red-tint'], ['teal-text', 'surface'],
-      ['teal-text', 'teal-tint'], ['on-ink', 'ink']];
+      ['teal-text', 'teal-tint'], ['on-ink', 'ink'], ['ink', 'red-tint']];
     for (const [theme, t] of [['light', light], ['dark', dark]]) {
       for (const [fg, bg] of pairs) {
         const c = contrast(t[`--ds-${fg}`], t[`--ds-${bg}`]);
@@ -4884,6 +4884,11 @@ async function runAllTests() {
     noRawHtml(head);
     assert.ok(ds.bubble('a', { mine: true }).includes('ds-bubble-mine') && ds.bubble('a').includes('ds-bubble-in'));
     assert.ok(ds.bubble('a', { author: 'Имя · эксперт', expert: true }).includes('badge-check'));
+    // A person's messages are red: mine solid, another person's pale; AI stays fog
+    assert.ok(ds.bubble('a', { author: 'Имя · эксперт', expert: true }).includes('ds-bubble-human'));
+    assert.ok(ds.bubble('a', { human: true }).includes('ds-bubble-human') && !ds.bubble('a').includes('ds-bubble-human'));
+    assert.ok(/\.ds-bubble-mine \{[^}]*background: var\(--ds-red\);[^}]*color: var\(--ds-on-red\)/.test(designCss()));
+    assert.ok(/\.ds-bubble-human \{ background: var\(--ds-red-tint\)/.test(designCss()));
     noRawHtml(ds.bubble(evil));
     const rep = ds.replies(['Первый', 'Второй'], { selected: 1, onclick: 'pick($i)' });
     assert.ok(rep.includes('pick(0)') && rep.includes('pick(1)') && rep.includes('aria-pressed="true"'));

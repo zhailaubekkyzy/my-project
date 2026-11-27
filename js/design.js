@@ -133,10 +133,13 @@
       </div>`;
   }
 
-  // mine: my own message (ink). Otherwise incoming (fog). author + expert: «Имя · эксперт» with the check mark.
-  function bubble(text, { mine = false, author = '', expert = false, time = '' } = {}) {
+  // Messages written by a person are red (owner's decision 27 Nov.): mine — solid red on the right,
+  // another person's (the expert writing personally, a friend) — pale red on the left; AI — fog.
+  // author + expert: «Имя · эксперт» with the check mark.
+  function bubble(text, { mine = false, human = false, author = '', expert = false, time = '' } = {}) {
     const head = author ? `<span class="ds-bubble-author">${esc(author)}${expert ? iconTag('badge-check') : ''}</span>` : '';
-    return `<div class="ds-bubble ${mine ? 'ds-bubble-mine' : 'ds-bubble-in'}">${head}${esc(text)}${time ? `<span class="ds-bubble-time">${esc(time)}</span>` : ''}</div>`;
+    const cls = mine ? 'ds-bubble-mine' : `ds-bubble-in${human || expert ? ' ds-bubble-human' : ''}`;
+    return `<div class="ds-bubble ${cls}">${head}${esc(text)}${time ? `<span class="ds-bubble-time">${esc(time)}</span>` : ''}</div>`;
   }
 
   // Ready answers for the client: pressing one = sending it as their message (decision 27 Nov., item 8)
@@ -370,7 +373,7 @@
               ${typing()}
             </div>
           </div>
-          <span class="ds-small">Роль «ИИ-…» — бледно-серым под именем. Готовый ответ = сообщение клиента.</span>`)}
+          `)}
 
         ${section('Нижнее меню', `<div class="ds-card" style="padding:0;overflow:hidden">${tabbar(tabs_, 'marketplace')}</div>`)}
 
