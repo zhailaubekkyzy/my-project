@@ -5185,8 +5185,9 @@ async function runAllTests() {
     }
     // Settings show the showcase row and screen only with the flag
     const profile = fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8');
-    assert.ok(/SF\.ds && SF\.ds\.on\(\) \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
-    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase"));
+    // ...and only to the team: with design-v2:all the clients get the new look, not the showcase
+    assert.ok(/SF\.ds && SF\.ds\.on\(\) && me\.staffRole \? row\(\{ icon: 'palette', label: 'Дизайн-система'/.test(profile));
+    assert.ok(profile.includes("route.screen === 'design' && SF.ds && SF.ds.on() && state.me.staffRole && SF.dsShowcase"));
     // On the server: FEATURES=design-v2:beta reaches only the people from BETA_USERS
     const appInfo = require('../server/services/app-info');
     const saved = { features: config.features, betaUsers: config.betaUsers };
@@ -5216,6 +5217,126 @@ async function runAllTests() {
     assert.ok(css.includes('[data-design="v2"] .app-header-logo') && app.includes('app-header-logo') && app.includes('app-header-me'));
     assert.ok(fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8').includes('settings-row-icon'));
     assert.ok(app.includes('if (SF.ds) SF.ds.apply();') && app.includes('SF.ds.count(badges[t.id])'));
+  });
+
+  // ---------------- Marketplace in the new look (step 2 of «Внедрение дизайна», mockups MK-Catalog / MK-States) ----------------
+  // The real screen files run in a sandbox with small stand-ins for the store, the server and the flags
+  function loadMarketplace({ features = ['design-v2', 'funnels'], remote = {}, failed = {}, funnels = null } = {}) {
+    const vm = require('vm');
+    const notified = [];
+    const window = {
+      document: { documentElement: { getAttribute: () => null, setAttribute() {}, removeAttribute() {} }, head: { appendChild() {} }, getElementById: () => null, createElement: () => ({}) },
+      funnelStore: { data: { remote: { niches: { sections: [{ id: 'health', label: 'Здоровье и питание' }], niches: [{ id: 'n1', name: 'Нутрициология', section: 'health', experts: 2, templates: 2 }] }, ...remote } }, notify: () => notified.push(1) },
+      smartFlowApi: { readyFunnels: { catalogue: async () => (funnels || { funnels: [] }) } }
+    };
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    window.SF = {
+      screens: {}, actions: {}, esc, js: (v) => esc(String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")),
+      feature: (n) => features.includes(n), MASCOTS: { consultant: 'images/mascots/si-consultant.webp' },
+      info: () => '<button class="info"></button>', emptyState: (m, t) => `<div class="old-empty">${t}</div>`, showToast() {},
+      appLink: () => '', patch() {},
+      data: {
+        signedIn: () => true, loadError: (k) => failed[k] || null, invalidate() {}, marketplace() {}, niches() {},
+        ensure: (key, fn) => Promise.resolve().then(fn)
+      }
+    };
+    window.window = window;
+    for (const file of ['design.js', 'niches.js', 'screens/marketplace.js', 'screens/funnels.js']) {
+      vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js', file), 'utf8'), window);
+    }
+    const state = (ui = {}) => ({ remote: window.funnelStore.data.remote, ui: { marketplaceSearch: '', ...ui }, office: { consultants: [] } });
+    return { SF: window.SF, state, render: (route = {}, ui) => window.SF.screens.marketplace.render({ screen: 'list', ...route }, state(ui)) };
+  }
+  const sampleSellers = [
+    { id: 'p1', slug: 's1', name: 'Анна', offer: 'Питание без срывов', priceMode: 'fixed', priceLabel: '25 000 ₸', niche: { id: 'n1', name: 'Нутрициология', section: 'health' }, reviews: { count: 3, average: 4.7 } },
+    { id: 'p2', slug: 's2', name: '<b>Ерлан</b>', offer: 'Разбор бизнеса', priceMode: 'free', niche: null, reviews: null }
+  ];
+
+  await test('103. Маркетплейс в новом виде: вкладки, поиск, фильтры и плитки специалистов — те же данные', async () => {
+    const m = loadMarketplace({ remote: { marketplace: sampleSellers } });
+    const html = m.render();
+    for (const cls of ['ds-tabs', 'ds-search', 'ds-chips', 'ds-tiles-grid', 'ds-tile']) assert.ok(html.includes(cls), cls);
+    assert.ok(html.includes('aria-selected="true"') && html.includes('Специалисты') && html.includes('Шаблоны ИИ‑продавцов'));
+    // Same data as before: price as the expert set it, the offer, the name; the rating only with reviews
+    assert.ok(html.includes('25 000 ₸') && html.includes('Бесплатно') && html.includes('Питание без срывов'));
+    assert.strictEqual((html.match(/ds-tile-rating/g) || []).length, 1, 'no invented rating');
+    assert.ok(html.includes('4,7') && html.includes('(3)'));
+    assert.ok(!html.includes('<b>Ерлан</b>') && html.includes('&lt;b&gt;Ерлан'), 'names are escaped');
+    // Same actions: a tile opens the card, the search keeps what is typed
+    const code = html.replace(/&#039;/g, "'");
+    assert.ok(code.includes("SF.push('consultant', { id: 'p1' })") && html.includes('data-keep="market-search"') && html.includes('SF.actions.searchMarket(this.value)'));
+    // The filter: the same keys, chips in the new look (chosen one pressed)
+    assert.ok(html.includes("SF.patch({ sec: 'health', nic: '' })") && html.includes('ds-chip" aria-pressed="true"'));
+    // Search filters on the phone, like before
+    assert.ok(!m.render({}, { marketplaceSearch: 'разбор' }).includes('Питание без срывов'));
+    // Without the flag: the old look, untouched
+    const old = loadMarketplace({ features: ['funnels'], remote: { marketplace: sampleSellers } }).render();
+    assert.ok(!old.includes('ds-tile') && old.includes('glass-card-3d'));
+  });
+
+  await test('104. Маркетплейс в новом виде: загрузка, пусто, ошибка — по правилу четырёх состояний', async () => {
+    // Loading: the skeleton in the shape of tiles, not «Загружаю…»
+    let html = loadMarketplace({ remote: { marketplace: null } }).render();
+    assert.ok(html.includes('aria-busy="true"') && html.includes('ds-tiles-grid') && !html.includes('Загружаю'));
+    // Error before anything loaded: human words + «Повторить» with the code, no endless skeleton
+    html = loadMarketplace({ remote: { marketplace: null }, failed: { marketplace: { message: 'x', code: 'K7P2' } } }).render();
+    assert.ok(html.includes('ds-error') && html.includes('Повторить') && html.includes('SF.actions.retryMarket()') && html.includes('K7P2'));
+    assert.ok(!html.includes('aria-busy'));
+    // Error after data was loaded: the tiles stay on the screen
+    html = loadMarketplace({ remote: { marketplace: sampleSellers }, failed: { marketplace: { message: 'x' } } }).render();
+    assert.ok(html.includes('ds-error') && html.includes('Показываем то, что загрузили раньше') && html.includes('Питание без срывов'));
+    // Empty: one phrase and exactly one button, for each reason
+    const oneButton = (h) => { const e = h.slice(h.indexOf('ds-empty')); return (e.match(/<button/g) || []).length === 1; };
+    const cases = [
+      [loadMarketplace({ remote: { marketplace: [] } }).render(), 'Витрина только открывается', 'Обновить'],
+      [loadMarketplace({ remote: { marketplace: sampleSellers } }).render({}, { marketplaceSearch: 'нет такого' }), 'Ничего не нашли', 'Сбросить поиск'],
+      [loadMarketplace({ remote: { marketplace: [sampleSellers[1]] } }).render({ sec: 'health' }), 'В этой нише пока никого', 'Все разделы']
+    ];
+    for (const [h, phrase, button] of cases) {
+      assert.ok(h.includes('ds-empty') && h.includes(phrase) && h.includes(button), phrase);
+      assert.ok(oneButton(h), `${phrase}: one button`);
+    }
+    // The phone remembers a failed load and forgets it after a good one (js/data.js)
+    const vm = require('vm');
+    let fail = true;
+    const notes = [];
+    const w = { SF: {}, funnelStore: { notify: () => notes.push(1), setRemote() {} }, smartFlowApi: { isSignedIn: () => true, getMarketplace: async () => { if (fail) { const e = new Error('Сервер долго не отвечает'); e.errorCode = 'AB12'; throw e; } return { consultants: [] }; } } };
+    w.window = w;
+    w.addEventListener = () => {};
+    Object.assign(w, { document: { hidden: true, addEventListener() {} }, console: { warn() {}, log() {} }, setInterval: () => 0, clearInterval() {}, setTimeout, clearTimeout, Date, Promise });
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js/data.js'), 'utf8'), w);
+    await w.SF.data.marketplace();
+    assert.strictEqual(w.SF.data.loadError('marketplace').code, 'AB12');
+    fail = false;
+    w.SF.data.invalidate('marketplace');
+    await w.SF.data.marketplace();
+    assert.strictEqual(w.SF.data.loadError('marketplace'), null);
+    assert.ok(notes.length >= 2, 'the screen is redrawn on both changes');
+  });
+
+  await test('105. Маркетплейс → «Шаблоны ИИ‑продавцов» в новом виде: строки как в MK-Catalog, только настоящие цифры', async () => {
+    const funnels = { funnels: [
+      { id: 'f1', title: 'Курс через урок', author: { name: 'Автор' }, niche: 'Нутрициология', nicheId: 'n1', nicheSection: 'health', steps: [{ title: 'a' }, { title: 'b' }, { title: 'c' }, { title: 'd' }, { title: 'e' }], priceLabel: '10%', priceTypeLabel: '% с продаж', results: { experts: 31, salesShare: 7 } },
+      { id: 'f2', title: '<i>Новый</i>', author: { name: 'Автор 2' }, niche: '', steps: [{ title: 'a' }, { title: 'b' }, { title: 'c' }], priceLabel: 'Бесплатно', priceTypeLabel: '', results: { experts: 1, salesShare: null } },
+      { id: 'f3', title: 'Без цифр', author: { name: 'Автор 3' }, steps: [{ title: 'a' }], priceLabel: '5 000 ₸', priceTypeLabel: 'разово', results: null }
+    ] };
+    const m = loadMarketplace({ funnels });
+    assert.ok(m.render({ mtab: 'biz' }).includes('aria-busy="true"'), 'loading → skeleton');
+    await m.SF.funnels.loadInline({});
+    await new Promise(r => setTimeout(r, 0));
+    const html = m.render({ mtab: 'biz' });
+    for (const cls of ['ds-tabs', 'ds-search', 'ds-list', 'ds-item', 'ds-thumb']) assert.ok(html.includes(cls), cls);
+    assert.ok(html.includes('5 шагов') && html.includes('3 шага') && html.includes('1 шаг<'));
+    // Real numbers only: the share of buyers when the server sends it (from 30 clients), the number of experts
+    assert.strictEqual((html.match(/% купили/g) || []).length, 1);
+    assert.ok(html.includes('7% купили') && html.includes('Используют 31 эксперт') && html.includes('Используют 1 эксперт<'));
+    assert.ok(!html.includes('мало данных') && !html.includes('★'), 'nothing invented');
+    // Where the client buys is not stored yet: no red «sale» bar on the preview
+    assert.ok(!html.includes('ds-thumb-sale'));
+    assert.ok(html.replace(/&#039;/g, "'").includes("SF.push('office-funnel', { id: 'f1' })") && !html.includes('<i>Новый</i>'));
+    // Filter by niche with the template keys, empty with one button
+    const none = m.render({ mtab: 'biz', tnic: 'nope' });
+    assert.ok(none.includes('Ничего не нашлось') && none.includes('Сбросить поиск'));
   });
 
   await new Promise(resolve => httpServer.close(resolve));

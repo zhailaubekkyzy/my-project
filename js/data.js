@@ -6,6 +6,8 @@
   const SF = window.SF;
   const inFlight = {};
   const loadedAt = {};
+  // The last failure of a load (key → { message, code }): the screen shows «Повторить» instead of loading forever
+  const failed = {};
 
   const store = () => window.funnelStore;
   const api = () => window.smartFlowApi;
@@ -20,11 +22,20 @@
     inFlight[key] = Promise.resolve()
       .then(loader)
       // false = skipped (not signed in yet): try again on the next render, after login
-      .then(result => { if (result !== false) loadedAt[key] = Date.now(); })
-      .catch(err => console.warn(`[SmartFlow data] ${key}:`, err.message))
+      .then(result => {
+        if (result !== false) loadedAt[key] = Date.now();
+        if (failed[key]) { delete failed[key]; store().notify(); }
+      })
+      .catch(err => {
+        console.warn(`[SmartFlow data] ${key}:`, err.message);
+        failed[key] = { message: err.message || 'Не загрузилось', code: err.errorCode || err.code || '' };
+        store().notify();
+      })
       .finally(() => { delete inFlight[key]; });
     return inFlight[key];
   }
+
+  const loadError = (key) => failed[key] || null;
 
   function invalidate(prefix) {
     Object.keys(loadedAt).forEach(k => { if (k.startsWith(prefix)) delete loadedAt[k]; });
@@ -449,5 +460,5 @@
     }
   } catch (e) {}
 
-  SF.data = { isMissing, ensure, invalidate, ...loaders, poll, stopPolling, waitingInquiries, isUnread, signedIn };
+  SF.data = { isMissing, ensure, invalidate, loadError, ...loaders, poll, stopPolling, waitingInquiries, isUnread, signedIn };
 })(window);

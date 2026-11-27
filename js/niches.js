@@ -37,6 +37,23 @@
       <button onclick="${onclick}" class="px-3 py-1.5 rounded-xl text-xs whitespace-nowrap border font-semibold flex items-center gap-1.5 ${active ? 'bg-[#81D8D0]/20 border-[#81D8D0] text-brand' : 'bg-card border-line text-muted'}">
         ${icon ? `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i>` : ''}${label}</button>`;
     const inSection = current ? withItems.filter(n => n.section === current) : [];
+    // The new look (flag design-v2): the same filters as black-when-chosen chips (MK-Catalog), no icons
+    if (SF.ds && SF.ds.on()) {
+      const dsChip = (active, onclick, label, num) =>
+        `<button type="button" class="ds-chip" aria-pressed="${active}" onclick="${onclick}">${label}${num ? `<span class="ds-chip-num">${num}</span>` : ''}</button>`;
+      return `
+        <div class="ds-chips-wrap">
+          <div class="ds-chips">
+            ${dsChip(!current, `SF.patch({ ${sec}: '', ${nic}: '' })`, 'Все')}
+            ${used.map(s => dsChip(current === s.id, `SF.patch({ ${sec}: '${s.id}', ${nic}: '' })`, esc(s.label))).join('')}
+          </div>
+          ${inSection.length > 1 ? `
+            <div class="ds-chips">
+              ${dsChip(!route[nic], `SF.patch({ ${nic}: '' })`, 'Все ниши')}
+              ${inSection.map(n => dsChip(route[nic] === n.id, `SF.patch({ ${nic}: '${SF.js(n.id)}' })`, esc(n.name), count(n))).join('')}
+            </div>` : ''}
+        </div>`;
+    }
     return `
       <div class="space-y-1.5">
         <div class="flex gap-1.5 overflow-x-auto pb-1">

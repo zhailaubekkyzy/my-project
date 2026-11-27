@@ -62,7 +62,55 @@
       </div>`;
   }
 
+  // ---------------- The new look (flag design-v2; mockups MK-Catalog, MK-States) ----------------
+  // Same data, same actions; only the look. Four states: skeleton · empty (one phrase + one button) ·
+  // error («Повторить», what was loaded stays) · normal.
+  function dsTabs(route) {
+    if (!SF.feature('funnels')) return '';
+    const tab = route.mtab === 'biz' ? 'biz' : 'experts';
+    return SF.ds.tabs([{ id: 'experts', label: 'Специалисты' }, { id: 'biz', label: 'Шаблоны ИИ‑продавцов' }], tab,
+      { onclick: "SF.patch({ mtab: '$id' })" });
+  }
+
+  function dsTile(c) {
+    return SF.ds.tile({
+      photo: c.photoUrl, fallback: SF.MASCOTS.consultant, ai: true, tag: c.niche ? c.niche.name : '',
+      price: priceText(c), title: c.offer, meta: c.name, rating: c.reviews,
+      onclick: `SF.push('consultant', { id: '${SF.js(c.id)}' })`
+    });
+  }
+
+  SF.actions.retryMarket = () => { SF.data.invalidate('marketplace'); SF.data.marketplace(); };
+  SF.actions.clearMarketSearch = () => { SF.actions.searchMarket(''); };
+
+  function renderListV2(state, route) {
+    const ds = SF.ds;
+    if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) return `<div class="ds ds-stack" style="gap:12px">${dsTabs(route)}${SF.funnels.catalogInline(route)}</div>`;
+    const all = state.remote.marketplace;
+    const failed = SF.data.loadError('marketplace');
+    const q = String(state.ui.marketplaceSearch || '').trim().toLowerCase();
+    const matches = (c) => !q || [c.name, c.offer, c.roleTitle, c.description, c.priceLabel, c.author && c.author.name]
+      .some(v => String(v || '').toLowerCase().includes(q));
+    const items = (all || []).filter(c => SF.niches.matches(c, route) && matches(c));
+    let body;
+    if (all === null && failed) body = '';
+    else if (all === null) body = ds.skeletonTiles(4);
+    else if (items.length) body = ds.tiles(items.map(dsTile));
+    else if (q) body = ds.empty({ title: 'Ничего не нашли', text: 'Людей можно найти во вкладке «Чаты».', button: { text: 'Сбросить поиск', onclick: 'SF.actions.clearMarketSearch()' } });
+    else if (all.length) body = ds.empty({ title: 'В этой нише пока никого', text: 'Посмотрите другие разделы.', button: { text: 'Все разделы', onclick: "SF.patch({ sec: '', nic: '' })" } });
+    else body = ds.empty({ mascot: SF.MASCOTS.consultant, title: 'Витрина только открывается', text: 'Здесь появятся SI-продавцы экспертов.', button: { text: 'Обновить', onclick: 'SF.actions.retryMarket()' } });
+    return `
+      <div class="ds ds-stack" style="gap:12px">
+        ${dsTabs(route)}
+        ${ds.search({ placeholder: 'Найти SI-продавца: имя, тема, эксперт', label: 'Поиск в Маркетплейсе', value: state.ui.marketplaceSearch || '', oninput: 'SF.actions.searchMarket(this.value)', keep: 'market-search' })}
+        ${SF.niches.filter('experts', route)}
+        ${failed ? ds.error({ text: all === null ? 'Не получилось загрузить витрину. Проверьте интернет.' : 'Не получилось обновить. Показываем то, что загрузили раньше.', retry: 'SF.actions.retryMarket()', code: failed.code }) : ''}
+        ${body}
+      </div>`;
+  }
+
   function renderList(state, route = {}) {
+    if (SF.ds && SF.ds.on()) return renderListV2(state, route);
     if (SF.feature('funnels') && route.mtab === 'biz' && SF.funnels) {
       return `${marketTabs(route)}${SF.funnels.catalogInline(route)}`;
     }
