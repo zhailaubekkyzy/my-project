@@ -114,6 +114,7 @@
         ${tile({ icon: 'users', title: 'Сообщества', sub: 'скрыть по жалобе', onclick: "SF.push('admin-communities')" })}
         ${tile({ icon: 'layers', title: 'Шаблоны', sub: 'снять по жалобе', onclick: "SF.push('admin-funnels')" })}
         ${tile({ icon: 'tags', title: 'Ниши', sub: 'переименовать, объединить', onclick: "SF.push('admin-niches')" })}
+        ${o.me.role === 'owner' && sys.paymentsEnv === 'sandbox' ? tile({ icon: 'credit-card', title: 'Проверка оплат', sub: 'комиссия на продлениях', onclick: "SF.push('admin-payments')" }) : ''}
       </div>
 
       ${card(`
@@ -812,6 +813,77 @@
 
   // ---------------- Screen ----------------
   // Who shares links, where, and how many people came (the best first)
+  // ---------------- Оплаты, шаг 2: комиссия SmartFlow на продлениях (песочница, только владелица) ----------------
+  const money = (minor) => (minor == null ? '—' : `$${(minor / 100).toFixed(2)}`);
+  const PAYMENT_KIND = { first: 'первый платёж', renewal: 'продление' };
+
+  function renderFeeTest() {
+    const d = cache.feeTest;
+    if (!d) return loading('feeTest');
+    const errorBox = errors.feeTest ? card(`<div class="text-xs text-si">Не обновилось: ${esc(errors.feeTest)}</div><button onclick="SF.admin.checkFeeTest()" class="px-3 py-1.5 rounded-xl btn-3d-dark text-xs">Повторить</button>`) : '';
+    const days = d.test && d.test.billingPeriodDays;
+    const every = days === 30 ? 'в месяц' : days ? `раз в ${days} дней` : 'в неделю';
+    const after = days === 30 ? 'через месяц' : days ? `через ${days} дней` : 'через неделю';
+    const intro = card(`
+      <div class="text-xs font-bold text-ink">Берёт ли Whop 1% с каждого продления</div>
+      <div class="text-[11px] text-ink-2 leading-snug">Тестовая подписка ${money(d.priceMinor)} ${every} на вашем подаккаунте, комиссия SmartFlow — ${money(d.expectedFeeMinor)}. Оплатите тестовой картой песочницы; ${after} Whop продлит подписку. Нажмите «Проверить»: у продления должна стоять комиссия ${money(d.expectedFeeMinor)}. Подписку раз в день Whop не разрешает.</div>`);
+    if (d.blocker) return `${errorBox}${intro}${card(`<div class="text-xs text-si">${esc(d.blocker.message)}</div>`)}`;
+    if (!d.test) {
+      return `${errorBox}${intro}${card(`<div class="text-xs text-muted">Тестовой подписки ещё нет.</div>${btn('Создать тестовую подписку', 'SF.admin.createFeeTest()', 'tiffany', { icon: 'circle-plus' })}`)}`;
+    }
+    const verdict = {
+      passed: '<div class="text-sm font-bold text-emerald-500">Проверка пройдена: комиссия взята с продления ✓</div>',
+      failed: '<div class="text-sm font-bold text-si">Продление прошло без комиссии — подписки на шаблоны и сообщества пока не делаем</div>',
+      waiting: `<div class="text-sm font-bold text-amber-500">Ждём продление (${after} после оплаты)</div>`
+    }[d.verdict] || '';
+    const rows = d.payments.length ? d.payments.map(p => `
+      <div class="flex items-center justify-between gap-2 text-[11px] py-1.5 border-t border-line first:border-0">
+        <span class="text-muted">${esc(fmtTime(p.at))}</span>
+        <span class="text-ink-2">${esc(PAYMENT_KIND[p.kind] || p.billingReason || '—')}${p.paid ? '' : ` · ${esc(p.status || 'не оплачен')}`}</span>
+        <span class="text-ink-2">${money(p.amountMinor)}</span>
+        <span class="${p.paid && (p.feeMinor || 0) >= d.expectedFeeMinor ? 'text-emerald-500' : 'text-si'} font-semibold">SmartFlow: ${money(p.feeMinor)}</span>
+      </div>`).join('') : '<div class="text-xs text-muted">Платежей пока нет — оплатите по ссылке.</div>';
+    return `
+      ${errorBox}
+      ${intro}
+      ${card(`
+        ${verdict}
+        ${d.test.canceled ? '<div class="text-[11px] text-muted">Подписка отменена.</div>' : ''}
+        ${!d.test.canceled && d.test.purchaseUrl ? btn('Оплатить тестовой картой', `SF.openLink('${SF.js(d.test.purchaseUrl)}')`, 'tiffany', { icon: 'credit-card' }) : ''}
+        ${rows}
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          ${btn('Проверить', 'SF.admin.checkFeeTest()', 'dark', { icon: 'refresh-cw' })}
+          ${d.test.canceled ? btn('Новая подписка', 'SF.admin.createFeeTest()', 'dark', { icon: 'circle-plus' }) : btn('Отменить подписку', 'SF.admin.cancelFeeTest()', 'dark', { icon: 'circle-x' })}
+        </div>`)}
+    `;
+  }
+
+  async function createFeeTest() {
+    try {
+      const res = await api().admin.createFeeTest();
+      showToast('Тестовая подписка создана — оплатите её');
+      if (res.purchaseUrl) SF.openLink(res.purchaseUrl);
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+    refresh('feeTest');
+  }
+
+  function checkFeeTest() {
+    refresh('feeTest');
+  }
+
+  async function cancelFeeTest() {
+    if (!window.confirm('Отменить тестовую подписку? Продлений больше не будет.')) return;
+    try {
+      await api().admin.cancelFeeTest();
+      showToast('Подписка отменена');
+    } catch (err) {
+      showToast(err.message || 'Не получилось');
+    }
+    refresh('feeTest');
+  }
+
   function renderPartners() {
     const d = cache.partners;
     if (!d) return loading('partners');
@@ -1024,7 +1096,8 @@
     'admin-funnels': 'Шаблоны',
     'admin-funnel': 'Шаблон',
     'admin-communities': 'Сообщества',
-    'admin-niches': 'Ниши'
+    'admin-niches': 'Ниши',
+    'admin-payments': 'Проверка оплат'
   };
 
   const RENDER = {
@@ -1043,7 +1116,8 @@
     'admin-funnels': renderFunnels,
     'admin-funnel': renderFunnelReview,
     'admin-communities': renderCommunities,
-    'admin-niches': renderNiches
+    'admin-niches': renderNiches,
+    'admin-payments': renderFeeTest
   };
 
   function afterRender(route, state) {
@@ -1070,6 +1144,7 @@
       case 'admin-funnel': return load(`funnel:${route.id}`, async () => (await a.funnel(route.id)).funnel);
       case 'admin-communities': return load('communities', async () => (await a.communities()).communities);
       case 'admin-niches': return load('niches', () => a.niches());
+      case 'admin-payments': return load('feeTest', () => a.feeTest(), 60000);
       default: return null;
     }
   }
@@ -1105,6 +1180,9 @@
     decideFunnel,
     hideCommunity,
     renameNiche,
-    mergeNiche
+    mergeNiche,
+    createFeeTest,
+    checkFeeTest,
+    cancelFeeTest
   };
 })(window);

@@ -74,6 +74,7 @@ router.get('/overview', async (req, res, next) => {
         bot: Boolean(config.telegramBotToken),
         mail: require('../services/mail-service').isConfigured(),
         push: require('../services/push-service').isConfigured(),
+        paymentsEnv: require('../services/payments').status().whop.env,
         scheduler: { running: alarm.running, lastTickAt: alarm.lastTickAt, jobs: alarm.jobs },
         warnings
       }
@@ -617,6 +618,46 @@ router.delete('/staff/:userId', requireStaff('owner'), async (req, res, next) =>
   } catch (err) {
     next(err);
   }
+});
+
+// ---------------------------------------------------------------
+// Оплаты, шаг 2: проверка комиссии SmartFlow на продлениях подписки (только владелица, только песочница)
+// ---------------------------------------------------------------
+const feeTest = require('../services/payments/fee-test');
+const { PaymentProviderError } = require('../services/payments/provider');
+
+async function sendFeeTestError(req, res, next, err) {
+  if (err instanceof feeTest.FeeTestError) return res.status(err.status).json({ error: 'fee_test', code: err.code, message: err.message });
+  if (err instanceof PaymentProviderError) {
+    const errorCode = supportService.newErrorCode();
+    await supportService.logError({ code: errorCode, source: 'server', userId: req.user ? req.user.userId : null, method: req.method,
+      path: req.originalUrl.split('?')[0], status: 502, message: err.message });
+    // Whop ответил отказом (4xx) — владелице видна его причина (без ключа); иначе — «не отвечает»
+    const refused = err.providerStatus >= 400 && err.providerStatus < 500;
+    return res.status(502).json({ error: 'provider', code: refused ? 'PROVIDER_REFUSED' : 'PROVIDER_UNAVAILABLE', errorCode,
+      message: refused ? `Whop отказал: ${err.message.replace(/^Whop ответил \d+:\s*/, '')}` : 'Whop сейчас не отвечает. Попробуйте ещё раз через минуту.' });
+  }
+  next(err);
+}
+
+router.get('/payments/fee-test', requireStaff('owner'), async (req, res, next) => {
+  try { res.json(await feeTest.status(req.staff.userId)); } catch (err) { sendFeeTestError(req, res, next, err); }
+});
+
+router.post('/payments/fee-test', requireStaff('owner'), async (req, res, next) => {
+  try {
+    const result = await feeTest.create(req.staff.userId);
+    await supportService.logAction(req.staff.userId, req.staff.userId, 'payments:fee-test', { order: result.id });
+    res.status(201).json(result);
+  } catch (err) { sendFeeTestError(req, res, next, err); }
+});
+
+router.post('/payments/fee-test/cancel', requireStaff('owner'), async (req, res, next) => {
+  try {
+    const result = await feeTest.cancel(req.staff.userId);
+    await supportService.logAction(req.staff.userId, req.staff.userId, 'payments:fee-test-cancel', result);
+    res.json(result);
+  } catch (err) { sendFeeTestError(req, res, next, err); }
 });
 
 module.exports = router;

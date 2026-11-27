@@ -4769,6 +4769,181 @@ async function runAllTests() {
     }
   });
 
+  await test('97. Проверка комиссии на продлениях: только владелица, только песочница, нужны процент и готовые выплаты', async () => {
+    const config = require('../server/config');
+    const originalWhop = config.payments.whop;
+    const originalBps = config.payments.platformFeeBps;
+    const savedAdmins = config.adminUsers;
+    try {
+      const owner = await tokenFor({ id: 970001, first_name: 'Владелица', last_name: 'Оплат' });
+      const ownerId = authService.verifySessionToken(owner).userId;
+      const stranger = await tokenFor({ id: 970002, first_name: 'Чужой', last_name: 'Человек' });
+      config.adminUsers = ['970001'];
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: 'whop_test_key_feetest_97', webhookSecret: 'ws_feetest_not_real', envProblem: null };
+      config.payments.platformFeeBps = 100;
+
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', stranger)).status, 403, 'Not the team');
+      // The overview tells the panel it is the sandbox (the tile is shown only then)
+      assert.strictEqual((await api('GET', '/api/admin/overview', owner)).body.system.paymentsEnv, 'sandbox');
+
+      // Payouts not ready yet
+      let res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.available, false);
+      assert.strictEqual(res.body.blocker.code, 'NOT_READY');
+      assert.strictEqual((await api('POST', '/api/admin/payments/fee-test', owner)).body.code, 'NOT_READY');
+
+      await db.run(`INSERT INTO payment_accounts (id, user_id, provider, provider_env, provider_account_id, status) VALUES ('pac_test_97', ?, 'whop', 'sandbox', 'biz_owner_97', 'ready')`, [ownerId]);
+      // No SmartFlow percentage in Railway
+      config.payments.platformFeeBps = null;
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', owner)).body.blocker.code, 'NO_FEE');
+      config.payments.platformFeeBps = 100;
+      // Real (production) Whop: never
+      config.payments.whop = { ...config.payments.whop, env: 'production', apiBase: 'https://api.whop.com/api/v1' };
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', owner)).body.blocker.code, 'NOT_SANDBOX');
+      assert.strictEqual((await api('POST', '/api/admin/payments/fee-test', owner)).status, 400);
+      assert.notStrictEqual((await api('GET', '/api/admin/overview', owner)).body.system.paymentsEnv, 'sandbox');
+      config.payments.whop = { ...config.payments.whop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1' };
+
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.available, true);
+      assert.strictEqual(res.body.test, null);
+      assert.strictEqual(res.body.expectedFeeMinor, 5, '1% of $5 = 5 cents');
+    } finally {
+      config.payments.whop = originalWhop;
+      config.payments.platformFeeBps = originalBps;
+      config.adminUsers = savedAdmins;
+    }
+  });
+
+  await test('98. Проверка комиссии: подписка $5 раз в неделю с комиссией 1%, итог по продлениям, отмена', async () => {
+    const config = require('../server/config');
+    const originalWhop = config.payments.whop;
+    const originalBps = config.payments.platformFeeBps;
+    const savedAdmins = config.adminUsers;
+    const realFetch = global.fetch;
+    const key = 'whop_test_key_feetest_98765';
+    const calls = [];
+    let payments = [];
+    const fees = {};
+    // Billing periods Whop refuses (the sandbox refused daily ones on 27 Nov.)
+    let refusedPeriods = [1];
+    try {
+      const owner = await tokenFor({ id: 970001, first_name: 'Владелица', last_name: 'Оплат' });
+      config.adminUsers = ['970001'];
+      config.payments.whop = { ...originalWhop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: key, webhookSecret: 'ws_feetest_not_real', envProblem: null };
+      config.payments.platformFeeBps = 100;
+      const checkout = { id: 'ch_98', purchase_url: 'https://sandbox.whop.com/checkout/ch_98', variant: { id: 'plan_98' } };
+      global.fetch = async (url, options = {}) => {
+        const u = String(url);
+        if (!u.startsWith('https://sandbox-api.whop.com/')) return realFetch(url, options);
+        const path = u.replace('https://sandbox-api.whop.com/api/v1', '');
+        calls.push({ method: options.method, path, body: options.body ? JSON.parse(options.body) : null });
+        const json = (b) => new Response(JSON.stringify(b), { status: 200 });
+        if (path === '/checkout_configurations' && options.method === 'POST') {
+          const period = JSON.parse(options.body).variant.billing_period;
+          if (refusedPeriods.includes(period)) {
+            return new Response(JSON.stringify({ error: { message: 'Failed to create dynamic plan: You cannot offer daily subscriptions. We recommend using a monthly billing period' } }), { status: 400 });
+          }
+          return json(checkout);
+        }
+        if (path === '/checkout_configurations/ch_98') return json(checkout);
+        if (path.startsWith('/payments?')) return json({ data: payments, page_info: {} });
+        const m = path.match(/^\/payments\/([^/]+)\/fees$/);
+        if (m) return json({ data: fees[m[1]] || [] });
+        if (/^\/memberships\/[^/]+\/cancel$/.test(path)) return json({ id: 'mem_98', status: 'canceled' });
+        return new Response('{}', { status: 404 });
+      };
+
+      // Whop refuses every period: the owner sees Whop's reason, not «не отвечает»
+      refusedPeriods = [1, 7, 30];
+      let res = await api('POST', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 502);
+      assert.strictEqual(res.body.code, 'PROVIDER_REFUSED');
+      assert(res.body.message.startsWith('Whop отказал: Failed to create dynamic plan'), res.body.message);
+      assert(!res.body.message.includes(key));
+      assert.strictEqual(Number((await db.get("SELECT COUNT(*) AS n FROM payment_orders WHERE kind = 'fee_test'")).n), 0, 'Nothing is saved when Whop refused');
+      // Weekly refused too → monthly
+      refusedPeriods = [1, 7];
+      calls.length = 0;
+      res = await api('POST', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.billingPeriodDays, 30);
+      assert.deepStrictEqual(calls.filter(c => c.path === '/checkout_configurations').map(c => c.body.variant.billing_period), [7, 30]);
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', owner)).body.test.billingPeriodDays, 30);
+      await api('POST', '/api/admin/payments/fee-test/cancel', owner);
+      // Weekly allowed (the usual case)
+      refusedPeriods = [1];
+      calls.length = 0;
+      res = await api('POST', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.billingPeriodDays, 7);
+      assert.strictEqual(res.body.purchaseUrl, 'https://sandbox.whop.com/checkout/ch_98');
+      const create = calls.find(c => c.path === '/checkout_configurations' && c.method === 'POST');
+      assert.strictEqual(create.body.variant.account_id, 'biz_owner_97', 'Charged straight to the seller’s sub-account');
+      assert.strictEqual(create.body.variant.billing_type, 'renewal');
+      assert.strictEqual(create.body.variant.billing_period, 7, 'Once a week: Whop does not allow daily subscriptions');
+      assert.strictEqual(create.body.variant.initial_price, 5);
+      assert.strictEqual(create.body.variant.renewal_price, 5);
+      assert.strictEqual(create.body.variant.application_fee_amount, 0.05, 'SmartFlow 1%');
+      const order = await db.get("SELECT * FROM payment_orders WHERE kind = 'fee_test' AND status <> 'canceled' ORDER BY created_at DESC LIMIT 1");
+      assert.strictEqual(order.subject_id, 'plan_98');
+      assert.strictEqual(Number(order.platform_fee_bps), 100);
+
+      // Not paid yet
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.test.purchaseUrl, 'https://sandbox.whop.com/checkout/ch_98');
+      assert.deepStrictEqual(res.body.payments, []);
+      assert.strictEqual(res.body.verdict, 'waiting');
+      assert(calls.some(c => c.path.startsWith('/payments?') && c.path.includes('account_id=biz_owner_97') && c.path.includes('variant_id=plan_98')));
+
+      // The first payment, with the fee
+      payments = [{ id: 'pay_1', status: 'paid', billing_reason: 'subscription_create', total: 5, paid_at: '2026-11-27T10:00:00Z', membership: { id: 'mem_98' } }];
+      fees.pay_1 = [{ origin: 'whop_processing_fee', amount: { amount: '0.45', decimals: 2 } }, { origin: 'application_fee', amount: { amount: '0.05', decimals: 2 } }];
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.payments.length, 1);
+      assert.strictEqual(res.body.payments[0].kind, 'first');
+      assert.strictEqual(res.body.payments[0].amountMinor, 500);
+      assert.strictEqual(res.body.payments[0].feeMinor, 5, 'Only the application fee, not Whop’s own fees');
+      assert.strictEqual(res.body.verdict, 'waiting', 'No renewal yet');
+
+      // The renewal came without the fee → failed
+      payments.push({ id: 'pay_2', status: 'paid', billing_reason: 'subscription_cycle', total: { amount: '5.00', decimals: 2 }, paid_at: '2026-11-28T10:00:00Z', membership: { id: 'mem_98' } });
+      fees.pay_2 = [{ origin: 'whop_processing_fee', amount: { amount: '0.45', decimals: 2 } }];
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.payments[1].kind, 'renewal');
+      assert.strictEqual(res.body.payments[1].feeMinor, 0);
+      assert.strictEqual(res.body.verdict, 'failed');
+
+      // ...and with the fee → passed
+      fees.pay_2.push({ origin: 'application_fee', amount: { amount: '0.05', decimals: 2 } });
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.verdict, 'passed');
+      // A failed renewal attempt does not count either way
+      payments.push({ id: 'pay_3', status: 'open', billing_reason: 'subscription_cycle', total: 5, created_at: '2026-11-29T10:00:00Z' });
+      assert.strictEqual((await api('GET', '/api/admin/payments/fee-test', owner)).body.verdict, 'passed');
+      assert(!JSON.stringify(res.body).includes(key));
+
+      // Cancel: the buyer's subscription is stopped right away
+      res = await api('POST', '/api/admin/payments/fee-test/cancel', owner);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.canceled, 1);
+      const cancelCall = calls.find(c => c.path === '/memberships/mem_98/cancel');
+      assert.strictEqual(cancelCall.body.cancel_at_period_end, false);
+      res = await api('GET', '/api/admin/payments/fee-test', owner);
+      assert.strictEqual(res.body.test.canceled, true);
+      assert.strictEqual(res.body.test.purchaseUrl, null);
+      assert.strictEqual((await api('POST', '/api/admin/payments/fee-test/cancel', owner)).body.code, 'NO_TEST');
+      const logged = await db.get("SELECT action FROM admin_actions WHERE action = 'payments:fee-test-cancel'");
+      assert(logged, 'Written to the team log');
+    } finally {
+      global.fetch = realFetch;
+      config.payments.whop = originalWhop;
+      config.payments.platformFeeBps = originalBps;
+      config.adminUsers = savedAdmins;
+    }
+  });
+
   // ---------------- Design system (docs/design/, decision 27 Nov.) ----------------
   // design.js runs in a sandbox with a tiny document: flags come from SF.feature like on the phone
   function loadDesignSystem(features = []) {
@@ -4810,7 +4985,7 @@ async function runAllTests() {
     return (x + 0.05) / (y + 0.05);
   }
 
-  await test('97. Дизайн-система: токены — палитра макета, Golos Text, отступы 4–24, радиусы, тёмная тема и контраст 4,5:1', async () => {
+  await test('99. Дизайн-система: токены — палитра макета, Golos Text, отступы 4–24, радиусы, тёмная тема и контраст 4,5:1', async () => {
     const css = designCss();
     const light = tokensOf(css, ':root,\n.ds-theme-light');
     const dark = tokensOf(css, ':root[data-theme="dark"],\n.ds-theme-dark');
@@ -4849,7 +5024,7 @@ async function runAllTests() {
     assert.ok(/\[data-design="v2"\] \.btn-3d-tiffany \{[^}]*box-shadow: none/.test(css));
   });
 
-  await test('98. Дизайн-система: базовые компоненты рисуются, текст людей экранируется', async () => {
+  await test('100. Дизайн-система: базовые компоненты рисуются, текст людей экранируется', async () => {
     const { ds } = loadDesignSystem();
     const evil = '<img src=x onerror=alert(1)>';
     const noRawHtml = (html) => assert.ok(!html.includes('<img src=x'), html);
@@ -4961,7 +5136,7 @@ async function runAllTests() {
     assert.ok(er.includes('role="alert"') && er.includes('Повторить') && er.includes('reload()') && er.includes('K7P2'));
   });
 
-  await test('99. Дизайн-система: новый вид и витрина — только с флагом design-v2 (BETA_USERS)', async () => {
+  await test('101. Дизайн-система: новый вид и витрина — только с флагом design-v2 (BETA_USERS)', async () => {
     // On the phone: <html data-design="v2"> and the font only with the flag; switching it off returns the old look
     const off = loadDesignSystem([]);
     assert.strictEqual(off.ds.apply(), false);
@@ -5025,7 +5200,7 @@ async function runAllTests() {
     }
   });
 
-  await test('100. Дизайн-система подключена: порядок стилей, скрипт до экранов, без цветов в коде компонентов', async () => {
+  await test('102. Дизайн-система подключена: порядок стилей, скрипт до экранов, без цветов в коде компонентов', async () => {
     const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
     const at = (s) => html.indexOf(s);
     assert.ok(at('css/app.css') < at('css/design.css') && at('css/design.css') < at('css/tailwind.css') && at('css/design.css') > 0);
