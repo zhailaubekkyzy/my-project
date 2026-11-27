@@ -74,8 +74,9 @@
         row({ icon: 'life-buoy', label: 'Поддержка', onclick: 'SF.actions.openSupport()' }),
         row({ icon: 'scale', label: 'Правовая информация', onclick: "SF.push('legal')" }),
         me.staffRole ? row({ icon: 'shield', label: 'Панель поддержки', onclick: "SF.push('admin')" }) : '',
-        // The new look's showcase: only for those who have it (flag design-v2)
-        SF.ds && SF.ds.on() ? row({ icon: 'palette', label: 'Дизайн-система', onclick: "SF.push('design')" }) : ''
+        // The new look's showcase: only the team (owner + support), and only with the flag design-v2 —
+        // also when the new look is on for everyone (design-v2:all)
+        SF.ds && SF.ds.on() && me.staffRole ? row({ icon: 'palette', label: 'Дизайн-система', onclick: "SF.push('design')" }) : ''
       ])}
       ${SF.inTelegram && !SF.inTelegram() ? group([
         SF.canInstall() ? row({ icon: 'smartphone', label: 'Установить на экран', onclick: 'SF.actions.installApp()' }) : '',
@@ -553,7 +554,7 @@
       if (route.screen === 'me') return renderView(state);
       if (route.screen === 'invite') return renderInvite(state);
       if (route.screen === 'legal') return renderLegal();
-      if (route.screen === 'design' && SF.ds && SF.ds.on() && SF.dsShowcase) return SF.dsShowcase.render();
+      if (route.screen === 'design' && SF.ds && SF.ds.on() && state.me.staffRole && SF.dsShowcase) return SF.dsShowcase.render();
       return renderSettings(state);
     },
     afterRender(route, state) {
