@@ -127,7 +127,7 @@
         <h2 class="ds-h2">Средний чек</h2>
         ${d.segmented([{ id: 'low', label: 'до 20 тыс' }, { id: 'mid', label: '20–100 тыс' }, { id: 'high', label: 'от 100 тыс' }], pick.check, { block: true, onclick: "SF.actions.dsPick('check', '$id')" })}
         <div class="ds-hint-card"><img src="images/mascots/si-buddy.webp" alt="" /><span style="flex:1">Ещё несколько вопросов — и я соберу черновик из шагов</span></div>
-        ${d.button({ text: 'Дальше', variant: 'dark', size: 'lg', block: true })}
+        ${d.button({ text: 'Дальше', size: 'lg', block: true })}
       </div>`;
     const builder = `
       ${d.screenHead({ back: 'void 0', title: '[Название шаблона]', sub: 'Черновик · сохранено только что' })}
@@ -194,7 +194,7 @@
       ${section('Отступы и радиусы', `<div class="ds-stack">${[[1, 4], [2, 8], [3, 12], [4, 16], [6, 24]].map(([k, px]) => `<div class="ds-row" style="gap:10px;font-size:13px"><span class="ds-space-bar" style="width:var(--ds-space-${k})"></span>${px}</div>`).join('')}</div>
         <div class="ds-row" style="gap:16px">${['xs', 'sm', 'md', 'lg', 'xl'].map(k => `<span class="ds-radius-box" style="border-radius:var(--ds-radius-${k})"></span>`).join('')}</div>`)}
       ${section('Кнопки', `${d.button({ text: 'Перейти к оплате', size: 'lg', block: true })}
-        <div class="ds-row">${d.button({ text: 'Дальше', variant: 'dark' })}${d.button({ text: 'Обводка', variant: 'outline' })}${d.button({ text: 'Тихая', variant: 'quiet' })}</div>
+        <div class="ds-row">${d.button({ text: 'Дальше' })}${d.button({ text: 'Тёмная', variant: 'dark' })}${d.button({ text: 'Обводка', variant: 'outline' })}${d.button({ text: 'Тихая', variant: 'quiet' })}</div>
         ${d.button({ text: 'Ответить: клиент ждёт', variant: 'primary', block: true })}
         ${d.button({ text: 'Опубликовать', variant: 'good', block: true, disabled: true, reason: 'Допишите описание для покупателя' })}`)}
       ${section('Поля', `${d.search({ placeholder: 'Ниша, продукт или цель' })}

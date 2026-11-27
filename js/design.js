@@ -190,7 +190,7 @@
         ${mascot ? `<img src="${esc(mascot)}" alt="" />` : ''}
         ${title ? `<span class="ds-empty-title">${esc(title)}</span>` : ''}
         ${text ? `<span class="ds-empty-text">${esc(text)}</span>` : ''}
-        ${btn ? button({ variant: 'dark', ...btn, block: true }) : ''}
+        ${btn ? button({ variant: 'good', ...btn, block: true }) : ''}
       </div>`;
   }
 

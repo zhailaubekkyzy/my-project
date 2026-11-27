@@ -4910,6 +4910,7 @@ async function runAllTests() {
     assert.ok(sk.includes('aria-busy="true"'));
     const em = ds.empty({ title: 'Пусто', text: evil, button: { text: 'Действие', onclick: 'x()' } });
     assert.strictEqual((em.match(/<button/g) || []).length, 1, 'one button on an empty screen');
+    assert.ok(em.includes('ds-btn-good'), 'the way out of an empty screen is a positive (turquoise) button');
     noRawHtml(em);
     // Catalog parts from MK-Catalog: tabs with an underline, black chosen chip, step preview, list row (2 lines, ✓, badges)
     const tb = ds.tabs([{ id: 'a', label: 'Шаблоны', num: 'N' }, { id: 'b', label: evil }], 'a');
@@ -4989,7 +4990,7 @@ async function runAllTests() {
     has('parts', ['ds-swatch', 'ds-btn-primary', 'ds-btn-good', 'ds-input', 'ds-badge', 'ds-status', 'ds-bubble-teal', 'ds-skel', 'ds-empty', 'ds-error']);
     // Every positive action is turquoise (owner's decision 27 Nov.); red only for the urgent
     const all = Object.values(pages).join('');
-    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать']) {
+    for (const label of ['Перейти к оплате', 'Подключить', 'Подключить и запустить', 'Опубликовать', 'Записать', 'Дальше']) {
       const found = [...all.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(?:<i[^>]*><\/i>)?([^<]*)</g)].filter(m => m[2] === label);
       assert.ok(found.length, label);
       for (const m of found) assert.ok(m[1].includes('ds-btn-good'), `${label}: ${m[1]}`);
