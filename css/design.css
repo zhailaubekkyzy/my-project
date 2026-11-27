@@ -559,3 +559,25 @@ textarea.ds-input { padding: var(--ds-space-3) 14px; min-height: 92px; line-heig
 [data-design="v2"] .app-header-logo,
 [data-design="v2"] .app-header-me { display: none; }
 [data-design="v2"] .tg-header .text-sm.font-bold { font-size: 17px; font-weight: 800; }
+
+/* ---------- Product tiles (Маркетплейс → Специалисты) ---------- */
+.ds-tiles-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-space-4) var(--ds-space-3); }
+@media (min-width: 560px) { .ds-tiles-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ds-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 0; border: none; background: none; color: var(--ds-ink); font-family: inherit; text-align: left; cursor: pointer; }
+.ds-tile-pic { position: relative; display: block; aspect-ratio: 1 / 1; border-radius: var(--ds-radius-md); background: var(--ds-fog); overflow: hidden; margin-bottom: 4px; }
+.ds-tile-photo { width: 100%; height: 100%; object-fit: cover; }
+.ds-tile-mascot { width: 100%; height: 100%; object-fit: contain; padding: 18%; box-sizing: border-box; }
+.ds-tile-ai { position: absolute; top: 8px; left: 8px; }
+.ds-tile-tag { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 2px 6px; border-radius: var(--ds-radius-xs); background: var(--ds-surface); font-size: 11px; font-weight: 600; color: var(--ds-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+.ds-tile-price { font-size: var(--ds-text-card); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-tile-title { font-size: var(--ds-text-meta); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ds-tile-meta { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: auto; font-size: var(--ds-text-badge); color: var(--ds-muted); }
+.ds-tile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-tile-rating { flex-shrink: 0; color: var(--ds-ink); font-weight: 700; }
+.ds-tile-rating span { color: var(--ds-muted); font-weight: 500; }
+.ds-tile-rating span[aria-hidden] { color: var(--ds-ink); }
+.ds-tile .ds-skel-line { margin-top: 4px; }
+.ds-chips-wrap { display: flex; flex-direction: column; gap: var(--ds-space-2); }
+.ds-chip .ds-chip-num { margin-left: 4px; opacity: .6; font-weight: 500; }
+.ds-search-row { display: flex; align-items: center; gap: var(--ds-space-2); }
+.ds-search-row > form, .ds-search-row > .ds-search { flex: 1; min-width: 0; }

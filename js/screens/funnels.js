@@ -122,7 +122,51 @@
 
   // The catalogue: the search goes to the server; sections and niches filter right here (like on marketplaces).
   // inline — inside the Marketplace tab «Шаблоны» (its own route keys, so the experts' filter is kept apart)
+  // ---------------- The catalogue in the new look (flag design-v2; mockup MK-Catalog) ----------------
+  // Rows: step preview · title (2 lines) · author · badges · «Используют N экспертов». Real numbers only:
+  // the share of buyers comes from the server only from 30 clients. Same data, same actions.
+  function dsRow(f) {
+    const r = f.results || {};
+    const share = r.salesShare !== null && r.salesShare !== undefined;
+    const badges = [];
+    if (share) badges.push({ text: `${r.salesShare}% купили`, tone: 'good' });
+    if (f.priceLabel) badges.push({ text: f.priceTypeLabel ? `${f.priceLabel} · ${f.priceTypeLabel}` : f.priceLabel, tone: 'neutral' });
+    return SF.ds.item({
+      title: f.title, meta: [f.author && f.author.name, f.niche].filter(Boolean).join(' · '),
+      preview: SF.ds.thumb({ steps: (f.steps || []).length, tone: share ? 'teal' : 'fog' }),
+      badges, foot: r.experts ? `Используют ${r.experts} ${plural(r.experts, 'эксперт', 'эксперта', 'экспертов')}` : '',
+      onclick: `SF.push('office-funnel', { id: '${SF.js(f.id)}' })`
+    });
+  }
+
+  function renderCatalogV2(route, inline) {
+    const ds = SF.ds;
+    const keys = inline ? { sec: 'tsec', nic: 'tnic' } : { sec: 'sec', nic: 'nic' };
+    const q = inline ? (route.tq || '') : (route.q || '');
+    const key = catalogKey({ q, niche: '' });
+    const data = cache[key];
+    const search = `
+      <div class="ds-search-row">
+        <form onsubmit="SF.funnels.${inline ? 'searchInline' : 'search'}(event)">${ds.search({ placeholder: 'Задача или слово: запись, вебинар, курс…', label: 'Поиск шаблонов', value: q })}</form>
+        ${SF.info('Шаблоны ИИ-продавцов от маркетологов и экспертов: как SI ведёт клиента к покупке. До покупки видно описание, шаги и результат; можно переписаться с продавцом шаблона. Купленный шаблон станет вашим новым SI-продавцом.')}
+      </div>`;
+    const failed = errors[key];
+    if (!data) {
+      return search + (failed ? ds.error({ text: 'Не получилось загрузить шаблоны. Проверьте интернет.', retry: 'SF.funnels.refresh()' }) : ds.skeleton({ rows: 3 }));
+    }
+    const filtered = data.funnels.filter(f => SF.niches.matches(f, route, keys));
+    const any = q || route[keys.sec] || route[keys.nic];
+    const clear = inline ? "SF.patch({ tq: '', tsec: '', tnic: '' })" : "SF.patch({ q: '', sec: '', nic: '' })";
+    const list = filtered.length
+      ? ds.list(filtered.map(dsRow))
+      : any
+        ? ds.empty({ title: 'Ничего не нашлось', text: 'Попробуйте другое слово или другой раздел.', button: { text: 'Сбросить поиск', onclick: clear } })
+        : ds.empty({ mascot: SF.MASCOTS.consultant, title: 'Шаблонов пока нет', text: 'Здесь появятся шаблоны маркетологов и экспертов.', button: { text: 'Обновить', onclick: 'SF.funnels.refresh()' } });
+    return `${search}${SF.niches.filter('templates', route, keys)}${failed ? ds.error({ text: 'Не получилось обновить. Показываем то, что загрузили раньше.', retry: 'SF.funnels.refresh()' }) : ''}${list}`;
+  }
+
   function renderCatalog(route, { inline = false } = {}) {
+    if (inline && SF.ds && SF.ds.on()) return renderCatalogV2(route, inline);
     const keys = inline ? { sec: 'tsec', nic: 'tnic' } : { sec: 'sec', nic: 'nic' };
     const q = inline ? (route.tq || '') : (route.q || '');
     const key = catalogKey({ q, niche: '' });

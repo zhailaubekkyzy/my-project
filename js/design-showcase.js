@@ -79,11 +79,11 @@
         ${d.chips([{ id: 'a', label: '[Раздел 1]' }, { id: 'b', label: '[Раздел 2]' }, { id: 'c', label: '[Раздел 3]' }], 'a')}
       </div>
       <div style="padding:0 16px">${d.list([
-        d.item({ title: '[Название = результат для клиента]', meta: 'Имя автора', verified: true, preview: d.thumb({ steps: 5, tone: 'red' }),
+        d.item({ title: '[Название = результат для клиента]', meta: 'Имя автора', verified: true, preview: d.thumb({ steps: 5, sale: true, tone: 'red' }),
           badges: [{ text: 'N% в покупку', tone: 'good' }, { text: '% от продаж', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
-        d.item({ title: '[Диагностика → консультация → программа]', meta: 'Имя автора', preview: d.thumb({ steps: 3, tone: 'teal' }),
+        d.item({ title: '[Диагностика → консультация → программа]', meta: 'Имя автора', preview: d.thumb({ steps: 3, sale: true, tone: 'teal' }),
           badges: [{ text: 'N% в запись', tone: 'good' }, { text: 'Бесплатно', tone: 'neutral' }], foot: 'Подключили N экспертов' }),
-        d.item({ title: '[Новый шаблон без цифр]', meta: 'Имя автора · новинка', preview: d.thumb({ steps: 7, tone: 'fog' }),
+        d.item({ title: '[Новый шаблон без цифр]', meta: 'Имя автора · новинка', preview: d.thumb({ steps: 7, sale: true, tone: 'fog' }),
           badges: [{ text: 'мало данных', tone: 'neutral' }, { text: 'Разово · [цена]', tone: 'neutral' }] })
       ])}</div>
       ${d.tabbar(TABS, 'marketplace')}`;
@@ -153,7 +153,7 @@
       ${d.screenHead({ back: 'void 0', title: 'Опубликовать' })}
       <div class="ds-pad">
         ${label('Так карточку увидят в Маркетплейсе')}
-        <div class="ds-card" style="padding:0 12px">${d.item({ title: '[Название шаблона]', meta: 'Вы · новинка', preview: d.thumb({ steps: 5, tone: 'red' }), badges: [{ text: 'мало данных', tone: 'neutral' }] })}</div>
+        <div class="ds-card" style="padding:0 12px">${d.item({ title: '[Название шаблона]', meta: 'Вы · новинка', preview: d.thumb({ steps: 5, sale: true, tone: 'red' }), badges: [{ text: 'мало данных', tone: 'neutral' }] })}</div>
         ${label('Как вам платят')}
         <div>
           ${d.toggle({ title: '% от продаж', sub: 'Процент задаёте вы', on: true, value: 'N%' })}

@@ -84,8 +84,9 @@
       </div>`;
   }
 
-  function search({ placeholder = 'Поиск', name = 'q', value = '', label = 'Поиск' } = {}) {
-    return `<label class="ds-search">${iconTag('search')}<input type="search" class="ds-input" name="${esc(name)}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}" /></label>`;
+  // oninput: our code; keep: the data-keep key (what is typed survives a re-render)
+  function search({ placeholder = 'Поиск', name = 'q', value = '', label = 'Поиск', oninput = '', keep = '' } = {}) {
+    return `<label class="ds-search">${iconTag('search')}<input type="search" class="ds-input" name="${esc(name)}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}" autocomplete="off"${keep ? ` data-keep="${esc(keep)}"` : ''}${oninput ? ` oninput="${esc(oninput)}"` : ''} /></label>`;
   }
 
   // inner is HTML built by the caller (already escaped)
@@ -216,12 +217,37 @@
       `<button type="button" class="ds-chip" aria-pressed="${c.id === active}"${handler(onclick ? onclick.replace('$id', c.id) : '')}>${esc(c.label)}</button>`).join('')}</div>`;
   }
 
-  // Step preview on a catalog card: how long the path is and where the sale is (tone: red · teal · fog)
-  function thumb({ steps = 0, sale = 0, tone = 'red' } = {}) {
+  // Step preview on a catalog card: how long the path is and, when known, where the sale is (red bar).
+  // tone: teal (has real results) · red · fog
+  function thumb({ steps = 0, sale = false, tone = 'fog' } = {}) {
     const n = Math.max(0, Math.floor(Number(steps) || 0));
-    const bars = [70, 55, 80].map((w, i) => `<i${i === 1 ? ' class="ds-thumb-sale"' : ''} style="width:${w}%"></i>`).join('');
+    const bars = [70, 55, 80].map((w, i) => `<i${i === 1 && sale ? ' class="ds-thumb-sale"' : ''} style="width:${w}%"></i>`).join('');
     const word = n % 10 === 1 && n % 100 !== 11 ? 'шаг' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'шага' : 'шагов');
     return `<div class="ds-thumb${['red', 'teal'].includes(tone) ? ` ds-thumb-${tone}` : ''}" aria-hidden="true">${bars}${n ? `<span>${n} ${word}</span>` : ''}</div>`;
+  }
+
+  // A product tile (Специалисты: 2 in a row on a phone, 3 on a wide screen — owner's decision 23 Nov.):
+  // picture · price · offer (2 lines) · name and rating. Real data only.
+  function tile({ photo = '', fallback = '', ai = false, tag = '', price = '', title = '', meta = '', rating = null, onclick = '' } = {}) {
+    const r = rating && rating.count ? `<span class="ds-tile-rating"><span aria-hidden="true">★</span> ${esc(String(rating.average).replace('.', ','))} <span>(${Number(rating.count)})</span></span>` : '';
+    return `
+      <button type="button" class="ds-tile"${handler(onclick)}>
+        <span class="ds-tile-pic">
+          <img src="${esc(photo || fallback)}" alt="" loading="lazy" class="${photo ? 'ds-tile-photo' : 'ds-tile-mascot'}" />
+          ${ai ? '<span class="ds-tile-ai si-dot" aria-hidden="true"></span>' : ''}
+          ${tag ? `<span class="ds-tile-tag">${esc(tag)}</span>` : ''}
+        </span>
+        ${price ? `<span class="ds-tile-price">${esc(price)}</span>` : ''}
+        <span class="ds-tile-title">${esc(title)}</span>
+        <span class="ds-tile-meta"><span class="ds-tile-name">${esc(meta)}</span>${r}</span>
+      </button>`;
+  }
+  const tiles = (items) => `<div class="ds-tiles-grid">${items.join('')}</div>`;
+
+  // Loading for tiles: the same shape as a real tile
+  function skeletonTiles(n = 4) {
+    return `<div class="ds-tiles-grid" aria-busy="true" aria-label="Загрузка">${Array.from({ length: n }, () =>
+      '<span class="ds-tile" style="cursor:default"><span class="ds-skel ds-tile-pic" style="aspect-ratio:1/1"></span><span class="ds-skel ds-skel-line" style="width:45%"></span><span class="ds-skel ds-skel-line" style="width:90%"></span><span class="ds-skel ds-skel-line ds-skel-soft" style="width:60%"></span></span>').join('')}</div>`;
   }
 
   // A row of a list / catalog (MK-Components «анатомия»): preview · title (2 lines max) · author ✓ · badges · small social proof
@@ -451,7 +477,7 @@
   SF.ds = {
     FLAG, on, apply, esc,
     button, field, search, card, badge, count, status, STATUSES, chatHead, bubble, replies, typing, tabbar,
-    skeleton, empty, error, tabs, chips, thumb, item, list,
+    skeleton, empty, error, tabs, chips, thumb, item, list, tile, tiles, skeletonTiles,
     screenHead, avatar, stepPath, stepEditor, stats, bigNumber, choice, segmented, toggle, progress, meter, checklist, alert,
     focusCard, actionBar, sheet, dateLine, offerCard, giftCard, composer, conditions, pill
   };
