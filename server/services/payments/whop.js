@@ -176,6 +176,54 @@ function sellerStatus(account) {
   return { status: 'not_connected', detail: kyc || null };
 }
 
+// ---------------- Подписки и платежи (шаг 2: проверка комиссии на продлениях) ----------------
+// Страница оплаты с подпиской на подаккаунте продавца (прямое списание) и комиссией платформы.
+// application_fee_amount — сумма в основных единицах валюты (0.05 = 5 центов), по документации Whop
+// «applies to subsequent payments on recurring variants» — это и проверяем.
+async function createSubscriptionCheckout({ accountId, title, priceMinor, feeMinor, billingPeriodDays, currency = 'usd', metadata = {} }) {
+  const major = (minor) => Number((minor / 100).toFixed(2));
+  const res = await request('POST', '/checkout_configurations', {
+    account_id: accountId,
+    metadata,
+    variant: {
+      account_id: accountId,
+      title,
+      billing_type: 'renewal',
+      billing_period: billingPeriodDays,
+      initial_price: major(priceMinor),
+      renewal_price: major(priceMinor),
+      currency,
+      application_fee_amount: major(feeMinor),
+      force_create_new_plan: true
+    }
+  });
+  if (!res || !res.id) throw new PaymentProviderError('Whop не создал страницу оплаты', { provider: name });
+  return { id: res.id, purchaseUrl: res.purchase_url || null, variantId: res.variant && res.variant.id ? res.variant.id : null };
+}
+
+async function getCheckout(checkoutId) {
+  const res = await request('GET', `/checkout_configurations/${encodeURIComponent(checkoutId)}`);
+  return { id: res && res.id, purchaseUrl: res && res.purchase_url ? res.purchase_url : null, variantId: res && res.variant && res.variant.id ? res.variant.id : null };
+}
+
+// Платежи подаккаунта по одному плану (первые 50 — для проверки достаточно)
+async function listPayments({ accountId, variantId }) {
+  const q = new URLSearchParams({ account_id: accountId, first: '50' });
+  if (variantId) q.set('variant_id', variantId);
+  const res = await request('GET', `/payments?${q.toString()}`);
+  return Array.isArray(res && res.data) ? res.data : [];
+}
+
+// Удержания по платежу; комиссия платформы — строка с origin = application_fee
+async function paymentFees(paymentId) {
+  const res = await request('GET', `/payments/${encodeURIComponent(paymentId)}/fees`);
+  return Array.isArray(res && res.data) ? res.data : [];
+}
+
+async function cancelMembership(membershipId) {
+  return request('POST', `/memberships/${encodeURIComponent(membershipId)}/cancel`, { cancel_at_period_end: false, reason: 'SmartFlow: test subscription' });
+}
+
 // Событие Whop → наш словарь (provider.js, EVENT_TYPES)
 function normalizeEvent(event) {
   const rawType = String(event.type || event.action || '');
@@ -202,5 +250,10 @@ module.exports = {
   getAccount,
   accountLink,
   sellerStatus,
+  createSubscriptionCheckout,
+  getCheckout,
+  listPayments,
+  paymentFees,
+  cancelMembership,
   TIMESTAMP_TOLERANCE_SECONDS
 };
