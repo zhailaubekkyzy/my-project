@@ -111,6 +111,8 @@ async function toPurchase(row, view = 'expert') {
     renewalRequested: Boolean(row.renewal_requested_at),
     renewalNote: row.renewal_note || '',
     confirmedAt: row.confirmed_at || null,
+    // Оплачено через SmartFlow (Whop): подписка продлевается сама, «Я оплатил(а)» не нужно
+    online: Boolean(row.payment_order_id),
     createdAt: row.created_at
   };
   if (view === 'expert') {

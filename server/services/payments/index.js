@@ -103,6 +103,7 @@ async function receiveWebhook(providerName, rawBody, headers) {
 }
 
 module.exports = {
+  checkout: require('./checkout'),
   FLAG,
   registerProvider,
   provider,
@@ -112,3 +113,7 @@ module.exports = {
   receiveWebhook,
   ledger: require('./ledger')
 };
+
+// Шаг 3: что делать по вебхукам (оплачено, возврат, спор) и что можно купить через Whop
+require('./events').register(module.exports);
+require('./subjects/ready-funnel').register();

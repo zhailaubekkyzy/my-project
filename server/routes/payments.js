@@ -29,8 +29,8 @@ router.post('/webhooks/:provider', express.raw({ type: '*/*', limit: '1mb' }), a
 
 // Понятные ответы: наши отказы — как есть; Whop не ответил — по-человечески и с кодом для поддержки
 async function sendPayoutsError(req, res, next, err) {
-  if (err instanceof payouts.PayoutsError) {
-    return res.status(err.status).json({ error: 'payouts', code: err.code, message: err.message });
+  if (err instanceof payouts.PayoutsError || err instanceof require('../services/payments/checkout').CheckoutError) {
+    return res.status(err.status).json({ error: 'payments', code: err.code, message: err.message });
   }
   if (err instanceof PaymentProviderError) {
     const errorCode = supportService.newErrorCode();
@@ -70,3 +70,4 @@ router.post('/payouts/dashboard', requireAuth, express.json(), async (req, res, 
 });
 
 module.exports = router;
+module.exports.sendPaymentError = sendPayoutsError;

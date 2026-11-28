@@ -514,6 +514,7 @@
       catalogue: (q = '', niche = '') => apiFetch(`/api/ready-funnels?q=${encodeURIComponent(q)}&niche=${encodeURIComponent(niche)}`),
       mine: () => apiFetch('/api/ready-funnels/mine'),
       get: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`),
+      checkout: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}/checkout`, { method: 'POST', body: '{}' }),
       submit: (data) => apiFetch('/api/ready-funnels', { method: 'POST', body: JSON.stringify(data) }),
       update: (id, data) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }),
       withdraw: (id) => apiFetch(`/api/ready-funnels/${encodeURIComponent(id)}`, { method: 'DELETE' }),

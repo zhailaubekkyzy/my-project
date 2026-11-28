@@ -47,6 +47,9 @@ router.get('/overview', async (req, res, next) => {
     if (!config.telegramBotToken) warnings.push('Нет TELEGRAM_BOT_TOKEN: вход и уведомления бота не работают.');
     if (config.isProd && activeDriver !== 'postgres') warnings.push('Сервер работает НЕ на Supabase (DB_DRIVER). Данные могут пропасть при перезапуске!');
     if (!(await supportService.ownerUserIds()).length) warnings.push('ADMIN_USERS не задан или номер не найден.');
+    // Оплаты через Whop: продление подписки, с которого Whop не удержал комиссию SmartFlow (вместо проверки в песочнице)
+    const noFee = await require('../services/payments/events').renewalsWithoutFee().catch(() => 0);
+    if (noFee) warnings.push(`Оплаты: ${noFee} продлен${noFee === 1 ? 'ие' : 'ий'} подписки без комиссии SmartFlow — Whop не удержал 1%. Передайте разработчику.`);
     const alarm = await scheduler.status();
     for (const job of alarm.jobs) {
       if (job.lastError) warnings.push(`«Будильник» (${job.name}): последняя проверка с ошибкой — ${job.lastError}. Передайте разработчику.`);

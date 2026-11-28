@@ -4446,7 +4446,7 @@ async function runAllTests() {
       assert.strictEqual(row.provider, 'whop');
       assert.strictEqual(row.provider_env, 'sandbox');
       assert.strictEqual(row.type, 'payment.succeeded');
-      assert.strictEqual(row.status, 'ignored', 'Step 0: no handler yet');
+      assert.strictEqual(row.status, 'processed', 'Step 3: the handler looks for our order (none here — nothing changes)');
       const again = await send(body, good);
       assert.strictEqual(again.status, 200);
       assert.strictEqual((await again.json()).duplicate, true, 'The same webhook twice — processed once');
@@ -5216,6 +5216,227 @@ async function runAllTests() {
     assert.ok(css.includes('[data-design="v2"] .app-header-logo') && app.includes('app-header-logo') && app.includes('app-header-me'));
     assert.ok(fs.readFileSync(path.join(__dirname, '../js/screens/profile.js'), 'utf8').includes('settings-row-icon'));
     assert.ok(app.includes('if (SF.ds) SF.ds.apply();') && app.includes('SF.ds.count(badges[t.id])'));
+  });
+
+  // ---------- Оплаты через Whop, шаг 3а: подписка эксперта на шаблон маркетолога ----------
+  const whopSetup = async () => {
+    const config = require('../server/config');
+    const saved = { whop: config.payments.whop, bps: config.payments.platformFeeBps, features: config.features, fetch: global.fetch };
+    config.payments.whop = { ...saved.whop, env: 'sandbox', apiBase: 'https://sandbox-api.whop.com/api/v1', apiKey: 'whop_test_key_3a_24680', webhookSecret: 'ws_3a_not_real_secret', envProblem: null };
+    config.payments.platformFeeBps = 100;
+    config.features = ['funnels:all', 'payments_whop:all'];
+    const calls = [];
+    const state = { fees: {}, payments: {}, products: 0, checkouts: 0 };
+    global.fetch = async (url, options = {}) => {
+      const u = String(url);
+      if (!u.startsWith('https://sandbox-api.whop.com/')) return saved.fetch(url, options);
+      const path = u.replace('https://sandbox-api.whop.com/api/v1', '');
+      const body = options.body ? JSON.parse(options.body) : null;
+      calls.push({ method: options.method, path, body });
+      const json = (b) => new Response(JSON.stringify(b), { status: 200 });
+      if (path === '/products' && options.method === 'POST') { state.products++; return json({ id: `prod_${state.products}` }); }
+      if (path === '/checkout_configurations' && options.method === 'POST') {
+        state.checkouts++;
+        return json({ id: `ch_${state.checkouts}`, purchase_url: `https://sandbox.whop.com/checkout/ch_${state.checkouts}`, variant: { id: `plan_${state.checkouts}` } });
+      }
+      let m = path.match(/^\/payments\/([^/]+)\/fees$/);
+      if (m) return json({ data: state.fees[m[1]] || [] });
+      m = path.match(/^\/payments\/([^/?]+)$/);
+      if (m) return json(state.payments[m[1]] || { id: m[1] });
+      return new Response('{}', { status: 404 });
+    };
+    const restore = () => {
+      config.payments.whop = saved.whop;
+      config.payments.platformFeeBps = saved.bps;
+      config.features = saved.features;
+      global.fetch = saved.fetch;
+    };
+    return { config, calls, state, restore };
+  };
+  const whopHook = async (type, data, id) => {
+    const whop = require('../server/services/payments/whop');
+    const body = JSON.stringify({ id, type, timestamp: new Date().toISOString(), data });
+    const ts = String(Math.floor(Date.now() / 1000));
+    return fetch(baseUrl + '/api/payments/webhooks/whop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'webhook-id': id, 'webhook-timestamp': ts, 'webhook-signature': whop.signWebhook(body, { id, timestamp: ts }) },
+      body
+    });
+  };
+  const appFee = (amount) => [{ origin: 'whop_processing_fee', amount: { amount: '0.90', decimals: 2 } }, { origin: 'application_fee', amount: { amount, decimals: 2 } }];
+  let shop3a = null;
+
+  await test('103. Шаблон с оплатой через SmartFlow: цена в $ и политика возврата, страница оплаты Whop на подаккаунте маркетолога', async () => {
+    const w = await whopSetup();
+    try {
+      const mk = await tokenFor({ id: 1030001, first_name: 'Маркетолог', last_name: 'Whop' });
+      const mkId = authService.verifySessionToken(mk).userId;
+      const ex = await tokenFor({ id: 1030002, first_name: 'Эксперт', last_name: 'Whop' });
+      const noPayouts = await tokenFor({ id: 1030003, first_name: 'Без', last_name: 'Выплат' });
+      const src = (await api('POST', '/api/projects/quick-start', mk, { goal: 'sell', about: 'маркетолог', offer: 'Курс', priceLabel: '$29', link: 'https://pay.example.com/a' })).body;
+      const src2 = (await api('POST', '/api/projects/quick-start', noPayouts, { goal: 'sell', about: 'маркетолог', offer: 'Курс', priceLabel: '$29', link: 'https://pay.example.com/b' })).body;
+      const base = { projectId: src.id, title: 'Подписка на шаблон', niche: 'Коучинг', description: 'О шаблоне', result: 'Результат', priceType: 'monthly', priceLabel: '$29 в месяц' };
+      const post = (body, token = mk) => api('POST', '/api/ready-funnels', token, body);
+
+      // Payouts not ready yet: without a link — no
+      assert.strictEqual((await post({ ...base, priceAmount: '29', refundPolicy: '7 дней' })).status, 400, 'No ready payouts — the own link is still needed');
+      await db.run(`INSERT INTO payment_accounts (id, user_id, provider, provider_env, provider_account_id, status) VALUES ('pac_3a_mk', ?, 'whop', 'sandbox', 'biz_mk_3a', 'ready')`, [mkId]);
+      assert.strictEqual((await post({ ...base })).status, 400, 'No price and no link');
+      assert.strictEqual((await post({ ...base, priceAmount: 'abc', refundPolicy: '7 дней' })).body.message, 'Цена — число в долларах, например 29 или 29.90');
+      assert.strictEqual((await post({ ...base, priceAmount: '0.5', refundPolicy: '7 дней' })).status, 400, 'From $1');
+      assert.strictEqual((await post({ ...base, priceAmount: '29' })).body.message, 'Напишите политику возврата — покупатель увидит её перед оплатой');
+      const created = await post({ ...base, priceAmount: '29', refundPolicy: 'Возврат в течение 7 дней, если шаблон не подключали' });
+      assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+      const funnel = created.body.funnel;
+      assert.strictEqual(funnel.priceMinor, 2900);
+      // Another marketer without payouts: the link is still required
+      assert.strictEqual((await post({ ...base, projectId: src2.id, priceAmount: '29', refundPolicy: '7 дней' }, noPayouts)).status, 400);
+
+      // The expert sees the payment window
+      let page = (await api('GET', `/api/ready-funnels/${funnel.id}`, ex)).body.funnel;
+      assert.deepStrictEqual(page.online, { priceMinor: 2900, currency: 'usd', priceLabel: '$29 / мес', refundPolicy: 'Возврат в течение 7 дней, если шаблон не подключали', recurring: true });
+      // Flag off for the seller — the old way
+      w.config.features = ['funnels:all'];
+      assert.strictEqual((await api('GET', `/api/ready-funnels/${funnel.id}`, ex)).body.funnel.online, null);
+      assert.strictEqual((await api('POST', `/api/ready-funnels/${funnel.id}/checkout`, ex)).body.code, 'SELLER_NOT_READY');
+      w.config.features = ['funnels:all', 'payments_whop:all'];
+
+      assert.strictEqual((await api('POST', `/api/ready-funnels/${funnel.id}/checkout`, mk)).body.code, 'OWN', 'Not one’s own');
+      const res = await api('POST', `/api/ready-funnels/${funnel.id}/checkout`, ex);
+      assert.strictEqual(res.status, 201, JSON.stringify(res.body));
+      assert.strictEqual(res.body.url, 'https://sandbox.whop.com/checkout/ch_1');
+      const product = w.calls.find(c => c.path === '/products');
+      assert.strictEqual(product.body.account_id, 'biz_mk_3a', 'The product is on the marketer’s sub-account');
+      const ch = w.calls.find(c => c.path === '/checkout_configurations');
+      assert.strictEqual(ch.body.variant.account_id, 'biz_mk_3a', 'Direct charge to the marketer');
+      assert.strictEqual(ch.body.variant.product_id, 'prod_1');
+      assert.strictEqual(ch.body.variant.billing_type, 'renewal');
+      assert.strictEqual(ch.body.variant.billing_period, 30);
+      assert.strictEqual(ch.body.variant.initial_price, 29);
+      assert.strictEqual(ch.body.variant.renewal_price, 29);
+      assert.strictEqual(ch.body.variant.currency, 'usd');
+      assert.strictEqual(ch.body.variant.application_fee_amount, 0.29, 'SmartFlow 1%');
+      const order = await db.get('SELECT * FROM payment_orders WHERE id = ?', [res.body.orderId]);
+      assert.strictEqual(ch.body.metadata.smartflow_order, order.id);
+      assert.strictEqual(order.status, 'pending');
+      assert.strictEqual(order.kind, 'template_subscription');
+      assert.strictEqual(Number(order.amount_minor), 2900);
+      assert.strictEqual((await db.get('SELECT whop_product_id FROM ready_funnels WHERE id = ?', [funnel.id])).whop_product_id, 'prod_1');
+      // Pressed again: the product is not made twice
+      await api('POST', `/api/ready-funnels/${funnel.id}/checkout`, ex);
+      assert.strictEqual(w.state.products, 1);
+      // Nothing is open before Whop says «paid»
+      page = (await api('GET', `/api/ready-funnels/${funnel.id}`, ex)).body.funnel;
+      assert.strictEqual(page.myPurchase, null);
+      assert(!JSON.stringify(w.calls).includes('whop_test_key_3a') && !JSON.stringify(res.body).includes('whop_test_key_3a'));
+      shop3a = { mk, mkId, ex, exId: authService.verifySessionToken(ex).userId, funnelId: funnel.id, orderId: order.id };
+    } finally {
+      w.restore();
+    }
+  });
+
+  await test('104. Вебхук «оплачено» открывает шаблон один раз, продления продлевают, без комиссии — предупреждение, спор', async () => {
+    assert(shop3a, 'test 103 made the order');
+    const w = await whopSetup();
+    const savedAdmins = require('../server/config').adminUsers;
+    try {
+      const { ex, exId, mkId, funnelId, orderId } = shop3a;
+      w.state.fees.pay_3a_1 = appFee('0.29');
+      const paid = { id: 'pay_3a_1', status: 'paid', billing_reason: 'subscription_create', total: { amount: '29.00', decimals: 2 }, paid_at: new Date().toISOString(), membership_id: 'mem_3a', metadata: { smartflow_order: orderId } };
+      assert.strictEqual((await whopHook('payment.succeeded', paid, 'msg_3a_1')).status, 200);
+      let p = await db.get('SELECT * FROM funnel_purchases WHERE expert_id = ? AND funnel_id = ?', [exId, funnelId]);
+      assert.strictEqual(p.status, 'active');
+      assert.strictEqual(p.payment_order_id, orderId);
+      const toDate = require('../server/services/payments/checkout').toDate;
+      const days = (toDate(p.paid_until) - Date.now()) / 86400000;
+      assert(days > 31 && days < 33, `Paid for a month + 2 days of grace (${days})`);
+      const order = await db.get('SELECT * FROM payment_orders WHERE id = ?', [orderId]);
+      assert.strictEqual(order.status, 'paid');
+      assert.strictEqual(order.provider_membership_id, 'mem_3a');
+      const shares = await db.all('SELECT role, amount_minor FROM payment_shares WHERE order_id = ? ORDER BY role', [orderId]);
+      assert.deepStrictEqual(shares.map(s => [s.role, Number(s.amount_minor)]), [['platform', 29], ['seller', 2871]]);
+      assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND text LIKE '%Оплата прошла%'`, [exId]), 'The expert is told');
+      assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND text LIKE '%Новая подписка%'`, [mkId]), 'The marketer is told');
+
+      // The same payment again (another delivery id): no second charge, no second purchase
+      assert.strictEqual((await whopHook('payment.succeeded', paid, 'msg_3a_1b')).status, 200);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM payment_charges WHERE order_id = ?', [orderId])).n), 1);
+      assert.strictEqual(Number((await db.get('SELECT COUNT(*) AS n FROM funnel_purchases WHERE expert_id = ? AND funnel_id = ?', [exId, funnelId])).n), 1);
+      // The expert's page: bought, renews by itself; paying again is not offered
+      const page = (await api('GET', `/api/ready-funnels/${funnelId}`, ex)).body.funnel;
+      assert.strictEqual(page.myPurchase.status, 'active');
+      assert.strictEqual(page.myPurchase.online, true);
+      assert.strictEqual((await api('POST', `/api/ready-funnels/${funnelId}/checkout`, ex)).body.code, 'ALREADY');
+
+      // A renewal (found by the membership, no metadata) moves the date on
+      await db.run(`UPDATE funnel_purchases SET paid_until = '2020-01-01 00:00:00' WHERE id = ?`, [p.id]);
+      w.state.fees.pay_3a_2 = appFee('0.29');
+      await whopHook('payment.succeeded', { id: 'pay_3a_2', status: 'paid', billing_reason: 'subscription_cycle', total: { amount: '29.00', decimals: 2 }, paid_at: new Date().toISOString(), membership_id: 'mem_3a' }, 'msg_3a_2');
+      p = await db.get('SELECT * FROM funnel_purchases WHERE id = ?', [p.id]);
+      assert(toDate(p.paid_until) > new Date(Date.now() + 30 * 86400000), 'Renewed');
+
+      // A renewal without the SmartFlow fee → a warning in the support panel
+      const owner = await tokenFor({ id: 1040009, first_name: 'Владелица', last_name: 'Панели' });
+      require('../server/config').adminUsers = ['1040009'];
+      let warnings = (await api('GET', '/api/admin/overview', owner)).body.system.warnings;
+      assert(!warnings.some(x => x.includes('без комиссии SmartFlow')));
+      w.state.fees.pay_3a_3 = [{ origin: 'whop_processing_fee', amount: { amount: '0.90', decimals: 2 } }];
+      await whopHook('payment.succeeded', { id: 'pay_3a_3', status: 'paid', billing_reason: 'subscription_cycle', total: { amount: '29.00', decimals: 2 }, membership_id: 'mem_3a' }, 'msg_3a_3');
+      warnings = (await api('GET', '/api/admin/overview', owner)).body.system.warnings;
+      assert(warnings.some(x => x.includes('1 продление подписки без комиссии SmartFlow')), warnings.join(' | '));
+
+      // A dispute: the seller is told, access stays
+      await whopHook('dispute.created', { id: 'dsp_1', status: 'needs_response', payment: { id: 'pay_3a_3' } }, 'msg_3a_d1');
+      assert.strictEqual((await db.get('SELECT status FROM payment_orders WHERE id = ?', [orderId])).status, 'disputed');
+      assert.strictEqual((await db.get('SELECT status FROM funnel_purchases WHERE id = ?', [p.id])).status, 'active', 'Access stays while the seller tries to agree');
+      assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND text LIKE '%открыл спор%'`, [mkId]));
+      // The dispute is lost: the money went back → access closes by itself
+      await whopHook('dispute.updated', { id: 'dsp_1', status: 'lost', payment: { id: 'pay_3a_3' } }, 'msg_3a_d2');
+      const ended = await db.get('SELECT * FROM funnel_purchases WHERE id = ?', [p.id]);
+      assert.strictEqual(ended.status, 'ended');
+      assert(ended.reason.includes('Спор'));
+      assert.strictEqual((await db.get('SELECT status FROM payment_orders WHERE id = ?', [orderId])).status, 'refunded');
+      assert(await db.get(`SELECT id FROM notifications WHERE user_id = ? AND text LIKE '%вернулись вам%'`, [exId]));
+    } finally {
+      require('../server/config').adminUsers = savedAdmins;
+      w.restore();
+    }
+  });
+
+  await test('105. Возврат: частичный — доступ остаётся, полный — шаблон отключается сам (событие дважды — один раз)', async () => {
+    assert(shop3a, 'test 103 made the funnel');
+    const w = await whopSetup();
+    try {
+      const ex2 = await tokenFor({ id: 1050001, first_name: 'Второй', last_name: 'Эксперт' });
+      const ex2Id = authService.verifySessionToken(ex2).userId;
+      const start = await api('POST', `/api/ready-funnels/${shop3a.funnelId}/checkout`, ex2);
+      assert.strictEqual(start.status, 201);
+      w.state.fees.pay_3a_r = appFee('0.29');
+      await whopHook('payment.succeeded', { id: 'pay_3a_r', status: 'paid', billing_reason: 'subscription_create', total: { amount: '29.00', decimals: 2 }, membership_id: 'mem_3a_r', metadata: { smartflow_order: start.body.orderId } }, 'msg_3a_r1');
+      const p = await db.get('SELECT * FROM funnel_purchases WHERE expert_id = ? AND funnel_id = ?', [ex2Id, shop3a.funnelId]);
+      assert.strictEqual(p.status, 'active');
+
+      w.state.payments.pay_3a_r = { id: 'pay_3a_r', refunded_amount: { amount: '10.00', decimals: 2 } };
+      await whopHook('refund.created', { id: 'rf_1', status: 'pending', payment_id: 'pay_3a_r' }, 'msg_3a_r2');
+      assert.strictEqual((await db.get('SELECT status FROM funnel_purchases WHERE id = ?', [p.id])).status, 'active', 'Not finished yet');
+      await whopHook('refund.updated', { id: 'rf_1', status: 'succeeded', payment_id: 'pay_3a_r' }, 'msg_3a_r3');
+      assert.strictEqual((await db.get('SELECT status FROM funnel_purchases WHERE id = ?', [p.id])).status, 'active', 'A part back — access stays');
+      assert.strictEqual(Number((await db.get('SELECT refunded_minor FROM payment_charges WHERE provider_payment_id = ?', ['pay_3a_r'])).refunded_minor), 1000);
+
+      w.state.payments.pay_3a_r = { id: 'pay_3a_r', refunded_amount: { amount: '29.00', decimals: 2 } };
+      await whopHook('refund.updated', { id: 'rf_2', status: 'succeeded', payment_id: 'pay_3a_r' }, 'msg_3a_r4');
+      await whopHook('refund.updated', { id: 'rf_2', status: 'succeeded', payment_id: 'pay_3a_r' }, 'msg_3a_r5');
+      const ended = await db.get('SELECT * FROM funnel_purchases WHERE id = ?', [p.id]);
+      assert.strictEqual(ended.status, 'ended');
+      assert(ended.reason.includes('Возврат'));
+      assert.strictEqual((await db.get('SELECT status FROM payment_orders WHERE id = ?', [start.body.orderId])).status, 'refunded');
+      assert.deepStrictEqual((await db.all('SELECT DISTINCT status FROM payment_shares WHERE order_id = ?', [start.body.orderId])).map(r => r.status), ['canceled']);
+      assert.strictEqual(Number((await db.get(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND text LIKE '%Возврат $29.00%'`, [shop3a.mkId])).n), 1, 'Told once');
+      // Someone else's order cannot be paid into: the webhook needs our order and Whop's signature
+      assert.strictEqual((await fetch(baseUrl + '/api/payments/webhooks/whop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
+    } finally {
+      w.restore();
+    }
   });
 
   await new Promise(resolve => httpServer.close(resolve));

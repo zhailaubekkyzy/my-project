@@ -149,12 +149,27 @@ router.post('/:id/buy', handle(async (req, res) => {
   res.status(201).json({ purchase: await purchases.toPurchase(row, 'expert') });
 }));
 
+/**
+ * POST /api/ready-funnels/:id/checkout — подписка на шаблон через Whop: { url } страница оплаты (шаг 3 оплат).
+ * Доступ открывается, когда Whop сообщит «оплачено» (вебхук), а не по возврату со страницы оплаты.
+ */
+router.post('/:id/checkout', async (req, res, next) => {
+  try {
+    const result = await require('../services/payments/checkout').start({ subjectType: 'ready_funnel', subjectId: req.params.id, buyerId: req.user.userId });
+    res.status(201).json(result);
+  } catch (err) {
+    require('./payments').sendPaymentError(req, res, next, err);
+  }
+});
+
 /** GET /api/ready-funnels/:id — one funnel (published, or the author's own) */
 router.get('/:id', handle(async (req, res) => {
   let funnel = await funnels.getForUser(req.user.userId, req.params.id);
   if (!funnel && await purchases.mineFor(req.user.userId, req.params.id)) funnel = await funnels.getBought(req.params.id);
   if (!funnel) return res.status(404).json({ error: 'not_found', message: 'Шаблон не найден или снят с публикации' });
   funnel.myPurchase = await purchases.mineFor(req.user.userId, funnel.id);
+  // Оплата через SmartFlow (Whop): цена, политика возврата и продавец готов принимать оплату
+  funnel.online = await require('../services/payments/subjects/ready-funnel').onlineOffer(await db.get('SELECT * FROM ready_funnels WHERE id = ?', [funnel.id]));
   funnel.results = (await purchases.resultsFor([funnel.id]))[funnel.id] || null;
   if (funnel.author.id !== req.user.userId) {
     analytics.capture('ready_funnel_viewed', req.user.userId, { funnel_id: funnel.id, price_type: funnel.priceType, steps: funnel.steps.length });

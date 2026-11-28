@@ -328,6 +328,26 @@
           `}
         ${writeAuthor}
       </div>`;
+    // Оплата через SmartFlow (Whop, шаг 3): окно оплаты — продавец, цена, политика возврата; в Telegram — «Оплатить на сайте»
+    const online = f.online && (!p || p.status !== 'active' || p.expired || !p.online);
+    if (online) {
+      const inTelegram = Boolean(window.Telegram?.WebApp?.initData);
+      const again = p && (p.status === 'ended' || p.status === 'declined') ? `<div class="glass-card-3d p-3.5 text-xs space-y-1"><div class="font-semibold text-si">${p.status === 'ended' ? 'Шаблон отключён' : 'Автор не подтвердил'}</div>${p.reason ? `<div class="text-ink-2">Причина: ${esc(p.reason)}</div>` : ''}</div>` : '';
+      return `${again}
+        <div class="glass-card-3d p-4 space-y-2.5 text-xs">
+          ${SF.sectionTitle('credit-card', 'Подписка на шаблон')}
+          <div class="text-lg font-extrabold text-ink">${esc(f.online.priceLabel)}</div>
+          <div class="text-ink-2 leading-snug">Продавец: <b>${esc(f.author.name)}</b>. Услугу оказывает продавец. SmartFlow — платформа.</div>
+          <div class="p-2.5 rounded-xl bg-sunken border border-line space-y-1">
+            <div class="font-semibold text-ink-2">Политика возврата</div>
+            <div class="text-ink-2 leading-snug whitespace-pre-line">${esc(f.online.refundPolicy)}</div>
+          </div>
+          <div class="text-[11px] text-muted leading-snug">Оплата картой на странице Whop. Подписка продлевается сама каждый месяц, отменить можно в любой момент.</div>
+          <button onclick="SF.funnels.payOnline('${SF.js(f.id)}')" class="w-full py-3 rounded-xl btn-3d-tiffany text-sm flex items-center justify-center gap-1.5"><i data-lucide="external-link" class="w-4 h-4"></i>${inTelegram ? 'Оплатить на сайте' : 'Оплатить'}</button>
+          ${f.onlineLink ? `<button onclick="SF.openLink('${SF.js(f.onlineLink)}')" class="w-full py-2 rounded-xl btn-3d-dark text-xs">Открыть страницу оплаты</button>` : ''}
+          ${writeAuthor}
+        </div>`;
+    }
     if (!p || p.status === 'declined' || p.status === 'ended') {
       const again = p ? `<div class="glass-card-3d p-3.5 text-xs space-y-1"><div class="font-semibold text-si">${p.status === 'ended' ? 'Автор отключил шаблон' : 'Автор не подтвердил'}</div>${p.reason ? `<div class="text-ink-2">Причина: ${esc(p.reason)}</div>` : ''}</div>` : '';
       return again + payForm(percent ? 'Подключить' : 'Купить', percent ? 'Подключить на этих условиях' : 'Я оплатил(а)');
@@ -341,7 +361,8 @@
     }
     // Active: the month; the bought template becomes a NEW SI-продавец (owner's decision 22 Nov.)
     const material = p.steps.filter(st => st.needsMaterial);
-    const month = p.priceType === 'monthly' ? `
+    const month = p.priceType === 'monthly' && p.online ? `
+      <div class="text-[11px] text-ink-2">Оплачено до ${fmtDay(p.paidUntil)}. Подписка продлевается сама каждый месяц.</div>` : p.priceType === 'monthly' ? `
       <div class="text-[11px] ${p.expired ? 'text-si' : 'text-ink-2'}">${p.expired ? 'Оплаченный месяц закончился — SI вернулся к вашей методологии.' : `Оплачено до ${fmtDay(p.paidUntil)}. Не продлите — SI сам вернётся к вашей методологии.`}</div>
       ${p.renewalRequested ? '<div class="text-[11px] text-brand">Ждём, когда автор подтвердит оплату следующего месяца.</div>' : `
         <div class="space-y-1.5 pt-1">
@@ -417,6 +438,7 @@
     const d = draft[route.id || 'new'] || (draft[route.id || 'new'] = editing ? {
       projectId: editing.sourceProjectId, title: editing.title, niche: editing.niche, description: editing.description,
       result: editing.result, priceType: editing.priceType, priceLabel: editing.priceLabel, paymentUrl: editing.paymentUrl || '',
+      priceAmount: editing.priceMinor ? String(editing.priceMinor / 100) : '', refundPolicy: editing.refundPolicy || '',
       videoUrl: editing.videoUrl || '', sellerProjectId: editing.sellerProjectId || '', nicheSection: editing.nicheSection || '', faq: editing.faq || []
     } : { projectId: (consultants.find(c => (c.steps || []).length >= 2) || consultants[0]).id, priceType: 'once' });
     // Who sells the template: by default the same SI-продавец it is made from
@@ -473,7 +495,13 @@
               </label>`).join('')}
           </div>
           ${fieldBox('priceLabel', priceType.id === 'percent' ? 'Процент' : 'Цена', { max: 60, placeholder: priceType.placeholder })}
-          ${fieldBox('paymentUrl', priceType.id === 'percent' ? 'Ваша ссылка на оплату (необязательно)' : 'Ваша ссылка на оплату', { type: 'url', max: 300, placeholder: 'https://...', hint: 'Деньги идут вам напрямую. Оплату подтверждаете вы — пока SmartFlow не подключит свой приём платежей.' })}
+          ${priceType.id === 'monthly' && SF.feature('payments_whop') ? `
+            <div class="p-3 rounded-xl bg-sunken border border-line space-y-2.5">
+              ${SF.sectionTitle('credit-card', 'Оплата через SmartFlow', '', 'Эксперт платит картой на странице Whop, подписка продлевается сама каждый месяц, деньги приходят на ваш счёт Whop, SmartFlow удерживает 1%. Нужны подключённые выплаты: Офис → «Выплаты». Тогда своя ссылка на оплату не обязательна.')}
+              ${fieldBox('priceAmount', 'Цена в месяц, $', { max: 9, placeholder: 'Например: 29' })}
+              ${fieldBox('refundPolicy', 'Политика возврата', { rows: 3, max: 1000, placeholder: 'Например: возврат в течение 7 дней после первой оплаты, если шаблон не подключали', hint: 'Покупатель увидит её перед оплатой. Возвраты и споры — на вас как на продавце.' })}
+            </div>` : ''}
+          ${fieldBox('paymentUrl', priceType.id === 'percent' ? 'Ваша ссылка на оплату (необязательно)' : (priceType.id === 'monthly' && SF.feature('payments_whop') ? 'Ваша ссылка на оплату (если без SmartFlow)' : 'Ваша ссылка на оплату'), { type: 'url', max: 300, placeholder: 'https://...', hint: 'Деньги идут вам напрямую. Оплату подтверждаете вы сами.' })}
         </div>
         <button type="submit" class="w-full py-3 rounded-2xl btn-3d-tiffany text-sm">${editing ? 'Сохранить' : 'Опубликовать'}</button>
       </form>`;
@@ -484,7 +512,7 @@
     event.preventDefault();
     const d = { ...(draft[id || 'new'] || {}) };
     const form = new FormData(event.target);
-    for (const k of ['projectId', 'title', 'description', 'result', 'priceType', 'priceLabel', 'paymentUrl', 'videoUrl', 'sellerProjectId', 'nicheSection']) {
+    for (const k of ['projectId', 'title', 'description', 'result', 'priceType', 'priceLabel', 'paymentUrl', 'priceAmount', 'refundPolicy', 'videoUrl', 'sellerProjectId', 'nicheSection']) {
       if (form.has(k)) d[k] = String(form.get(k) || '').trim();
     }
     if (form.has('nicheName')) d.niche = String(form.get('nicheName') || '').trim();
@@ -516,6 +544,20 @@
       store().popRoute();
     } catch (err) {
       showToast(err.message || 'Не получилось');
+    }
+  }
+
+  // Оплата через SmartFlow: страница Whop (в Telegram — во внешнем браузере). Доступ откроется, когда Whop сообщит «оплачено»
+  async function payOnline(funnelId) {
+    try {
+      const res = await api().readyFunnels.checkout(funnelId);
+      const opened = SF.openLink(res.url);
+      const f = cache[`one:${funnelId}`];
+      if (f) f.onlineLink = opened ? null : res.url;
+      showToast(opened ? 'Оплатите на странице Whop — шаблон откроется сам, как только оплата пройдёт' : 'Откройте страницу оплаты кнопкой ниже');
+      store().notify();
+    } catch (err) {
+      showToast(SF.withErrorCode(err.message || 'Не получилось', err));
     }
   }
 
@@ -748,6 +790,7 @@
     refresh,
     submit,
     buy,
+    payOnline,
     decide,
     endPercent,
     apply,

@@ -201,6 +201,39 @@ async function createSubscriptionCheckout({ accountId, title, priceMinor, feeMin
   return { id: res.id, purchaseUrl: res.purchase_url || null, variantId: res.variant && res.variant.id ? res.variant.id : null };
 }
 
+// «Продукт» на подаккаунте продавца: без него Whop не создаёт подписку («you must pass in product details»)
+async function createProduct({ accountId, title, metadata = {} }) {
+  const res = await request('POST', '/products', { account_id: accountId, title: String(title || 'SmartFlow').slice(0, 80), visibility: 'hidden', metadata });
+  if (!res || !res.id) throw new PaymentProviderError('Whop не создал продукт', { provider: name });
+  return res.id;
+}
+
+/**
+ * Страница оплаты: прямое списание на подаккаунт продавца, комиссия платформы — application_fee_amount.
+ * recurring: подписка каждые billingPeriodDays дней; иначе разовая оплата.
+ * metadata копируется Whop в платежи и подписки — по ней вебхук находит наш заказ.
+ */
+async function createCheckout({ accountId, productId, title, priceMinor, feeMinor, recurring, billingPeriodDays = 30, currency = 'usd', metadata = {}, redirectUrl }) {
+  const major = (minor) => Number((minor / 100).toFixed(2));
+  const variant = {
+    account_id: accountId,
+    product_id: productId || undefined,
+    title: String(title || '').slice(0, 80) || undefined,
+    billing_type: recurring ? 'renewal' : 'one_time',
+    initial_price: major(priceMinor),
+    currency,
+    application_fee_amount: major(feeMinor),
+    force_create_new_plan: true
+  };
+  if (recurring) {
+    variant.billing_period = billingPeriodDays;
+    variant.renewal_price = major(priceMinor);
+  }
+  const res = await request('POST', '/checkout_configurations', { account_id: accountId, metadata, redirect_url: redirectUrl || undefined, variant });
+  if (!res || !res.id || !res.purchase_url) throw new PaymentProviderError('Whop не создал страницу оплаты', { provider: name });
+  return { id: res.id, purchaseUrl: res.purchase_url, variantId: res.variant && res.variant.id ? res.variant.id : null };
+}
+
 async function getCheckout(checkoutId) {
   const res = await request('GET', `/checkout_configurations/${encodeURIComponent(checkoutId)}`);
   return { id: res && res.id, purchaseUrl: res && res.purchase_url ? res.purchase_url : null, variantId: res && res.variant && res.variant.id ? res.variant.id : null };
@@ -218,6 +251,10 @@ async function listPayments({ accountId, variantId }) {
 async function paymentFees(paymentId) {
   const res = await request('GET', `/payments/${encodeURIComponent(paymentId)}/fees`);
   return Array.isArray(res && res.data) ? res.data : [];
+}
+
+async function getPayment(paymentId) {
+  return request('GET', `/payments/${encodeURIComponent(paymentId)}`);
 }
 
 async function cancelMembership(membershipId) {
@@ -251,9 +288,12 @@ module.exports = {
   accountLink,
   sellerStatus,
   createSubscriptionCheckout,
+  createProduct,
+  createCheckout,
   getCheckout,
   listPayments,
   paymentFees,
+  getPayment,
   cancelMembership,
   TIMESTAMP_TOLERANCE_SECONDS
 };
