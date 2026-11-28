@@ -111,6 +111,9 @@ function toFunnel(row, view = 'public') {
     publishedAt: row.status === 'published' ? (row.reviewed_at || row.submitted_at) : null,
     // The author's own link: the expert pays by it (part 2); the marketer confirms the payment
     paymentUrl: row.payment_url || null,
+    // Цена для оплаты через SmartFlow (Whop): в долларах, с политикой возврата; можно ли купить сейчас — online на странице шаблона
+    priceMinor: row.price_minor ? Number(row.price_minor) : null,
+    refundPolicy: row.refund_policy || '',
     videoUrl: row.video_url || null,
     // The author's AI-продавец of this template: experts write to it before buying (owner's decision 22 Nov.)
     seller: row.seller_slug && row.seller_status === 'active' ? {
@@ -152,12 +155,27 @@ function readFields(body) {
   if (!priceType) throw new FunnelError('Выберите, как вам платят: разово, подписка или процент с продаж');
   if (!priceLabel) throw new FunnelError(priceType === 'percent' ? 'Напишите процент, например «10% с продаж»' : 'Напишите цену, например «15 000 ₸»');
   if (rawUrl && !paymentUrl) throw new FunnelError('Ссылка на оплату должна начинаться с https://');
-  if (priceType !== 'percent' && !paymentUrl) throw new FunnelError('Добавьте свою ссылку на оплату — деньги идут вам напрямую');
+  // Оплата через SmartFlow (Whop, шаг 3): цена в долларах и политика возврата — только у подписки
+  let priceMinor = null;
+  try {
+    priceMinor = priceType === 'monthly' ? require('./payments/checkout').parsePrice(body.priceAmount) : null;
+  } catch (err) {
+    throw new FunnelError(err.message);
+  }
+  const refundPolicy = priceMinor ? cleanText(body.refundPolicy, 1000) : '';
+  if (priceMinor && !refundPolicy) throw new FunnelError('Напишите политику возврата — покупатель увидит её перед оплатой');
   const rawVideo = String(body.videoUrl || '').trim();
   const videoUrl = rawVideo && /^https:\/\//i.test(rawVideo) ? cleanUrl(rawVideo) : null;
   if (rawVideo && !videoUrl) throw new FunnelError('Ссылка на видео должна начинаться с https://');
   const faq = body.faq === undefined ? undefined : JSON.stringify(require('./faq').normalizeFaq(body.faq));
-  return { title, niche, nicheSection: String(body.nicheSection || ''), description, result, priceType, priceLabel, paymentUrl, videoUrl, faq };
+  return { title, niche, nicheSection: String(body.nicheSection || ''), description, result, priceType, priceLabel, paymentUrl, videoUrl, faq, priceMinor, refundPolicy: refundPolicy || null };
+}
+
+// Без своей ссылки на оплату можно, только если шаблон продаётся через SmartFlow: цена в долларах + выплаты «готово»
+async function checkPayment(userId, fields) {
+  if (fields.priceType === 'percent' || fields.paymentUrl) return;
+  if (fields.priceMinor && await require('./payments/checkout').canSell(userId)) return;
+  throw new FunnelError('Добавьте свою ссылку на оплату — деньги идут вам напрямую');
 }
 
 // The niche the author wrote: found in the list or created at once (niche-service)
@@ -218,6 +236,7 @@ async function syncProduct(userId, row, fields, projectId) {
 
 async function submit(userId, body = {}) {
   const fields = readFields(body);
+  await checkPayment(userId, fields);
   const { project, snapshot } = await ownProject(userId, body.projectId);
   const mine = await db.get(
     `SELECT COUNT(*) AS count FROM ready_funnels WHERE author_id = ? AND status <> 'withdrawn'`,
@@ -233,10 +252,10 @@ async function submit(userId, body = {}) {
   // Published at once: no review by the team since step 4 (owner's decision 22 Nov.)
   await db.run(
     `INSERT INTO ready_funnels (id, author_id, source_project_id, seller_project_id, product_id, video_url, niche_id, faq, title, niche, description, result,
-       price_type, price_label, payment_url, snapshot, status, submitted_at, reviewed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
+       price_type, price_label, payment_url, price_minor, currency, refund_policy, snapshot, status, submitted_at, reviewed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
     [id, userId, project.id, sellerId, productId, fields.videoUrl, nicheId, fields.faq || '[]', fields.title, fields.niche, fields.description, fields.result,
-      fields.priceType, fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow()]
+      fields.priceType, fields.priceLabel, fields.paymentUrl, fields.priceMinor, fields.priceMinor ? 'usd' : null, fields.refundPolicy, JSON.stringify(snapshot), sqlNow(), sqlNow()]
   );
   return getRow(id);
 }
@@ -251,19 +270,20 @@ async function authorRow(userId, id) {
 async function update(userId, id, body = {}) {
   const row = await authorRow(userId, id);
   const fields = readFields(body);
+  await checkPayment(userId, fields);
   const { project, snapshot } = await ownProject(userId, body.projectId || row.source_project_id);
   const sellerId = body.sellerProjectId === undefined ? row.seller_project_id : await sellerOf(userId, body, project);
   const productId = await syncProduct(userId, row, fields, sellerId || project.id);
   const nicheId = await nicheOf(userId, fields);
   await db.run(
     `UPDATE ready_funnels SET niche_id = ?, faq = COALESCE(?, faq), source_project_id = ?, seller_project_id = ?, product_id = ?, video_url = ?, title = ?, niche = ?, description = ?, result = ?,
-       price_type = ?, price_label = ?, payment_url = ?, snapshot = ?,
+       price_type = ?, price_label = ?, payment_url = ?, price_minor = ?, currency = ?, refund_policy = ?, snapshot = ?,
        status = CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'published' END,
        review_note = CASE WHEN status = 'hidden' THEN review_note ELSE NULL END,
        reviewed_at = CASE WHEN status = 'published' THEN reviewed_at ELSE ? END, submitted_at = ?, updated_at = ?
      WHERE id = ?`,
     [nicheId, fields.faq === undefined ? null : fields.faq, project.id, sellerId, productId, fields.videoUrl, fields.title, fields.niche, fields.description, fields.result, fields.priceType,
-      fields.priceLabel, fields.paymentUrl, JSON.stringify(snapshot), sqlNow(), sqlNow(), sqlNow(), id]
+      fields.priceLabel, fields.paymentUrl, fields.priceMinor, fields.priceMinor ? 'usd' : null, fields.refundPolicy, JSON.stringify(snapshot), sqlNow(), sqlNow(), sqlNow(), id]
   );
   return getRow(id);
 }
